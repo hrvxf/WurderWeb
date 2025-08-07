@@ -1,3 +1,6 @@
+"use client";
+
+
 import { useSearchParams } from "next/navigation";
 import { useState, useRef } from "react";
 import Footer from "@/components/Footer";
