@@ -1,10 +1,10 @@
-// app/confirmation/page.tsx
+// src/app/confirmation/page.tsx
 import dynamic from "next/dynamic";
 
-const ConfirmationPageInner = dynamic(() => import("./ConfirmationPageInner"), {
+const ConfirmationContent = dynamic(() => import("./ConfirmationContent"), {
   ssr: false,
 });
 
-export default function ConfirmationPage() {
-  return <ConfirmationPageInner />;
+export default function ConfirmationPageWrapper() {
+  return <ConfirmationContent />;
 }

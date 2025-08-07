@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-export default function ConfirmationPageInner() {
+export default function ConfirmationContent() {
   const searchParams = useSearchParams();
   const [name, setName] = useState<string | null>(null);
 
