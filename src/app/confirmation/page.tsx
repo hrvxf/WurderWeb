@@ -1,5 +1,6 @@
-import dynamicFn from "next/dynamic";
+// src/app/confirmation/page.tsx
 import { Suspense } from "react";
+import dynamicFn from "next/dynamic";
 
 export const dynamic = "force-dynamic";
 
