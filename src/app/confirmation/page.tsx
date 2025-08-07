@@ -1,10 +1,16 @@
-// src/app/confirmation/page.tsx
-import dynamic from "next/dynamic";
+import dynamicFn from "next/dynamic";
+import { Suspense } from "react";
 
-const ConfirmationContent = dynamic(() => import("./ConfirmationContent"), {
+export const dynamic = "force-dynamic";
+
+const ConfirmationContent = dynamicFn(() => import("./ConfirmationContent"), {
   ssr: false,
 });
 
-export default function ConfirmationPageWrapper() {
-  return <ConfirmationContent />;
+export default function ConfirmationPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <ConfirmationContent />
+    </Suspense>
+  );
 }

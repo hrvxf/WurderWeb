@@ -63,6 +63,7 @@ export default function ConfirmationPage() {
   };
 
   return (
+    
     <div className="flex flex-col min-h-screen bg-transparent">
       {/* Toast */}
       <AnimatePresence>
@@ -153,9 +154,9 @@ export default function ConfirmationPage() {
             </button>
           </div>
         </div>
+        
       </motion.main>
 
-      <Footer />
     </div>
   );
 }
