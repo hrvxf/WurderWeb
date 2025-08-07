@@ -1,14 +1,16 @@
-// src/app/confirmation/page.tsx
-
 "use client";
 
-import dynamic from "next/dynamic";
+// ✅ Rename to avoid conflict
+import dynamicImport from "next/dynamic";
 
-// Dynamically import your client-only component
-const ConfirmationContent = dynamic(() => import("./ConfirmationContent"), {
-  ssr: false, // Disable server-side rendering
+// ✅ Opt out of prerendering
+export const dynamic = "force-dynamic";
+
+// ✅ Dynamically load the actual page content
+const ConfirmationContent = dynamicImport(() => import("./ConfirmationContent"), {
+  ssr: false,
 });
 
-export default function ConfirmationPage() {
+export default function Page() {
   return <ConfirmationContent />;
 }
