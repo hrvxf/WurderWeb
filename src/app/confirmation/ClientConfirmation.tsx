@@ -1,69 +1,75 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
-import { useState, useRef } from "react";
-import Footer from "@/components/Footer";
+import { useMemo, useRef, useState } from "react";
 import { QRCodeCanvas } from "qrcode.react";
-import { EnvelopeIcon, ChatBubbleLeftEllipsisIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import {
+  EnvelopeIcon,
+  ChatBubbleLeftEllipsisIcon,
+  ArrowDownTrayIcon,
+} from "@heroicons/react/24/outline";
 import { motion, AnimatePresence } from "framer-motion";
 
-function parseAddons(params: URLSearchParams): string[] {
-  const addons = params.get("addons");
+function parseAddonsFromString(addons: string | null): string[] {
   if (!addons) return [];
   return addons
     .split(",")
-    .map((a: string) => a.trim())
-    .filter((a: string) => a !== "")
-    .map((a: string) => a.charAt(0).toUpperCase() + a.slice(1));
+    .map((a) => a.trim())
+    .filter(Boolean)
+    .map((a) => a.charAt(0).toUpperCase() + a.slice(1));
 }
 
-export default function ConfirmationPage() {
-  const searchParams = useSearchParams();
-  const code = searchParams.get("code");
-  const players = searchParams.get("players");
-  const addons = parseAddons(searchParams);
+export default function ClientConfirmation() {
   const [toast, setToast] = useState("");
   const qrRef = useRef<HTMLDivElement>(null);
 
+  // Read query params on the client (no useSearchParams, no Suspense)
+  const { code, players, addons } = useMemo(() => {
+    if (typeof window === "undefined") {
+      return { code: "", players: "", addons: [] as string[] };
+    }
+    const sp = new URLSearchParams(window.location.search);
+    const code = sp.get("code") || "";
+    const players = sp.get("players") || "";
+    const addons = parseAddonsFromString(sp.get("addons"));
+    return { code, players, addons };
+  }, []);
+
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(""), 2500);
+    window.setTimeout(() => setToast(""), 2500);
   };
 
   const copyToClipboard = () => {
-    if (code) {
-      navigator.clipboard.writeText(code);
-      showToast("Game code copied!");
-    }
+    if (!code) return;
+    navigator.clipboard.writeText(code);
+    showToast("Game code copied!");
   };
 
   const shareWhatsApp = () => {
-    if (code) {
-      const message = `Join my Wurder game! Use code: ${code}`;
-      window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
-    }
+    if (!code) return;
+    const message = `Join my Wurder game! Use code: ${code}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
   };
 
   const shareEmail = () => {
-    if (code) {
-      const subject = "Join my Wurder Game!";
-      const body = `Hey! Join my Wurder game using this code: ${code}`;
-      window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    }
+    if (!code) return;
+    const subject = "Join my Wurder Game!";
+    const body = `Hey! Join my Wurder game using this code: ${code}`;
+    window.location.href = `mailto:?subject=${encodeURIComponent(
+      subject
+    )}&body=${encodeURIComponent(body)}`;
   };
 
   const downloadQR = () => {
     const canvas = qrRef.current?.querySelector("canvas");
-    if (canvas) {
-      const link = document.createElement("a");
-      link.href = canvas.toDataURL("image/png");
-      link.download = `wurder-game-${code}.png`;
-      link.click();
-    }
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `wurder-game-${code || "code"}.png`;
+    link.click();
   };
 
   return (
-    
     <div className="flex flex-col min-h-screen bg-transparent">
       {/* Toast */}
       <AnimatePresence>
@@ -87,7 +93,9 @@ export default function ConfirmationPage() {
         className="flex-grow flex flex-col items-center justify-center px-6 py-8"
       >
         <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-6 w-full max-w-lg text-center">
-          <h1 className="text-3xl font-extrabold mb-3 text-yellow-900">Your Game is Ready!</h1>
+          <h1 className="text-3xl font-extrabold mb-3 text-yellow-900">
+            Your Game is Ready!
+          </h1>
           <p className="text-base text-gray-700 mb-6">
             Share this code with your players to join the game in the Wurder app.
           </p>
@@ -99,13 +107,13 @@ export default function ConfirmationPage() {
               boxShadow: [
                 "0 0 0 rgba(0,0,0,0)",
                 "0 0 15px rgba(255,215,0,0.4)",
-                "0 0 0 rgba(0,0,0,0)"
-              ]
+                "0 0 0 rgba(0,0,0,0)",
+              ],
             }}
             transition={{ repeat: Infinity, duration: 2 }}
             className="relative bg-white border border-yellow-200 rounded-xl px-6 py-4 shadow-lg mb-5 text-4xl font-mono font-bold text-gray-900 group"
           >
-            {code}
+            {code || "—"}
             <button
               onClick={copyToClipboard}
               className="absolute right-3 top-3 text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded shadow"
@@ -120,9 +128,8 @@ export default function ConfirmationPage() {
               ref={qrRef}
               className="bg-white border border-gray-200 rounded-lg shadow p-3 relative overflow-hidden"
             >
-              <QRCodeCanvas value={code || ""} size={140} />
-              {/* Dark overlay on hover */}
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition"></div>
+              <QRCodeCanvas value={code} size={140} />
+              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition" />
             </div>
             <button
               onClick={downloadQR}
@@ -133,9 +140,10 @@ export default function ConfirmationPage() {
             </button>
           </div>
 
-          {/* Players */}
+          {/* Players / Add-ons */}
           <div className="bg-white border border-gray-200 rounded-md px-3 py-2 text-md font-medium text-gray-800 mb-6">
-            {players} Players {addons.length > 0 && `• Add-ons: ${addons.join(" & ")}`}
+            {players ? players : "—"} Players
+            {addons.length > 0 && ` • Add-ons: ${addons.join(" & ")}`}
           </div>
 
           {/* Share Buttons */}
@@ -154,9 +162,7 @@ export default function ConfirmationPage() {
             </button>
           </div>
         </div>
-        
       </motion.main>
-
     </div>
   );
 }

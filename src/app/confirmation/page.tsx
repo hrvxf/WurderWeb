@@ -1,17 +1,9 @@
-// src/app/confirmation/page.tsx
-import { Suspense } from "react";
-import dynamicFn from "next/dynamic";
+// No "use client" here — this stays a server component.
+import ClientConfirmation from "./ClientConfirmation";
 
-export const dynamic = "force-dynamic";
-
-const ConfirmationContent = dynamicFn(() => import("./ConfirmationContent"), {
-  ssr: false,
-});
+// (Optional) keep it static; the child handles runtime-only bits.
+export const dynamic = "force-static";
 
 export default function ConfirmationPage() {
-  return (
-    <Suspense fallback={<div>Loading...</div>}>
-      <ConfirmationContent />
-    </Suspense>
-  );
+  return <ClientConfirmation />;
 }
