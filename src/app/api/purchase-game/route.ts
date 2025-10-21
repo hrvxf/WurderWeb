@@ -10,19 +10,112 @@ type PurchasePayload = {
   addons?: unknown;
 };
 
+type StoredGame = {
+  name: string;
+  players: number;
+  addons: string[];
+  price: number;
+  createdAt: Date;
+};
+
+const globalWithStore = globalThis as typeof globalThis & {
+  __offlineGames__?: Map<string, StoredGame>;
+};
+
+const offlineGameStore =
+  globalWithStore.__offlineGames__ ??
+  (globalWithStore.__offlineGames__ = new Map<string, StoredGame>());
+
+const FIRESTORE_TIMEOUT_MS = 1_000;
+
+type FirestoreResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: "offline" | "timeout" };
+
 const ADDON_PRICE = 5;
 
 const generateGameCode = () =>
   Math.random().toString(36).substring(2, 8).toUpperCase();
+
+function isOfflineError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string" &&
+    ((error as { code: string }).code === "unavailable" ||
+      (error as { code: string }).code === "failed-precondition" ||
+      (error as { code: string }).code === "deadline-exceeded")
+  );
+}
+
+async function tryFirestore<T>(operation: () => Promise<T>): Promise<FirestoreResult<T>> {
+  const opPromise: Promise<FirestoreResult<T>> = (async () => {
+    try {
+      const value = await operation();
+      return { ok: true, value } as const;
+    } catch (error) {
+      if (isOfflineError(error)) {
+        return { ok: false, reason: "offline" } as const;
+      }
+
+      throw error;
+    }
+  })();
+
+  const timeoutPromise = new Promise<FirestoreResult<T>>((resolve) => {
+    const timer = setTimeout(() => {
+      resolve({ ok: false, reason: "timeout" });
+    }, FIRESTORE_TIMEOUT_MS);
+
+    void opPromise.finally(() => clearTimeout(timer));
+  });
+
+  try {
+    return await Promise.race([opPromise, timeoutPromise]);
+  } catch (error) {
+    // If the operation threw a non-offline error we rethrow so the caller can handle it.
+    throw error;
+  }
+}
+
+async function isCodeTaken(code: string): Promise<boolean> {
+  const result = await tryFirestore(() => getDoc(doc(db, "games", code)));
+
+  if (result.ok) {
+    if (result.value.exists()) {
+      return true;
+    }
+
+    return offlineGameStore.has(code);
+  }
+
+  return offlineGameStore.has(code);
+}
+
+async function saveGame(code: string, data: Omit<StoredGame, "createdAt">) {
+  const result = await tryFirestore(() =>
+    setDoc(doc(db, "games", code), {
+      ...data,
+      createdAt: serverTimestamp(),
+    })
+  );
+
+  if (!result.ok) {
+    offlineGameStore.set(code, {
+      ...data,
+      createdAt: new Date(),
+    });
+  }
+}
 
 async function getUniqueGameCode(): Promise<string> {
   let attempts = 0;
   let code = generateGameCode();
 
   while (attempts < 25) {
-    const docRef = doc(db, "games", code);
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) {
+    const taken = await isCodeTaken(code);
+    if (!taken) {
       return code;
     }
 
@@ -79,12 +172,11 @@ export async function POST(request: NextRequest) {
     const gameCode = await getUniqueGameCode();
     const price = calculatePrice(players, addons.length);
 
-    await setDoc(doc(db, "games", gameCode), {
+    await saveGame(gameCode, {
       name,
       players,
       addons,
       price,
-      createdAt: serverTimestamp(),
     });
 
     return NextResponse.json({
