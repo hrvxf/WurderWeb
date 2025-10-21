@@ -50,25 +50,25 @@ function isOfflineError(error: unknown) {
 }
 
 async function tryFirestore<T>(operation: () => Promise<T>): Promise<FirestoreResult<T>> {
-  const opPromise = operation().then<FirestoreResult<T>>(
-    (value) => ({ ok: true, value }),
-    (error) => {
+  const opPromise: Promise<FirestoreResult<T>> = (async () => {
+    try {
+      const value = await operation();
+      return { ok: true, value } as const;
+    } catch (error) {
       if (isOfflineError(error)) {
         return { ok: false, reason: "offline" } as const;
       }
 
       throw error;
     }
-  );
+  })();
 
   const timeoutPromise = new Promise<FirestoreResult<T>>((resolve) => {
     const timer = setTimeout(() => {
       resolve({ ok: false, reason: "timeout" });
     }, FIRESTORE_TIMEOUT_MS);
 
-    opPromise.finally(() => clearTimeout(timer)).catch(() => {
-      /* handled above */
-    });
+    void opPromise.finally(() => clearTimeout(timer));
   });
 
   try {
