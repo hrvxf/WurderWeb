@@ -2,10 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { db } from "@/lib/firebase";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import Button from "@/components/Button";
-import Footer from "@/components/Footer";
 import { motion } from "framer-motion";
 
 export default function BuyPackage() {
@@ -25,21 +22,6 @@ export default function BuyPackage() {
     );
   };
 
-  const generateGameCode = () =>
-    Math.random().toString(36).substring(2, 8).toUpperCase();
-
-  const getUniqueGameCode = async (): Promise<string> => {
-    let code = generateGameCode();
-    let exists = true;
-    while (exists) {
-      const docRef = doc(db, "games", code);
-      const docSnap = await getDoc(docRef);
-      if (!docSnap.exists()) exists = false;
-      else code = generateGameCode();
-    }
-    return code;
-  };
-
   const handlePurchase = async () => {
     setError("");
 
@@ -56,21 +38,47 @@ export default function BuyPackage() {
     setLoading(true);
 
     try {
-      const gameCode = await getUniqueGameCode();
-
-      await setDoc(doc(db, "games", gameCode), {
-        name: gameName.trim(),
-        players,
-        addons,
-        createdAt: serverTimestamp(),
+      const response = await fetch("/api/purchase-game", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          gameName: gameName.trim(),
+          players,
+          addons,
+        }),
       });
 
-      router.push(
-        `/confirmation?code=${gameCode}&players=${players}&addons=${addons.join(",")}`
-      );
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.code) {
+        const message =
+          typeof data?.error === "string"
+            ? data.error
+            : "Something went wrong. Please try again.";
+        throw new Error(message);
+      }
+
+      const params = new URLSearchParams({
+        code: data.code,
+        players: String(data.players ?? players),
+      });
+
+      if (Array.isArray(data.addons) && data.addons.length > 0) {
+        params.set("addons", data.addons.join(","));
+      } else if (addons.length > 0) {
+        params.set("addons", addons.join(","));
+      }
+
+      router.push(`/confirmation?${params.toString()}`);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong. Please try again.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setLoading(false);
     }
