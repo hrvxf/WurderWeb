@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/firebase";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,18 @@ type GameDetails = {
   price: number;
 };
 
+type StoredGameDocument = {
+  code: string;
+  name: string;
+  maxPlayers: number;
+  playerSlots: number;
+  price: number;
+  addons: string[];
+  createdAt: string;
+  started: boolean;
+  players: Record<string, unknown>;
+};
+
 const ADDON_PRICE = 5;
 
 const generateGameCode = () =>
@@ -27,11 +39,53 @@ async function isCodeTaken(code: string): Promise<boolean> {
   return snapshot.exists();
 }
 
+function getGameStorageRefs(code: string) {
+  const now = new Date();
+  const createdAt = now.toISOString();
+
+  const baseYear = 2024;
+  const yearBucket = String(Math.max(0, now.getUTCFullYear() - baseYear));
+  const quarterBucket = String(Math.floor(now.getUTCMonth() / 3) + 1);
+  const dayBucket = String(now.getUTCDate());
+
+  const primaryRef = doc(db, "games", code);
+  const archiveRef = doc(
+    db,
+    "games",
+    yearBucket,
+    quarterBucket,
+    dayBucket,
+    code,
+    "1"
+  );
+
+  return { primaryRef, archiveRef, createdAt };
+}
+
+function buildStoredGame(code: string, data: GameDetails, createdAt: string) {
+  const stored: StoredGameDocument = {
+    code,
+    name: data.name,
+    maxPlayers: data.players,
+    playerSlots: data.players,
+    price: data.price,
+    addons: data.addons,
+    createdAt,
+    started: false,
+    players: {},
+  };
+
+  return stored;
+}
+
 async function saveGame(code: string, data: GameDetails) {
-  await setDoc(doc(db, "games", code), {
-    ...data,
-    createdAt: serverTimestamp(),
-  });
+  const { primaryRef, archiveRef, createdAt } = getGameStorageRefs(code);
+  const storedGame = buildStoredGame(code, data, createdAt);
+
+  await Promise.all([
+    setDoc(primaryRef, storedGame),
+    setDoc(archiveRef, storedGame),
+  ]);
 }
 
 async function getUniqueGameCode(): Promise<string> {
