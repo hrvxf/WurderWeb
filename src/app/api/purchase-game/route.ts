@@ -80,28 +80,41 @@ async function tryFirestore<T>(operation: () => Promise<T>): Promise<FirestoreRe
 }
 
 async function isCodeTaken(code: string): Promise<boolean> {
-  const result = await tryFirestore(() => getDoc(doc(db, "games", code)));
+  try {
+    const result = await tryFirestore(() => getDoc(doc(db, "games", code)));
 
-  if (result.ok) {
-    if (result.value.exists()) {
-      return true;
+    if (result.ok) {
+      if (result.value.exists()) {
+        return true;
+      }
+
+      return offlineGameStore.has(code);
     }
 
     return offlineGameStore.has(code);
+  } catch (error) {
+    console.error("Failed to check code availability", error);
+    return offlineGameStore.has(code);
   }
-
-  return offlineGameStore.has(code);
 }
 
 async function saveGame(code: string, data: Omit<StoredGame, "createdAt">) {
-  const result = await tryFirestore(() =>
-    setDoc(doc(db, "games", code), {
-      ...data,
-      createdAt: serverTimestamp(),
-    })
-  );
+  try {
+    const result = await tryFirestore(() =>
+      setDoc(doc(db, "games", code), {
+        ...data,
+        createdAt: serverTimestamp(),
+      })
+    );
 
-  if (!result.ok) {
+    if (!result.ok) {
+      offlineGameStore.set(code, {
+        ...data,
+        createdAt: new Date(),
+      });
+    }
+  } catch (error) {
+    console.error("Failed to save game to Firestore", error);
     offlineGameStore.set(code, {
       ...data,
       createdAt: new Date(),
