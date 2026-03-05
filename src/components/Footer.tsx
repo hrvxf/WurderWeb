@@ -10,6 +10,9 @@ export default function Footer() {
           <a href="/privacy" className="hover:text-gray-800 transition-colors">
             Privacy Policy
           </a>
+          <a href="/delete-account" className="hover:text-gray-800 transition-colors">
+            Delete Account
+          </a>
           <a href="/contact" className="hover:text-gray-800 transition-colors">
             Contact
           </a>
