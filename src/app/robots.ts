@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wurder.co.uk";
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wurder.app";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -12,3 +12,5 @@ export default function robots(): MetadataRoute.Robots {
     host: siteUrl,
   };
 }
+
+

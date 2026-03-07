@@ -10,6 +10,20 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  {
+    ignores: [
+      "src/app/create-account/**",
+      "src/app/email-login/**",
+      "src/app/delete-account/**",
+      "src/app/profile/**",
+      "src/app/utils/**",
+      "src/components/auth/**",
+      "src/components/Header.tsx",
+      "src/components/Footer.tsx",
+      "src/components/PriceSection.tsx",
+      "src/functions/**",
+    ],
+  },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

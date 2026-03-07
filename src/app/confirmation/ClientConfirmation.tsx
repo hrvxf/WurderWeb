@@ -1,168 +1,84 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
-import {
-  EnvelopeIcon,
-  ChatBubbleLeftEllipsisIcon,
-  ArrowDownTrayIcon,
-} from "@heroicons/react/24/outline";
-import { motion, AnimatePresence } from "framer-motion";
+import Button from "@/components/Button";
+import { buildUniversalJoinLink } from "@/domain/join/links";
 
-function parseAddonsFromString(addons: string | null): string[] {
-  if (!addons) return [];
-  return addons
+function normalizeAddons(value: string | null): string[] {
+  if (!value) return [];
+  return value
     .split(",")
-    .map((a) => a.trim())
-    .filter(Boolean)
-    .map((a) => a.charAt(0).toUpperCase() + a.slice(1));
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export default function ClientConfirmation() {
-  const [toast, setToast] = useState("");
+  const params = useSearchParams();
   const qrRef = useRef<HTMLDivElement>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
-  // Read query params on the client (no useSearchParams, no Suspense)
-  const { code, players, addons } = useMemo(() => {
-    if (typeof window === "undefined") {
-      return { code: "", players: "", addons: [] as string[] };
-    }
-    const sp = new URLSearchParams(window.location.search);
-    const code = sp.get("code") || "";
-    const players = sp.get("players") || "";
-    const addons = parseAddonsFromString(sp.get("addons"));
-    return { code, players, addons };
-  }, []);
+  const code = params.get("code")?.trim().toUpperCase() || "";
+  const players = params.get("players") || "";
+  const addons = useMemo(() => normalizeAddons(params.get("addons")), [params]);
+  const joinLink = buildUniversalJoinLink(code || "UNKNOWN");
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(""), 2500);
-  };
-
-  const copyToClipboard = () => {
+  function copyCode() {
     if (!code) return;
     navigator.clipboard.writeText(code);
-    showToast("Game code copied!");
-  };
+    setCopyState("copied");
+    window.setTimeout(() => setCopyState("idle"), 1200);
+  }
 
-  const shareWhatsApp = () => {
-    if (!code) return;
-    const message = `Join my Wurder game! Use code: ${code}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
-  };
-
-  const shareEmail = () => {
-    if (!code) return;
-    const subject = "Join my Wurder Game!";
-    const body = `Hey! Join my Wurder game using this code: ${code}`;
-    window.location.href = `mailto:?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(body)}`;
-  };
-
-  const downloadQR = () => {
+  function downloadQr() {
     const canvas = qrRef.current?.querySelector("canvas");
-    if (!canvas) return;
+    if (!canvas || !code) return;
     const link = document.createElement("a");
     link.href = canvas.toDataURL("image/png");
-    link.download = `wurder-game-${code || "code"}.png`;
+    link.download = `wurder-join-${code}.png`;
     link.click();
-  };
+  }
 
   return (
-    <div className="flex flex-col min-h-screen bg-transparent">
-      {/* Toast */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-5 py-3 rounded-lg shadow-lg z-50"
-          >
-            {toast}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <section className="mx-auto max-w-2xl glass-surface rounded-3xl p-6 sm:p-8">
+      <h1 className="text-3xl font-bold">Game Code Ready</h1>
+      <p className="mt-3 text-soft">Share this game code or QR. QR payload uses the canonical universal join URL.</p>
 
-      {/* Main Content */}
-      <motion.main
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex-grow flex flex-col items-center justify-center px-6 py-8"
-      >
-        <div className="bg-white/80 backdrop-blur-md rounded-3xl shadow-2xl p-6 w-full max-w-lg text-center">
-          <h1 className="text-3xl font-extrabold mb-3 text-yellow-900">
-            Your Game is Ready!
-          </h1>
-          <p className="text-base text-gray-700 mb-6">
-            Share this code with your players to join the game in the Wurder app.
-          </p>
+      <div className="mt-6 rounded-2xl border border-white/15 bg-black/25 p-5 text-center">
+        <p className="text-xs uppercase tracking-[0.16em] text-muted">Game code</p>
+        <p className="mt-2 font-mono text-4xl font-bold tracking-[0.1em]">{code || "------"}</p>
+        <Button onClick={copyCode} variant="glass" className="mt-4">
+          {copyState === "copied" ? "Copied" : "Copy code"}
+        </Button>
+      </div>
 
-          {/* Game Code */}
-          <motion.div
-            animate={{
-              scale: [1, 1.02, 1],
-              boxShadow: [
-                "0 0 0 rgba(0,0,0,0)",
-                "0 0 15px rgba(255,215,0,0.4)",
-                "0 0 0 rgba(0,0,0,0)",
-              ],
-            }}
-            transition={{ repeat: Infinity, duration: 2 }}
-            className="relative bg-white border border-yellow-200 rounded-xl px-6 py-4 shadow-lg mb-5 text-4xl font-mono font-bold text-gray-900 group"
-          >
-            {code || "—"}
-            <button
-              onClick={copyToClipboard}
-              className="absolute right-3 top-3 text-xs bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded shadow"
-            >
-              Copy
-            </button>
-          </motion.div>
-
-          {/* QR + Hover Download */}
-          <div className="relative group mb-5 inline-block">
-            <div
-              ref={qrRef}
-              className="bg-white border border-gray-200 rounded-lg shadow p-3 relative overflow-hidden"
-            >
-              <QRCodeCanvas value={code} size={140} />
-              <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition" />
-            </div>
-            <button
-              onClick={downloadQR}
-              className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition bg-gray-800 text-white p-2 rounded-full shadow"
-              title="Download QR"
-            >
-              <ArrowDownTrayIcon className="h-4 w-4" />
-            </button>
-          </div>
-
-          {/* Players / Add-ons */}
-          <div className="bg-white border border-gray-200 rounded-md px-3 py-2 text-md font-medium text-gray-800 mb-6">
-            {players ? players : "—"} Players
-            {addons.length > 0 && ` • Add-ons: ${addons.join(" & ")}`}
-          </div>
-
-          {/* Share Buttons */}
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={shareWhatsApp}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-green-500 text-white rounded-full shadow hover:opacity-90 transition"
-            >
-              <ChatBubbleLeftEllipsisIcon className="h-5 w-5" /> Share via WhatsApp
-            </button>
-            <button
-              onClick={shareEmail}
-              className="flex items-center justify-center gap-2 px-5 py-3 bg-gray-200 text-gray-800 rounded-full shadow hover:bg-gray-300 transition"
-            >
-              <EnvelopeIcon className="h-5 w-5" /> Share via Email
-            </button>
-          </div>
+      <div className="mt-6 grid gap-5 sm:grid-cols-[auto_1fr] sm:items-center">
+        <div ref={qrRef} className="inline-flex rounded-xl border border-white/20 bg-white p-3">
+          <QRCodeCanvas value={joinLink} size={150} />
         </div>
-      </motion.main>
-    </div>
+        <div>
+          <p className="text-sm text-soft">Join URL</p>
+          <p className="mt-1 break-all text-xs text-muted">{joinLink}</p>
+          <Button onClick={downloadQr} className="mt-4" variant="ghost">
+            Download QR
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-sm text-soft">
+        <p>Players: {players || "-"}</p>
+        <p>Add-ons: {addons.length > 0 ? addons.join(", ") : "None"}</p>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        {code ? <Button href={`/join/${code}`}>Test Join Route</Button> : null}
+        <Button href="/" variant="glass">
+          Back Home
+        </Button>
+      </div>
+    </section>
   );
 }
+
+

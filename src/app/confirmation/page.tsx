@@ -1,9 +1,12 @@
-// No "use client" here — this stays a server component.
+import { Suspense } from "react";
 import ClientConfirmation from "./ClientConfirmation";
 
-// (Optional) keep it static; the child handles runtime-only bits.
 export const dynamic = "force-static";
 
 export default function ConfirmationPage() {
-  return <ClientConfirmation />;
+  return (
+    <Suspense fallback={<p className="text-soft">Loading confirmation...</p>}>
+      <ClientConfirmation />
+    </Suspense>
+  );
 }

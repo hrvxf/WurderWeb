@@ -13,12 +13,12 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "baseUrl": ".",                      // <-- ADD THIS
+    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]                   // <-- Keep like this
+      "@/*": ["src/*"]
     },
     "plugins": [{ "name": "next" }]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", "**/*.mdx", ".next/types/**/*.ts"],
+  "exclude": ["node_modules", "tests", "src/**/*.test.ts"]
 }

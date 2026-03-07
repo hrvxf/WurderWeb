@@ -2,58 +2,142 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Button from "@/components/Button";
+import { HANDOFF_FALLBACK_DELAY_MS } from "@/domain/handoff/constants";
+import { buildAppJoinLink, buildUniversalJoinLink } from "@/domain/join/links";
+import { ANALYTICS_EVENTS, trackEvent } from "@/lib/analytics";
 
-export default function JoinFallbackClient({ gameCode }: { gameCode: string }) {
+type Props = {
+  gameCode: string;
+  isValidCode: boolean;
+};
+
+export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
   const [showFallback, setShowFallback] = useState(false);
 
-  const appDeepLink = useMemo(() => `wurder://join/${encodeURIComponent(gameCode)}`, [gameCode]);
+  const universalLink = useMemo(() => buildUniversalJoinLink(gameCode), [gameCode]);
+  const appDeepLink = useMemo(() => buildAppJoinLink(gameCode), [gameCode]);
 
   useEffect(() => {
-    if (!gameCode) {
+    trackEvent(ANALYTICS_EVENTS.joinPageView, {
+      game_code_present: Boolean(gameCode),
+      code_valid: isValidCode,
+      source_channel: "direct",
+    });
+
+    if (!isValidCode) {
+      trackEvent(ANALYTICS_EVENTS.joinFallbackShown, {
+        handoff_outcome: "invalid_code",
+      });
       setShowFallback(true);
       return;
     }
 
+    trackEvent(ANALYTICS_EVENTS.joinCodeValid, { code_valid: true });
+
     const fallbackTimer = window.setTimeout(() => {
       setShowFallback(true);
-    }, 1400);
+      trackEvent(ANALYTICS_EVENTS.joinFallbackShown, {
+        handoff_outcome: "fallback",
+        source_channel: "join_route",
+      });
+    }, HANDOFF_FALLBACK_DELAY_MS);
 
-    window.location.href = appDeepLink;
+    trackEvent(ANALYTICS_EVENTS.joinOpenAttempt, {
+      handoff_outcome: "attempted",
+      source_channel: "join_route",
+    });
 
-    return () => window.clearTimeout(fallbackTimer);
-  }, [appDeepLink, gameCode]);
+    window.location.assign(universalLink);
+
+    const successTimer = window.setTimeout(() => {
+      trackEvent(ANALYTICS_EVENTS.joinOpenSuccessProxy, {
+        handoff_outcome: "opened",
+        source_channel: "join_route",
+      });
+    }, 500);
+
+    return () => {
+      window.clearTimeout(fallbackTimer);
+      window.clearTimeout(successTimer);
+    };
+  }, [gameCode, isValidCode, universalLink]);
 
   if (!showFallback) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-6 bg-gradient-to-b from-amber-50 to-white">
-        <p className="text-lg font-medium text-gray-700">Opening the Wurder app…</p>
+      <main className="flex min-h-[60vh] items-center justify-center rounded-3xl glass-surface px-6 text-center">
+        <div>
+          <p className="text-sm uppercase tracking-[0.2em] text-muted">Join Handoff</p>
+          <p className="mt-3 text-2xl font-semibold">Opening the Wurder app...</p>
+          <p className="mt-2 text-soft">Game code {gameCode}</p>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-6 bg-gradient-to-b from-amber-50 to-white">
-      <section className="max-w-xl w-full bg-white rounded-2xl shadow-xl p-8 text-center">
-        <h1 className="text-3xl font-bold text-gray-900">Join game {gameCode}</h1>
-        <p className="mt-3 text-gray-600">
-          If Wurder is installed, tap below to open the game instantly. If not, install the app first.
+    <main className="glass-surface min-h-[60vh] rounded-3xl px-6 py-10 sm:px-10">
+      <div className="mx-auto max-w-xl text-center">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted">Join Game</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">
+          {isValidCode ? `Join ${gameCode}` : "Invalid game code"}
+        </h1>
+        <p className="mt-3 text-soft">
+          {isValidCode
+            ? "If the app is installed, open it directly. If not, install first and continue with the same game code."
+            : "Game code must be six uppercase letters or numbers. Ask your host for a valid code."}
         </p>
 
-        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <a
-            href={appDeepLink}
-            className="inline-flex items-center justify-center rounded-xl bg-black text-white px-6 py-3 font-semibold hover:bg-gray-800 transition"
-          >
-            Open in app
-          </a>
-          <Link
-            href="/"
-            className="inline-flex items-center justify-center rounded-xl bg-amber-500 text-white px-6 py-3 font-semibold hover:bg-amber-600 transition"
-          >
-            Install app
-          </Link>
+        <div className="mt-8 grid gap-3">
+          {isValidCode ? (
+            <>
+              <Button
+                onClick={() => {
+                  trackEvent(ANALYTICS_EVENTS.joinOpenAttempt, {
+                    handoff_outcome: "manual_retry",
+                    source_channel: "fallback",
+                  });
+                  window.location.assign(appDeepLink);
+                }}
+                fullWidth
+              >
+                Retry Open in App
+              </Button>
+              <Button
+                href={`/?gameCode=${gameCode}`}
+                variant="glass"
+                fullWidth
+                className="text-center"
+              >
+                Continue in Web
+              </Button>
+              <Button
+                href={`/?install=1&gameCode=${gameCode}`}
+                variant="ghost"
+                fullWidth
+                className="text-center"
+                onClick={() =>
+                  trackEvent(ANALYTICS_EVENTS.joinInstallClick, {
+                    source_channel: "fallback",
+                    game_code_present: true,
+                  })
+                }
+              >
+                Install App
+              </Button>
+            </>
+          ) : (
+            <Button href="/" variant="glass" fullWidth>
+              Back to Home
+            </Button>
+          )}
         </div>
-      </section>
+
+        <p className="mt-6 text-sm text-muted">
+          Need help? <Link href="mailto:hello@wurder.app" className="underline">hello@wurder.app</Link>
+        </p>
+      </div>
     </main>
   );
 }
+
