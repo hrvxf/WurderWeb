@@ -10,7 +10,6 @@ import { motion } from "framer-motion";
 
 export default function BuyPackage() {
   const router = useRouter();
-  const [gameName, setGameName] = useState("");
   const [players, setPlayers] = useState(5);
   const [addons, setAddons] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,11 +42,6 @@ export default function BuyPackage() {
   const handlePurchase = async () => {
     setError("");
 
-    if (!gameName.trim()) {
-      setError("Please enter a game name.");
-      return;
-    }
-
     if (players <= 0) {
       setError("Please select a valid number of players.");
       return;
@@ -59,7 +53,6 @@ export default function BuyPackage() {
       const gameCode = await getUniqueGameCode();
 
       await setDoc(doc(db, "games", gameCode), {
-        name: gameName.trim(),
         players,
         addons,
         createdAt: serverTimestamp(),
@@ -80,10 +73,6 @@ export default function BuyPackage() {
     <div className="flex flex-col bg-transparent">
       {/* Mobile Header */}
       <div className="sm:hidden flex items-center justify-between bg-white/50 backdrop-blur-md px-4 py-3 shadow">
-        <button onClick={() => router.push("/")} className="text-blue-600 font-medium">
-          ← Back
-        </button>
-        <h2 className="font-semibold text-lg">Buy Game Package</h2>
         <div className="w-10" />
       </div>
 
@@ -101,16 +90,6 @@ export default function BuyPackage() {
             {error && (
               <p className="bg-red-100 text-red-700 p-3 rounded mb-4 text-center">{error}</p>
             )}
-
-            {/* Game Name */}
-            <h3 className="text-lg font-semibold mb-2">Game Name</h3>
-            <input
-              type="text"
-              placeholder="Enter your game name"
-              className="w-full border border-gray-300 rounded-lg px-4 py-3 mb-4 text-black placeholder-gray-500 focus:outline-none focus:ring-2 bg-white focus:ring-yellow-500"
-              value={gameName}
-              onChange={(e) => setGameName(e.target.value)}
-            />
 
             {/* Number of Players */}
             <h3 className="text-lg font-semibold mb-2">Number of Players</h3>
@@ -160,6 +139,7 @@ export default function BuyPackage() {
               {loading ? "Processing..." : "Purchase & Generate Code"}
             </Button>
           </div>
+
           {/* Right Side – Info Panel */}
           <div className="hidden lg:flex w-1/2 bg-gradient-to-br backdrop-blur-md items-center justify-center p-10 border-l border-yellow-200 shadow-inner">
             <div className="text-center max-w-md">
@@ -190,12 +170,8 @@ export default function BuyPackage() {
               </ul>
             </div>
           </div>
-
-
-
         </div>
       </motion.div>
-
     </div>
   );
 }
