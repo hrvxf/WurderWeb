@@ -1,0 +1,21 @@
+{
+  "name": "Wurder",
+  "short_name": "Wurder",
+  "description": "The real-world social deduction game.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07080d",
+  "theme_color": "#07080d",
+  "icons": [
+    {
+      "src": "/favicons/icons/180x180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/favicons/icons/master_icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

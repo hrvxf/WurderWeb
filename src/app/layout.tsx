@@ -14,6 +14,16 @@ export const metadata: Metadata = {
   },
   description:
     "Fast social assassin gameplay. Join with a game code, validate handoff fast, and open directly in the Wurder app.",
+  manifest: "/favicons/manifest.webmanifest",
+  icons: {
+    icon: [
+      { url: "/favicons/icons/16x16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicons/icons/32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicons/icons/master_icon.png", sizes: "512x512", type: "image/png" },
+    ],
+    shortcut: [{ url: "/favicons/icons/32x32.png" }],
+    apple: [{ url: "/favicons/icons/180x180.png", sizes: "180x180", type: "image/png" }],
+  },
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
