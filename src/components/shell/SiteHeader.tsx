@@ -15,7 +15,7 @@ export default function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-black/20 backdrop-blur-md">
       <div className="page-wrap flex h-16 items-center justify-between gap-4">
         <Link href="/" className="inline-flex items-center gap-3">
-          <Image src="/wurder-logo3.png" alt="Wurder" width={156} height={44} priority />
+          <Image src="/wurder_gold.png" alt="Wurder" width={156} height={44} priority />
         </Link>
         <nav className="hidden items-center gap-5 text-sm text-soft md:flex">
           {navItems.map((item) => (

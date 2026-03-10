@@ -71,7 +71,7 @@ export default function Header({ onLoginClick }: HeaderProps) {
         {/* Logo */}
         <a href="/" className="flex items-center space-x-3">
           <Image
-            src="/wurder-logo3.png"
+            src="/wurder_gold.png"
             alt="Wurder"
             width={shrinkHeader ? 170 : 200}
             height={58}
