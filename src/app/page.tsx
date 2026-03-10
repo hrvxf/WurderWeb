@@ -71,27 +71,53 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="how-it-works" aria-labelledby="how-title" className="grid gap-4 sm:grid-cols-3">
-        <h2 id="how-title" className="sr-only">
-          How It Works
+      <section
+        id="how-it-works"
+        aria-labelledby="how-wurder-works-title"
+        className="relative overflow-hidden rounded-3xl border border-amber-100/15 bg-black/25 px-6 py-10 sm:px-8 sm:py-12"
+      >
+        <div className="pointer-events-none absolute inset-0 -z-10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_8%_15%,rgba(199,53,93,0.18),transparent_48%),radial-gradient(circle_at_92%_4%,rgba(217,106,90,0.12),transparent_40%),linear-gradient(160deg,rgba(8,9,12,0.85),rgba(14,10,15,0.9))]" />
+        </div>
+
+        <p className="text-xs uppercase tracking-[0.24em] text-amber-200/80">How Wurder Works</p>
+        <h2 id="how-wurder-works-title" className="mt-3 max-w-3xl text-3xl font-bold tracking-tight sm:text-4xl">
+          How Wurder Works
         </h2>
-        <article className="glass-surface rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-200/80">Step 1</p>
-          <h3 className="mt-2 text-lg font-semibold">Get your assignment</h3>
-          <p className="mt-2 text-sm text-soft">Enter the game and receive one secret target with one kill word.</p>
-        </article>
-        <article className="glass-surface rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-200/80">Step 2</p>
-          <h3 className="mt-2 text-lg font-semibold">Blend in and trap</h3>
-          <p className="mt-2 text-sm text-soft">
-            Keep your own word hidden while steering your target into saying theirs.
-          </p>
-        </article>
-        <article className="glass-surface rounded-2xl p-5">
-          <p className="text-xs uppercase tracking-[0.2em] text-amber-200/80">Step 3</p>
-          <h3 className="mt-2 text-lg font-semibold">Survive and climb</h3>
-          <p className="mt-2 text-sm text-soft">Each elimination advances you, but everyone is hunting someone.</p>
-        </article>
+        <p className="mt-4 max-w-3xl text-sm leading-relaxed text-white/85 sm:text-base">
+          A secret target. A hidden word. One chance to strike before someone gets you first.
+        </p>
+
+        <ol className="mt-8 grid gap-4 md:grid-cols-2">
+          <li className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-amber-100/40 hover:bg-white/[0.06] focus-within:ring-2 focus-within:ring-amber-200/70">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-200/85">Step 1</p>
+            <h3 className="mt-2 text-xl font-semibold">Receive Your Contract</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              Every player is assigned a secret target and a kill word.
+            </p>
+          </li>
+          <li className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-amber-100/40 hover:bg-white/[0.06] focus-within:ring-2 focus-within:ring-amber-200/70">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-200/85">Step 2</p>
+            <h3 className="mt-2 text-xl font-semibold">Commit a Wurder</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              Trick your target into saying the word without making them suspicious.
+            </p>
+          </li>
+          <li className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-amber-100/40 hover:bg-white/[0.06] focus-within:ring-2 focus-within:ring-amber-200/70">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-200/85">Step 3</p>
+            <h3 className="mt-2 text-xl font-semibold">Stay Alive</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              Someone else is hunting you at the same time, so every conversation matters.
+            </p>
+          </li>
+          <li className="group rounded-2xl border border-white/15 bg-white/[0.03] p-5 transition duration-300 hover:-translate-y-0.5 hover:border-amber-100/40 hover:bg-white/[0.06] focus-within:ring-2 focus-within:ring-amber-200/70">
+            <p className="text-xs uppercase tracking-[0.2em] text-amber-200/85">Step 4</p>
+            <h3 className="mt-2 text-xl font-semibold">Confirm the Kill</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/85">
+              When a kill is claimed, the victim confirms or disputes it to keep the game fair.
+            </p>
+          </li>
+        </ol>
       </section>
     </div>
   );
