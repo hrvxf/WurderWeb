@@ -1,0 +1,54 @@
+export type WurderUserStats = {
+  gamesPlayed?: number;
+  kills?: number;
+  deaths?: number;
+  wins?: number;
+  streak?: number;
+  streakBest?: number;
+  points?: number;
+  pointsLifetime?: number;
+  mvpAwards?: number;
+};
+
+export type WurderUserProfile = {
+  uid: string;
+  email: string | null;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  wurderId?: string;
+  wurderIdLower?: string;
+  avatar?: string | null;
+  avatarUrl?: string | null;
+  avatarPath?: string | null;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  activeGame?: unknown | null;
+  stats?: WurderUserStats;
+  roles?: {
+    admin?: boolean;
+    moderator?: boolean;
+  };
+  onboarding?: {
+    profileComplete?: boolean;
+  };
+};
+
+export type UsernameLookup = {
+  username?: string;
+  usernameLower: string;
+  uid?: string;
+  email?: string;
+  createdAt?: unknown;
+};
+
+export const DEFAULT_PROFILE_STATS: Required<
+  Pick<WurderUserStats, "gamesPlayed" | "kills" | "deaths" | "points" | "streak" | "mvpAwards">
+> = {
+  gamesPlayed: 0,
+  kills: 0,
+  deaths: 0,
+  points: 0,
+  streak: 0,
+  mvpAwards: 0,
+};
