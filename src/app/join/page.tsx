@@ -1,12 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Button from "@/components/Button";
 import { parseGameCode } from "@/domain/join/code";
 import { extractGameCodeFromPayload } from "@/domain/join/joinLink";
 
 export default function JoinEntryPage() {
+  return (
+    <Suspense fallback={<JoinEntryPageFallback />}>
+      <JoinEntryPageContent />
+    </Suspense>
+  );
+}
+
+function JoinEntryPageFallback() {
+  return (
+    <main className="glass-surface min-h-[60vh] rounded-3xl px-6 py-10 sm:px-10">
+      <div className="mx-auto max-w-xl">
+        <p className="text-xs uppercase tracking-[0.18em] text-muted">Join Game</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Loading join form...</h1>
+      </div>
+    </main>
+  );
+}
+
+function JoinEntryPageContent() {
   const params = useSearchParams();
   const router = useRouter();
   const [payload, setPayload] = useState(() => params.get("code") || "");
