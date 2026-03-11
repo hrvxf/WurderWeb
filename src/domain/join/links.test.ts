@@ -9,4 +9,8 @@ describe("join links", () => {
   it("builds app deep link", () => {
     expect(buildAppJoinLink("ABC123")).toBe("wurder://join/ABC123");
   });
+
+  it("falls back to generic app deep link for invalid game code", () => {
+    expect(buildAppJoinLink("abc")).toBe("wurder://join");
+  });
 });
