@@ -4,7 +4,6 @@ import Button from "@/components/Button";
 
 const navItems = [
   { href: "/", label: "Home" },
-  { href: "/buy", label: "Buy" },
   { href: "/members", label: "Members" },
   { href: "/contact", label: "Support" },
   { href: "/privacy", label: "Privacy" },
@@ -29,8 +28,8 @@ export default function SiteHeader() {
           <Button href="/login" variant="ghost">
             Sign In
           </Button>
-          <Button href="/buy" variant="glass">
-            Start a Game
+          <Button href="/join" variant="glass">
+            Join a Game
           </Button>
         </div>
       </div>

@@ -11,7 +11,12 @@ function safeDecode(input: string): string {
 }
 
 export function buildJoinUniversalLink(gameCode: string): string {
-  return `https://wurder.app/join/${encodeURIComponent(gameCode)}`;
+  const parsed = parseGameCode(gameCode);
+  if (!parsed.isValid) {
+    return "";
+  }
+
+  return `https://wurder.app/join/${parsed.value}`;
 }
 
 export function extractGameCodeFromPayload(payload: string): string {

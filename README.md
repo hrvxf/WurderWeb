@@ -1,6 +1,6 @@
 # Wurder Website
 
-Next.js App Router website for Wurder marketing, game purchase flow, and members area.
+Next.js App Router website for Wurder marketing, join flow, and members area.
 
 ## Local Development
 

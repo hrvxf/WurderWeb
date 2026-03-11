@@ -5,6 +5,10 @@ describe("joinLink helpers", () => {
     expect(buildJoinUniversalLink("ABC123")).toBe("https://wurder.app/join/ABC123");
   });
 
+  it("rejects invalid game code when building universal URL", () => {
+    expect(buildJoinUniversalLink("AB-123")).toBe("");
+  });
+
   it("extracts game code from raw payload", () => {
     expect(extractGameCodeFromPayload("abc123")).toBe("ABC123");
   });

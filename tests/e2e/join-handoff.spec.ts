@@ -14,6 +14,16 @@ test("manual join entry resolves code from URL payload", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
 });
 
+test("confirmation join QR flow excludes purchase metadata", async ({ page }) => {
+  await page.goto("/confirmation?code=ABC123&players=12&addons=Guilds");
+  await expect(page.getByText("Share Join QR")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Link" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Close" })).toBeVisible();
+  await expect(page.getByText("Players:")).toHaveCount(0);
+  await expect(page.getByText("Add-ons:")).toHaveCount(0);
+  await expect(page.getByText("Checkout")).toHaveCount(0);
+});
+
 test("support contact is reachable", async ({ page }) => {
   await page.goto("/contact");
   await expect(page.getByText("hello@wurder.app")).toBeVisible();

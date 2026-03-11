@@ -4,7 +4,7 @@ import Button from "@/components/Button";
 
 export const metadata: Metadata = {
   title: "Support",
-  description: "Get support for join links, game codes, and purchase issues.",
+  description: "Get support for join links and game codes.",
 };
 
 export default function ContactPage() {

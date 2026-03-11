@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Button from "@/components/Button";
 import { HANDOFF_FALLBACK_DELAY_MS } from "@/domain/handoff/constants";
-import { buildAppJoinLink, buildJoinUniversalLink } from "@/domain/join/links";
+import { buildAppJoinLink } from "@/domain/join/links";
 import { ANALYTICS_EVENTS, trackEvent } from "@/lib/analytics";
 
 type Props = {
@@ -15,7 +15,6 @@ type Props = {
 export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
   const [showFallback, setShowFallback] = useState(false);
 
-  const universalLink = useMemo(() => buildJoinUniversalLink(gameCode), [gameCode]);
   const appDeepLink = useMemo(() => buildAppJoinLink(gameCode), [gameCode]);
 
   useEffect(() => {
@@ -48,7 +47,7 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
       source_channel: "join_route",
     });
 
-    window.location.assign(universalLink);
+    window.location.assign(appDeepLink);
 
     const successTimer = window.setTimeout(() => {
       trackEvent(ANALYTICS_EVENTS.joinOpenSuccessProxy, {
@@ -61,7 +60,7 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
       window.clearTimeout(fallbackTimer);
       window.clearTimeout(successTimer);
     };
-  }, [gameCode, isValidCode, universalLink]);
+  }, [appDeepLink, gameCode, isValidCode]);
 
   if (!showFallback) {
     return (
@@ -109,7 +108,7 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
                 fullWidth
                 className="text-center"
               >
-                Continue on web
+                Continue in web
               </Button>
               <Button
                 href={`/join?code=${gameCode}`}
@@ -135,9 +134,14 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
               </Button>
             </>
           ) : (
-            <Button href="/" variant="glass" fullWidth>
-              Back to Home
-            </Button>
+            <>
+              <Button href={`/join?code=${encodeURIComponent(gameCode)}`} variant="glass" fullWidth>
+                Enter code manually
+              </Button>
+              <Button href="/" variant="ghost" fullWidth>
+                Back to Home
+              </Button>
+            </>
           )}
         </div>
 
