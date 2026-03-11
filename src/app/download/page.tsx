@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { parseGameCode } from "@/domain/join/code";
+import { buildAppJoinLink } from "@/domain/join/links";
 
 export default async function DownloadPage({
   searchParams,
@@ -26,12 +27,12 @@ export default async function DownloadPage({
       ) : null}
       <div className="mt-8 flex flex-wrap gap-3">
         {parsedCode.isValid ? (
-          <Link
-            href={`/join/${parsedCode.value}`}
+          <a
+            href={buildAppJoinLink(parsedCode.value)}
             className="inline-flex min-h-12 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-6 font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0e]"
           >
             Open in app
-          </Link>
+          </a>
         ) : null}
         <Link
           href="/"

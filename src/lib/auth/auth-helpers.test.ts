@@ -1,4 +1,9 @@
-import { isValidWurderId, normalizeEmail, normalizeWurderId } from "@/lib/auth/auth-helpers";
+import {
+  isValidWurderId,
+  normalizeEmail,
+  normalizePersonName,
+  normalizeWurderId,
+} from "@/lib/auth/auth-helpers";
 
 describe("auth helper normalization", () => {
   it("normalizes emails and wurder IDs with trim + lowercase", () => {
@@ -17,5 +22,8 @@ describe("auth helper normalization", () => {
     expect(isValidWurderId("bad-id")).toBe(false);
     expect(isValidWurderId("!oops")).toBe(false);
   });
-});
 
+  it("normalizes person names into forced capitalization", () => {
+    expect(normalizePersonName("  aLiCe   o'connor-smith ")).toBe("Alice O'Connor-Smith");
+  });
+});

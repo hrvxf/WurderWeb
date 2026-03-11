@@ -24,7 +24,18 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
 NEXT_PUBLIC_FIREBASE_APP_ID=
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=
 NEXT_PUBLIC_APP_URL=
+FIREBASE_ADMIN_PROJECT_ID=
+FIREBASE_ADMIN_CLIENT_EMAIL=
+FIREBASE_ADMIN_PRIVATE_KEY=
+GOOGLE_APPLICATION_CREDENTIALS=
 ```
+
+Admin notes:
+- `FIREBASE_ADMIN_PROJECT_ID` should match your Firebase project (for example `wurderv-1`).
+- Use either inline admin env vars or `GOOGLE_APPLICATION_CREDENTIALS`, not both.
+- `FIREBASE_ADMIN_CLIENT_EMAIL` and `FIREBASE_ADMIN_PRIVATE_KEY` must come from a Firebase service account key.
+- `FIREBASE_ADMIN_PRIVATE_KEY` must preserve newlines (store as a single string with `\n` escapes in `.env.local`).
+- `GOOGLE_APPLICATION_CREDENTIALS` should point to a local Firebase service account JSON file path, for example `C:\secrets\wurder-firebase-admin.json`.
 
 ## Members Area
 

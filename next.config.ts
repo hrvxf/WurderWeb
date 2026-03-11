@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/buy",
-        destination: "/join",
+        destination: "/download",
         permanent: false,
       },
     ];
