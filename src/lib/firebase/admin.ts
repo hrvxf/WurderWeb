@@ -73,7 +73,18 @@ function readAdminCredential(): ReturnType<typeof cert> | null {
 }
 
 const credential = readAdminCredential();
-const app = getApps()[0] ?? initializeApp({ projectId: readAdminProjectId(), credential: credential ?? undefined });
+const app =
+  getApps()[0] ??
+  initializeApp(
+    credential
+      ? {
+          projectId: readAdminProjectId(),
+          credential,
+        }
+      : {
+          projectId: readAdminProjectId(),
+        }
+  );
 
 export const adminAuth = getAuth(app);
 export const adminDb = getFirestore(app);
