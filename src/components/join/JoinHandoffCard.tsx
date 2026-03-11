@@ -4,11 +4,10 @@ import { Component, type ErrorInfo, type ReactNode, useMemo, useState } from "re
 import { QRCodeCanvas } from "qrcode.react";
 import Button from "@/components/Button";
 import { parseGameCode } from "@/domain/join/code";
-import { buildAppJoinLink } from "@/domain/join/links";
-import { extractGameCodeFromPayload } from "@/domain/join/joinLink";
+import { buildAppJoinLink, buildJoinUniversalLink } from "@/domain/join/links";
 
 type Props = {
-  initialPayload?: string;
+  initialCode?: string;
 };
 
 type QrBoundaryProps = {
@@ -39,36 +38,72 @@ class QrRenderBoundary extends Component<QrBoundaryProps, QrBoundaryState> {
   }
 }
 
-export default function JoinHandoffCard({ initialPayload = "" }: Props) {
-  const [payload, setPayload] = useState(initialPayload);
+export default function JoinHandoffCard({ initialCode = "" }: Props) {
+  const parsedInitial = useMemo(() => parseGameCode(initialCode), [initialCode]);
+  const [status, setStatus] = useState<"idle" | "generating" | "ready" | "error">(
+    parsedInitial.isValid ? "ready" : "idle"
+  );
+  const [generatedCode, setGeneratedCode] = useState(parsedInitial.isValid ? parsedInitial.value : "");
+  const [errorMessage, setErrorMessage] = useState("");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
 
-  const payloadHasValue = payload.trim().length > 0;
-  const extractedCode = useMemo(() => extractGameCodeFromPayload(payload), [payload]);
-  const parsed = useMemo(() => parseGameCode(extractedCode), [extractedCode]);
-  const isCodeSpecific = parsed.isValid;
-  const appDeepLink = isCodeSpecific ? buildAppJoinLink(parsed.value) : buildAppJoinLink("");
-  const downloadHref = isCodeSpecific ? `/download?gameCode=${parsed.value}` : "/download";
-  const manualHref = isCodeSpecific ? `/join/${parsed.value}` : "/join";
+  const parsedCode = useMemo(() => parseGameCode(generatedCode), [generatedCode]);
+  const hasCode = parsedCode.isValid;
+  const appDeepLink = hasCode ? buildAppJoinLink(parsedCode.value) : buildAppJoinLink("");
+  const universalLink = hasCode ? buildJoinUniversalLink(parsedCode.value) : "";
+  const downloadHref = hasCode ? `/download?gameCode=${parsedCode.value}` : "/download";
+  const manualHref = hasCode ? `/join/${parsedCode.value}` : "/join";
 
-  async function copyDeepLink() {
+  async function generateJoinCode() {
+    setStatus("generating");
+    setErrorMessage("");
+
     try {
-      await navigator.clipboard.writeText(appDeepLink);
-      setCopyState("copied");
-      window.setTimeout(() => setCopyState("idle"), 1500);
+      const response = await fetch("/api/join-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok || typeof data?.code !== "string") {
+        throw new Error(
+          typeof data?.error === "string"
+            ? data.error
+            : "Unable to generate a join code right now. Please try again."
+        );
+      }
+
+      const parsed = parseGameCode(data.code);
+      if (!parsed.isValid) {
+        throw new Error("Generated code is invalid. Please try again.");
+      }
+
+      setGeneratedCode(parsed.value);
+      setStatus("ready");
     } catch (error) {
-      console.error("Failed to copy join deep link", error);
-      setCopyState("failed");
-      window.setTimeout(() => setCopyState("idle"), 2000);
+      const fallbackMessage =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Unable to generate a join code right now. Please try again.";
+      console.error("Join code generation failed", error);
+      setErrorMessage(fallbackMessage);
+      setStatus("error");
     }
   }
 
-  function openInApp() {
+  async function copyCode() {
     try {
-      window.location.assign(appDeepLink);
+      if (!hasCode) {
+        return;
+      }
+
+      await navigator.clipboard.writeText(parsedCode.value);
+      setCopyState("copied");
+      window.setTimeout(() => setCopyState("idle"), 1500);
     } catch (error) {
-      console.error("Failed to open app deep link", error);
-      window.location.assign(downloadHref);
+      console.error("Failed to copy join code", error);
+      setCopyState("failed");
+      window.setTimeout(() => setCopyState("idle"), 2000);
     }
   }
 
@@ -76,63 +111,77 @@ export default function JoinHandoffCard({ initialPayload = "" }: Props) {
     <main className="glass-surface min-h-[60vh] rounded-3xl px-6 py-10 sm:px-10">
       <div className="mx-auto max-w-xl">
         <p className="text-xs uppercase tracking-[0.18em] text-muted">Join Wurder</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Scan to open the Wurder app</h1>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Generate Join Code</h1>
         <p className="mt-3 text-soft">
-          {isCodeSpecific
-            ? `Game code ${parsed.value} is attached to this handoff.`
-            : "Generate a generic app handoff or paste a join payload with a game code."}
+          Generate a join code, then scan the QR or open directly in the Wurder app.
         </p>
 
-        <label htmlFor="join-payload" className="mt-8 block text-sm text-soft">
-          Game code or join link
-        </label>
-        <input
-          id="join-payload"
-          className="input-dark mt-2"
-          placeholder="ABC123 or https://wurder.app/join/ABC123"
-          value={payload}
-          onChange={(event) => setPayload(event.target.value)}
-          autoCapitalize="characters"
-          autoComplete="off"
-          spellCheck={false}
-        />
-
-        <div className="mt-4 rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-sm">
-          <p className="text-soft">Resolved game code: {parsed.value || "------"}</p>
-          <p className="mt-1 text-muted">
-            {isCodeSpecific
-              ? "Deep link is game-specific and ready."
-              : payloadHasValue
-                ? "Input did not resolve to a valid six-character code. Generic handoff is active."
-                : "No code provided. Generic app handoff is active."}
-          </p>
+        <div className="mt-6">
+          <Button
+            onClick={generateJoinCode}
+            fullWidth
+            disabled={status === "generating"}
+          >
+            {status === "generating" ? "Generating..." : "Generate Join Code"}
+          </Button>
         </div>
 
-        <section className="mt-6 rounded-2xl border border-white/15 bg-black/25 p-5">
+        {status === "error" ? (
+          <div className="mt-4 rounded-xl border border-rose-300/40 bg-rose-950/35 px-4 py-3 text-sm text-rose-100">
+            {errorMessage || "Unable to generate a join code right now. Please try again."}
+          </div>
+        ) : null}
+
+        {status === "ready" && hasCode ? (
+          <div className="mt-5 rounded-2xl border border-white/15 bg-black/25 p-5">
+            <p className="text-xs uppercase tracking-[0.16em] text-muted">Your join code</p>
+            <p className="mt-2 font-mono text-4xl font-bold tracking-[0.12em]">{parsedCode.value}</p>
+          </div>
+        ) : null}
+
+        <section className="mt-5 rounded-2xl border border-white/15 bg-black/25 p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-muted">Join QR</p>
           <div className="mt-4 inline-flex rounded-xl border border-white/20 bg-white p-4">
             <QrRenderBoundary
               fallback={
                 <div className="flex h-[170px] w-[170px] items-center justify-center rounded-lg border border-black/10 bg-white px-4 text-center text-xs text-black/70">
-                  QR unavailable. Use Open in Wurder or copy the deep link below.
+                  QR unavailable. Use Open in Wurder, Copy Code, or Download Wurder.
                 </div>
               }
             >
-              <QRCodeCanvas value={appDeepLink} size={170} level="M" fgColor="#111111" bgColor="#FFFFFF" marginSize={4} />
+              {status === "ready" && hasCode ? (
+                <QRCodeCanvas value={appDeepLink} size={170} level="M" fgColor="#111111" bgColor="#FFFFFF" marginSize={4} />
+              ) : (
+                <div className="flex h-[170px] w-[170px] items-center justify-center rounded-lg border border-black/10 bg-white px-4 text-center text-xs text-black/70">
+                  Generate a join code to create QR.
+                </div>
+              )}
             </QrRenderBoundary>
           </div>
 
-          <p className="mt-4 break-all text-xs text-muted">{appDeepLink}</p>
+          <p className="mt-4 break-all text-xs text-muted">{status === "ready" && hasCode ? appDeepLink : "wurder://join/{GAME_CODE}"}</p>
+          {universalLink ? <p className="mt-1 break-all text-xs text-muted">{universalLink}</p> : null}
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <Button onClick={openInApp} fullWidth>
+            <Button
+              onClick={() => {
+                try {
+                  window.location.assign(appDeepLink);
+                } catch (error) {
+                  console.error("Failed to open app deep link", error);
+                  window.location.assign(downloadHref);
+                }
+              }}
+              fullWidth
+              disabled={!hasCode}
+            >
               Open in Wurder
             </Button>
             <Button href={downloadHref} variant="glass" fullWidth>
               Download Wurder
             </Button>
-            <Button onClick={copyDeepLink} variant="glass" fullWidth>
-              {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy Deep Link"}
+            <Button onClick={copyCode} variant="glass" fullWidth disabled={!hasCode}>
+              {copyState === "copied" ? "Copied" : copyState === "failed" ? "Copy failed" : "Copy Code"}
             </Button>
             <Button href={manualHref} variant="ghost" fullWidth>
               Enter code manually
@@ -141,7 +190,7 @@ export default function JoinHandoffCard({ initialPayload = "" }: Props) {
         </section>
 
         <p className="mt-5 text-sm text-muted">
-          Already have the app? Enter your code manually.
+          Scan the QR with another device, or enter the code manually in the app.
         </p>
       </div>
     </main>

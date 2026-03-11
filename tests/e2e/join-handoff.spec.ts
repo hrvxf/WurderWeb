@@ -8,9 +8,16 @@ test("join route handles valid and invalid codes", async ({ page }) => {
   await expect(page.getByText("Invalid game code")).toBeVisible();
 });
 
-test("join share page resolves code and renders QR actions", async ({ page }) => {
+test("join page shows generate CTA by default", async ({ page }) => {
+  await page.goto("/join");
+  await expect(page.getByRole("button", { name: "Generate Join Code" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open in Wurder" })).toBeDisabled();
+});
+
+test("join page accepts code payload and renders QR actions", async ({ page }) => {
   await page.goto("/join?code=https://wurder.app/join/abc123");
-  await expect(page.getByText("Resolved game code: ABC123")).toBeVisible();
+  await expect(page.getByText("Your join code")).toBeVisible();
+  await expect(page.getByText("ABC123")).toBeVisible();
   await expect(page.getByRole("button", { name: "Open in Wurder" })).toBeEnabled();
   await expect(page.getByRole("link", { name: "Download Wurder" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Enter code manually" })).toBeVisible();
