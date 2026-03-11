@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { readPublicEnv } from "@/lib/env";
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://wurder.app";
+const siteUrl = readPublicEnv("NEXT_PUBLIC_SITE_URL") || "https://wurder.app";
 
 const routes = ["", "/buy", "/contact", "/privacy", "/terms"];
 

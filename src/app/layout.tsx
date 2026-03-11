@@ -3,10 +3,13 @@ import type { ReactNode } from "react";
 import AppShell from "@/components/shell/AppShell";
 import AnalyticsScripts from "@/components/AnalyticsScripts";
 import AppProviders from "@/components/providers/AppProviders";
+import { readPublicEnv } from "@/lib/env";
 import "./globals.css";
 
 const siteUrl =
-  process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://wurder.app";
+  readPublicEnv("NEXT_PUBLIC_APP_URL") ||
+  readPublicEnv("NEXT_PUBLIC_SITE_URL") ||
+  "https://wurder.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
