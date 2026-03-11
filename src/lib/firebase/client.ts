@@ -2,7 +2,7 @@ import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/a
 import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { readPublicEnv } from "@/lib/env";
+import { readEnv, readPublicEnv } from "@/lib/env";
 
 const REQUIRED_FIREBASE_ENV = [
   "NEXT_PUBLIC_FIREBASE_API_KEY",
@@ -14,8 +14,13 @@ const REQUIRED_FIREBASE_ENV = [
 ] as const;
 
 function readFirebaseEnv(key: (typeof REQUIRED_FIREBASE_ENV)[number]): string | undefined {
-  const value = readPublicEnv(key);
-  return value?.trim() ? value.trim() : undefined;
+  const publicValue = readPublicEnv(key)?.trim();
+  if (publicValue) return publicValue;
+
+  // Allow server-only aliases in API/build environments.
+  const serverAlias = key.replace("NEXT_PUBLIC_", "");
+  const serverValue = readEnv(serverAlias)?.trim();
+  return serverValue || undefined;
 }
 
 const firebaseEnvMap: Record<(typeof REQUIRED_FIREBASE_ENV)[number], string | undefined> = {
