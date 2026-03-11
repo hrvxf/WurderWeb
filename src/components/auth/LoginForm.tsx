@@ -79,6 +79,7 @@ export default function LoginForm({ nextPath }: LoginFormProps) {
             onChange={(event) => setIdentifier(event.target.value)}
             className="input-dark mt-2"
             autoComplete="username"
+            autoCapitalize="none"
             placeholder="name@example.com or your_wurder_id"
           />
         </label>
@@ -91,6 +92,7 @@ export default function LoginForm({ nextPath }: LoginFormProps) {
             onChange={(event) => setPassword(event.target.value)}
             className="input-dark mt-2"
             autoComplete="current-password"
+            autoCapitalize="none"
             placeholder="Enter your password"
           />
         </label>

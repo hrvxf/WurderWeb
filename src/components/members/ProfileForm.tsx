@@ -107,6 +107,7 @@ export default function ProfileForm() {
             value={name}
             onChange={(event) => setName(event.target.value)}
             placeholder="Optional if first + last are set"
+            autoCapitalize="words"
           />
         </label>
 
@@ -118,6 +119,7 @@ export default function ProfileForm() {
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
               autoComplete="given-name"
+              autoCapitalize="words"
             />
           </label>
 
@@ -128,6 +130,7 @@ export default function ProfileForm() {
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
               autoComplete="family-name"
+              autoCapitalize="words"
             />
           </label>
         </div>
@@ -140,6 +143,7 @@ export default function ProfileForm() {
             onChange={(event) => setWurderId(event.target.value)}
             disabled={hasLockedWurderId}
             placeholder="your_wurder_id"
+            autoCapitalize="none"
           />
           <span className="mt-2 block text-sm text-muted">
             {hasLockedWurderId
@@ -155,6 +159,7 @@ export default function ProfileForm() {
             value={avatarUrl}
             onChange={(event) => setAvatarUrl(event.target.value)}
             placeholder="https://..."
+            autoCapitalize="none"
           />
         </label>
 

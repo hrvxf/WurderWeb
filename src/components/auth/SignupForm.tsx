@@ -77,6 +77,7 @@ export default function SignupForm() {
           <input
             type="email"
             autoComplete="email"
+            autoCapitalize="none"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             className="input-dark mt-2"
@@ -90,6 +91,7 @@ export default function SignupForm() {
           <input
             type="password"
             autoComplete="new-password"
+            autoCapitalize="none"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             className="input-dark mt-2"
@@ -106,6 +108,7 @@ export default function SignupForm() {
               onChange={(event) => setFirstName(event.target.value)}
               className="input-dark mt-2"
               autoComplete="given-name"
+              autoCapitalize="words"
               placeholder="Alex"
             />
           </label>
@@ -117,6 +120,7 @@ export default function SignupForm() {
               onChange={(event) => setLastName(event.target.value)}
               className="input-dark mt-2"
               autoComplete="family-name"
+              autoCapitalize="words"
               placeholder="Mason"
             />
           </label>
@@ -129,6 +133,7 @@ export default function SignupForm() {
             onChange={(event) => setWurderId(event.target.value)}
             className="input-dark mt-2"
             autoComplete="username"
+            autoCapitalize="none"
             placeholder="your_wurder_id"
           />
           {!wurderIdLooksValid ? (
