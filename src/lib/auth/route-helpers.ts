@@ -1,6 +1,6 @@
 import type { WurderUserProfile } from "@/lib/types/user";
 
-import { isProfileComplete } from "@/lib/auth/profile-bootstrap";
+import { isProfileComplete } from "@/lib/auth/profile-completion";
 
 export const AUTH_ROUTES = {
   login: "/login",

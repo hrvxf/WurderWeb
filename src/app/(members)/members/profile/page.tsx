@@ -2,7 +2,7 @@
 
 import ProfileForm from "@/components/members/ProfileForm";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isProfileComplete } from "@/lib/auth/profile-bootstrap";
+import { isProfileComplete } from "@/lib/auth/profile-completion";
 
 export default function MembersProfilePage() {
   const { profile } = useAuth();

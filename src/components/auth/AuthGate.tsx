@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isProfileComplete } from "@/lib/auth/profile-bootstrap";
+import { isProfileComplete } from "@/lib/auth/profile-completion";
 import { AUTH_ROUTES, toNextPath } from "@/lib/auth/route-helpers";
 
 type AuthGateProps = {

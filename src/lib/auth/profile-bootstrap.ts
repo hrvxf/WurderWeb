@@ -10,6 +10,7 @@ import {
 
 import { db } from "@/lib/firebase";
 import { buildName, isValidWurderId, normalizeEmail, normalizeWurderId } from "@/lib/auth/auth-helpers";
+import { isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
 
 type EnsureProfileInput = {
@@ -65,15 +66,6 @@ function normalizeProfile(
     email: email ?? null,
     stats: normalizeStats(source.stats),
   };
-}
-
-export function isProfileComplete(profile: WurderUserProfile | null): boolean {
-  if (!profile) return false;
-  const hasWurderId = Boolean(cleanText(profile.wurderId));
-  const hasFullName =
-    Boolean(cleanText(profile.name)) ||
-    (Boolean(cleanText(profile.firstName)) && Boolean(cleanText(profile.lastName)));
-  return hasWurderId && hasFullName;
 }
 
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
