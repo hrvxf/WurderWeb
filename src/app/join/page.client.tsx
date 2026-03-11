@@ -1,6 +1,7 @@
 "use client";
 
 import { Component, type ErrorInfo, type ReactNode, useMemo, useState } from "react";
+import { LoaderCircle } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 import AuthGate from "@/components/auth/AuthGate";
 import Button from "@/components/Button";
@@ -66,7 +67,7 @@ function JoinGenerator() {
     setJoinState({ status: "creating" });
 
     try {
-      const idToken = await user.getIdToken();
+      const idToken = await user.getIdToken(false);
       const response = await fetch("/api/join/create-game", {
         method: "POST",
         headers: {
@@ -102,15 +103,30 @@ function JoinGenerator() {
   }
 
   return (
-    <section className="mx-auto max-w-2xl rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8">
+    <section
+      className={`mx-auto max-w-2xl rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8 ${
+        joinState.status === "creating" ? "cursor-progress" : ""
+      }`}
+    >
       <h1 className="text-3xl font-bold tracking-tight">Create Join QR</h1>
       <p className="mt-3 text-soft">
         Create a game as your signed-in account, then share the QR so players can join.
       </p>
 
       <div className="mt-6">
-        <Button onClick={handleCreateGame} disabled={joinState.status === "creating"}>
-          {joinState.status === "creating" ? "Creating..." : "Create Game QR"}
+        <Button
+          onClick={handleCreateGame}
+          disabled={joinState.status === "creating"}
+          className={joinState.status === "creating" ? "disabled:cursor-progress" : ""}
+        >
+          {joinState.status === "creating" ? (
+            <>
+              <LoaderCircle className="mr-2 size-4 animate-spin" aria-hidden="true" />
+              Creating...
+            </>
+          ) : (
+            "Create Game QR"
+          )}
         </Button>
       </div>
 

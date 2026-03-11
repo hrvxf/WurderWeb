@@ -11,6 +11,13 @@ type WordGroupDoc = {
   enabled?: unknown;
 };
 
+const DEFAULT_CLASSIC_WORD_GROUP_TTL_MS = 5 * 60 * 1000;
+
+let cachedDefaultClassicWordGroup:
+  | { value: string | null; expiresAt: number }
+  | null = null;
+let inFlightDefaultClassicWordGroupLookup: Promise<string | null> | null = null;
+
 export type CreateGameDoc = {
   gameCode: string;
   hostPlayerId: string;
@@ -74,21 +81,42 @@ function groupMatchesStyle(
 }
 
 export async function resolveDefaultClassicWordGroupId(db: Firestore): Promise<string | null> {
-  const snapshot = await db.collection("wordGroups").get();
-  const candidates = snapshot.docs
-    .map((docSnap) => ({ id: docSnap.id, data: (docSnap.data() ?? {}) as WordGroupDoc }))
-    .filter((entry) => entry.data.enabled !== false)
-    .filter((entry) =>
-      groupMatchesStyle(
-        entry.data.style,
-        "classic",
-        entry.id,
-        typeof entry.data.name === "string" ? entry.data.name : ""
-      )
-    )
-    .sort((a, b) => a.id.localeCompare(b.id));
+  const now = Date.now();
+  if (cachedDefaultClassicWordGroup && cachedDefaultClassicWordGroup.expiresAt > now) {
+    return cachedDefaultClassicWordGroup.value;
+  }
 
-  return candidates[0]?.id ?? null;
+  if (!inFlightDefaultClassicWordGroupLookup) {
+    inFlightDefaultClassicWordGroupLookup = db
+      .collection("wordGroups")
+      .get()
+      .then((snapshot) => {
+        const candidates = snapshot.docs
+          .map((docSnap) => ({ id: docSnap.id, data: (docSnap.data() ?? {}) as WordGroupDoc }))
+          .filter((entry) => entry.data.enabled !== false)
+          .filter((entry) =>
+            groupMatchesStyle(
+              entry.data.style,
+              "classic",
+              entry.id,
+              typeof entry.data.name === "string" ? entry.data.name : ""
+            )
+          )
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        const value = candidates[0]?.id ?? null;
+        cachedDefaultClassicWordGroup = {
+          value,
+          expiresAt: Date.now() + DEFAULT_CLASSIC_WORD_GROUP_TTL_MS,
+        };
+        return value;
+      })
+      .finally(() => {
+        inFlightDefaultClassicWordGroupLookup = null;
+      });
+  }
+
+  return inFlightDefaultClassicWordGroupLookup;
 }
 
 export function buildInitialGameDoc(input: {
