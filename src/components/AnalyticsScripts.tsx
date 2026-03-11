@@ -1,7 +1,8 @@
 import Script from "next/script";
+import { readPublicEnv } from "@/lib/env";
 
-const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
-const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
+const gtmId = readPublicEnv("NEXT_PUBLIC_GTM_ID");
+const gaMeasurementId = readPublicEnv("NEXT_PUBLIC_GA_MEASUREMENT_ID");
 
 export default function AnalyticsScripts() {
   if (!gtmId && !gaMeasurementId) {

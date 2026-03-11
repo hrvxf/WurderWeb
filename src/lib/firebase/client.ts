@@ -2,6 +2,7 @@ import { getApp, getApps, initializeApp, type FirebaseOptions } from "firebase/a
 import { getAuth, GoogleAuthProvider, OAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { readPublicEnv } from "@/lib/env";
 
 const REQUIRED_FIREBASE_ENV = [
   "NEXT_PUBLIC_FIREBASE_API_KEY",
@@ -12,13 +13,13 @@ const REQUIRED_FIREBASE_ENV = [
   "NEXT_PUBLIC_FIREBASE_APP_ID",
 ] as const;
 
-const FIREBASE_API_KEY = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-const FIREBASE_AUTH_DOMAIN = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-const FIREBASE_STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
-const FIREBASE_MESSAGING_SENDER_ID = process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID;
-const FIREBASE_APP_ID = process.env.NEXT_PUBLIC_FIREBASE_APP_ID;
-const FIREBASE_MEASUREMENT_ID = process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID;
+const FIREBASE_API_KEY = readPublicEnv("NEXT_PUBLIC_FIREBASE_API_KEY");
+const FIREBASE_AUTH_DOMAIN = readPublicEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
+const FIREBASE_PROJECT_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
+const FIREBASE_STORAGE_BUCKET = readPublicEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
+const FIREBASE_MESSAGING_SENDER_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID");
+const FIREBASE_APP_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_APP_ID");
+const FIREBASE_MEASUREMENT_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID");
 
 const firebaseEnvMap: Record<(typeof REQUIRED_FIREBASE_ENV)[number], string | undefined> = {
   NEXT_PUBLIC_FIREBASE_API_KEY: FIREBASE_API_KEY,
