@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Button from "@/components/Button";
 import { HANDOFF_FALLBACK_DELAY_MS } from "@/domain/handoff/constants";
-import { buildAppJoinLink, buildUniversalJoinLink } from "@/domain/join/links";
+import { buildAppJoinLink, buildJoinUniversalLink } from "@/domain/join/links";
 import { ANALYTICS_EVENTS, trackEvent } from "@/lib/analytics";
 
 type Props = {
@@ -15,7 +15,7 @@ type Props = {
 export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
   const [showFallback, setShowFallback] = useState(false);
 
-  const universalLink = useMemo(() => buildUniversalJoinLink(gameCode), [gameCode]);
+  const universalLink = useMemo(() => buildJoinUniversalLink(gameCode), [gameCode]);
   const appDeepLink = useMemo(() => buildAppJoinLink(gameCode), [gameCode]);
 
   useEffect(() => {
@@ -101,7 +101,7 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
                 }}
                 fullWidth
               >
-                Retry Open in App
+                Open in app
               </Button>
               <Button
                 href={`/?gameCode=${gameCode}`}
@@ -109,10 +109,18 @@ export default function JoinFallbackClient({ gameCode, isValidCode }: Props) {
                 fullWidth
                 className="text-center"
               >
-                Continue in Web
+                Continue on web
               </Button>
               <Button
-                href={`/?install=1&gameCode=${gameCode}`}
+                href={`/join?code=${gameCode}`}
+                variant="glass"
+                fullWidth
+                className="text-center"
+              >
+                Enter code manually
+              </Button>
+              <Button
+                href={`/download?gameCode=${gameCode}`}
                 variant="ghost"
                 fullWidth
                 className="text-center"

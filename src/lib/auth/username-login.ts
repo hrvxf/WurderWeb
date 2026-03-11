@@ -30,17 +30,7 @@ export async function resolveLoginIdentifier(identifier: string): Promise<string
   }
 
   if (typeof lookup.uid === "string" && lookup.uid.trim().length > 0) {
-    const userSnapshot = await getDoc(doc(db, "users", lookup.uid));
-    if (!userSnapshot.exists()) {
-      throw new Error("Could not find a user profile for that Wurder ID.");
-    }
-
-    const email = userSnapshot.data().email;
-    if (typeof email !== "string" || email.trim().length === 0) {
-      throw new Error("No email is linked to that Wurder ID.");
-    }
-
-    return normalizeEmail(email);
+    throw new Error("That Wurder ID is missing login metadata. Please sign in with email.");
   }
 
   throw new Error("Could not resolve login details for that Wurder ID.");

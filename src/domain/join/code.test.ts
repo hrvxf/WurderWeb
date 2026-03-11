@@ -12,4 +12,8 @@ describe("parseGameCode", () => {
   it("rejects invalid length", () => {
     expect(parseGameCode("ABCDE").isValid).toBe(false);
   });
+
+  it("does not throw on malformed URL encoding", () => {
+    expect(parseGameCode("%E0%A4%A").isValid).toBe(false);
+  });
 });

@@ -1,5 +1,11 @@
+import { buildJoinUniversalLink as buildCanonicalJoinUniversalLink } from "@/domain/join/joinLink";
+
 export function buildUniversalJoinLink(gameCode: string): string {
-  return `https://wurder.app/join/${encodeURIComponent(gameCode)}`;
+  return buildCanonicalJoinUniversalLink(gameCode);
+}
+
+export function buildJoinUniversalLink(gameCode: string): string {
+  return buildCanonicalJoinUniversalLink(gameCode);
 }
 
 export function buildAppJoinLink(gameCode: string): string {

@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { QRCodeCanvas } from "qrcode.react";
 import Button from "@/components/Button";
-import { buildUniversalJoinLink } from "@/domain/join/links";
+import { parseGameCode } from "@/domain/join/code";
+import GameCodeQrCard from "@/components/join/GameCodeQrCard";
 
 function normalizeAddons(value: string | null): string[] {
   if (!value) return [];
@@ -16,28 +16,18 @@ function normalizeAddons(value: string | null): string[] {
 
 export default function ClientConfirmation() {
   const params = useSearchParams();
-  const qrRef = useRef<HTMLDivElement>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
 
-  const code = params.get("code")?.trim().toUpperCase() || "";
+  const parsedCode = parseGameCode(params.get("code") || "");
+  const code = parsedCode.value;
   const players = params.get("players") || "";
   const addons = useMemo(() => normalizeAddons(params.get("addons")), [params]);
-  const joinLink = buildUniversalJoinLink(code || "UNKNOWN");
 
   function copyCode() {
     if (!code) return;
     navigator.clipboard.writeText(code);
     setCopyState("copied");
     window.setTimeout(() => setCopyState("idle"), 1200);
-  }
-
-  function downloadQr() {
-    const canvas = qrRef.current?.querySelector("canvas");
-    if (!canvas || !code) return;
-    const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = `wurder-join-${code}.png`;
-    link.click();
   }
 
   return (
@@ -53,17 +43,8 @@ export default function ClientConfirmation() {
         </Button>
       </div>
 
-      <div className="mt-6 grid gap-5 sm:grid-cols-[auto_1fr] sm:items-center">
-        <div ref={qrRef} className="inline-flex rounded-xl border border-white/20 bg-white p-3">
-          <QRCodeCanvas value={joinLink} size={150} />
-        </div>
-        <div>
-          <p className="text-sm text-soft">Join URL</p>
-          <p className="mt-1 break-all text-xs text-muted">{joinLink}</p>
-          <Button onClick={downloadQr} className="mt-4" variant="ghost">
-            Download QR
-          </Button>
-        </div>
+      <div className="mt-6">
+        <GameCodeQrCard gameCode={code} onCloseHref="/" />
       </div>
 
       <div className="mt-6 rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-sm text-soft">
@@ -72,7 +53,7 @@ export default function ClientConfirmation() {
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
-        {code ? <Button href={`/join/${code}`}>Test Join Route</Button> : null}
+        {parsedCode.isValid ? <Button href={`/join/${code}`}>Test Join Route</Button> : null}
         <Button href="/" variant="glass">
           Back Home
         </Button>

@@ -5,8 +5,16 @@ export type NormalizedGameCode = {
   isValid: boolean;
 };
 
+function safeDecode(input: string): string {
+  try {
+    return decodeURIComponent(input);
+  } catch {
+    return input;
+  }
+}
+
 export function normalizeGameCode(input: string): string {
-  return decodeURIComponent(input ?? "")
+  return safeDecode(input ?? "")
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "");
