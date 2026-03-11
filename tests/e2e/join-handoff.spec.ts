@@ -8,10 +8,11 @@ test("join route handles valid and invalid codes", async ({ page }) => {
   await expect(page.getByText("Invalid game code")).toBeVisible();
 });
 
-test("manual join entry resolves code from URL payload", async ({ page }) => {
+test("join share page resolves code and renders QR actions", async ({ page }) => {
   await page.goto("/join?code=https://wurder.app/join/abc123");
   await expect(page.getByText("Resolved game code: ABC123")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Copy Link" })).toBeEnabled();
+  await expect(page.getByRole("link", { name: "Close" })).toBeVisible();
 });
 
 test("confirmation join QR flow excludes purchase metadata", async ({ page }) => {

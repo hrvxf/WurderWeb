@@ -1,10 +1,11 @@
 "use client";
 
 import { Suspense, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Button from "@/components/Button";
 import { parseGameCode } from "@/domain/join/code";
 import { extractGameCodeFromPayload } from "@/domain/join/joinLink";
+import GameCodeQrCard from "@/components/join/GameCodeQrCard";
 
 export default function JoinEntryPage() {
   return (
@@ -18,8 +19,8 @@ function JoinEntryPageFallback() {
   return (
     <main className="glass-surface min-h-[60vh] rounded-3xl px-6 py-10 sm:px-10">
       <div className="mx-auto max-w-xl">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">Join Game</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Loading join form...</h1>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted">Join QR</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Loading QR setup...</h1>
       </div>
     </main>
   );
@@ -27,26 +28,18 @@ function JoinEntryPageFallback() {
 
 function JoinEntryPageContent() {
   const params = useSearchParams();
-  const router = useRouter();
   const [payload, setPayload] = useState(() => params.get("code") || "");
 
   const extractedCode = useMemo(() => extractGameCodeFromPayload(payload), [payload]);
   const parsed = useMemo(() => parseGameCode(extractedCode), [extractedCode]);
 
-  function continueToJoin() {
-    if (!parsed.isValid) {
-      return;
-    }
-    router.push(`/join/${parsed.value}`);
-  }
-
   return (
     <main className="glass-surface min-h-[60vh] rounded-3xl px-6 py-10 sm:px-10">
       <div className="mx-auto max-w-xl">
-        <p className="text-xs uppercase tracking-[0.18em] text-muted">Join Game</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Enter code manually</h1>
+        <p className="text-xs uppercase tracking-[0.18em] text-muted">Host Share</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Generate Join QR</h1>
         <p className="mt-3 text-soft">
-          Paste a game code or join URL. We accept raw codes and links that include <code>/join/{"{CODE}"}</code>.
+          Enter a lobby code or join URL and share the QR. Scanning opens Wurder app join flow for that game.
         </p>
 
         <label htmlFor="join-payload" className="mt-8 block text-sm text-soft">
@@ -67,15 +60,16 @@ function JoinEntryPageContent() {
           <p className="text-soft">Resolved game code: {parsed.value || "------"}</p>
           <p className="mt-1 text-muted">
             {parsed.isValid
-              ? "Code is valid and ready."
+              ? "Code is valid and ready to share."
               : "Code must be six uppercase letters or numbers (A-Z, 0-9)."}
           </p>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <Button onClick={continueToJoin} fullWidth disabled={!parsed.isValid}>
-            Continue
-          </Button>
+        <div className="mt-6">
+          <GameCodeQrCard gameCode={parsed.value} onCloseHref="/" />
+        </div>
+
+        <div className="mt-6">
           <Button href="/" variant="glass" fullWidth>
             Back Home
           </Button>
