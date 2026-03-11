@@ -13,40 +13,39 @@ const REQUIRED_FIREBASE_ENV = [
   "NEXT_PUBLIC_FIREBASE_APP_ID",
 ] as const;
 
-const FIREBASE_API_KEY = readPublicEnv("NEXT_PUBLIC_FIREBASE_API_KEY");
-const FIREBASE_AUTH_DOMAIN = readPublicEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
-const FIREBASE_PROJECT_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
-const FIREBASE_STORAGE_BUCKET = readPublicEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
-const FIREBASE_MESSAGING_SENDER_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID");
-const FIREBASE_APP_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_APP_ID");
-const FIREBASE_MEASUREMENT_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID");
+function readFirebaseEnv(key: (typeof REQUIRED_FIREBASE_ENV)[number]): string | undefined {
+  const value = readPublicEnv(key);
+  return value?.trim() ? value.trim() : undefined;
+}
 
 const firebaseEnvMap: Record<(typeof REQUIRED_FIREBASE_ENV)[number], string | undefined> = {
-  NEXT_PUBLIC_FIREBASE_API_KEY: FIREBASE_API_KEY,
-  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: FIREBASE_AUTH_DOMAIN,
-  NEXT_PUBLIC_FIREBASE_PROJECT_ID: FIREBASE_PROJECT_ID,
-  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: FIREBASE_STORAGE_BUCKET,
-  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: FIREBASE_MESSAGING_SENDER_ID,
-  NEXT_PUBLIC_FIREBASE_APP_ID: FIREBASE_APP_ID,
-};
-
-const firebaseConfig: FirebaseOptions = {
-  apiKey: FIREBASE_API_KEY ?? "demo-api-key",
-  authDomain: FIREBASE_AUTH_DOMAIN ?? "demo.firebaseapp.com",
-  projectId: FIREBASE_PROJECT_ID ?? "demo",
-  storageBucket: FIREBASE_STORAGE_BUCKET ?? "demo.appspot.com",
-  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID ?? "000000000000",
-  appId: FIREBASE_APP_ID ?? "1:000000000000:web:0000000000000000000000",
-  measurementId: FIREBASE_MEASUREMENT_ID,
+  NEXT_PUBLIC_FIREBASE_API_KEY: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_API_KEY"),
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN"),
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID"),
+  NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET"),
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID"),
+  NEXT_PUBLIC_FIREBASE_APP_ID: readFirebaseEnv("NEXT_PUBLIC_FIREBASE_APP_ID"),
 };
 
 const missingFirebaseEnv = REQUIRED_FIREBASE_ENV.filter((key) => !firebaseEnvMap[key]);
 
-if (typeof window !== "undefined" && missingFirebaseEnv.length > 0) {
-  console.warn(
+if (missingFirebaseEnv.length > 0) {
+  throw new Error(
     `[firebase] Missing required Firebase env vars: ${missingFirebaseEnv.join(", ")}.`
   );
 }
+
+const FIREBASE_MEASUREMENT_ID = readPublicEnv("NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID")?.trim();
+
+const firebaseConfig: FirebaseOptions = {
+  apiKey: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: firebaseEnvMap.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: FIREBASE_MEASUREMENT_ID,
+};
 
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
