@@ -5,6 +5,7 @@ import Button from "@/components/Button";
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/buy", label: "Buy" },
+  { href: "/members", label: "Members" },
   { href: "/contact", label: "Support" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
@@ -24,9 +25,14 @@ export default function SiteHeader() {
             </Link>
           ))}
         </nav>
-        <Button href="/buy" className="hidden md:inline-flex" variant="glass">
-          Start a Game
-        </Button>
+        <div className="hidden items-center gap-2 md:flex">
+          <Button href="/login" variant="ghost">
+            Sign In
+          </Button>
+          <Button href="/buy" variant="glass">
+            Start a Game
+          </Button>
+        </div>
       </div>
     </header>
   );
