@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isValidWurderId } from "@/lib/auth/auth-helpers";
+import { isValidWurderId, normalizePersonName } from "@/lib/auth/auth-helpers";
 import { updateUserProfile, UsernameTakenError } from "@/lib/auth/profile-bootstrap";
 
 export default function ProfileForm() {
@@ -106,6 +106,7 @@ export default function ProfileForm() {
             className="input-dark mt-2"
             value={name}
             onChange={(event) => setName(event.target.value)}
+            onBlur={(event) => setName(normalizePersonName(event.target.value))}
             placeholder="Optional if first + last are set"
             autoCapitalize="words"
           />
@@ -118,6 +119,7 @@ export default function ProfileForm() {
               className="input-dark mt-2"
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
+              onBlur={(event) => setFirstName(normalizePersonName(event.target.value))}
               autoComplete="given-name"
               autoCapitalize="words"
             />
@@ -129,6 +131,7 @@ export default function ProfileForm() {
               className="input-dark mt-2"
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
+              onBlur={(event) => setLastName(normalizePersonName(event.target.value))}
               autoComplete="family-name"
               autoCapitalize="words"
             />

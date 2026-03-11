@@ -57,12 +57,30 @@ export function normalizeWurderId(value: string): string {
   return value.trim().toLowerCase();
 }
 
+export function normalizePersonName(value: string): string {
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  if (!cleaned) return "";
+
+  return cleaned
+    .split(" ")
+    .map((word) =>
+      word
+        .split(/([-'])/g)
+        .map((segment) => {
+          if (!segment || segment === "-" || segment === "'") return segment;
+          return segment.charAt(0).toUpperCase() + segment.slice(1).toLowerCase();
+        })
+        .join("")
+    )
+    .join(" ");
+}
+
 export function isValidWurderId(value: string): boolean {
   return WURDER_ID_REGEX.test(value.trim());
 }
 
 export function buildName(firstName?: string, lastName?: string): string {
-  const first = (firstName ?? "").trim();
-  const last = (lastName ?? "").trim();
+  const first = normalizePersonName(firstName ?? "");
+  const last = normalizePersonName(lastName ?? "");
   return `${first} ${last}`.trim();
 }

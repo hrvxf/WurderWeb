@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import Button from "@/components/Button";
+import { useAuth } from "@/lib/auth/AuthProvider";
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -11,6 +14,8 @@ const navItems = [
 ];
 
 export default function SiteHeader() {
+  const { isAuthenticated, loading } = useAuth();
+
   return (
     <header className="sticky top-0 z-40 border-b border-white/10 bg-black/20 backdrop-blur-md">
       <div className="page-wrap flex h-16 items-center justify-between gap-4">
@@ -25,11 +30,17 @@ export default function SiteHeader() {
           ))}
         </nav>
         <div className="hidden items-center gap-2 md:flex">
-          <Button href="/login" variant="ghost">
-            Sign In
-          </Button>
-          <Button href="/join" variant="glass">
-            Join a Game
+          {loading ? null : isAuthenticated ? (
+            <Button href="/join" variant="ghost">
+              Create Game
+            </Button>
+          ) : (
+            <Button href="/login" variant="ghost">
+              Sign In
+            </Button>
+          )}
+          <Button href="/download" variant="glass">
+            Download App
           </Button>
         </div>
       </div>

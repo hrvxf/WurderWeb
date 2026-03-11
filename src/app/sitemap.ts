@@ -3,7 +3,7 @@ import { readPublicEnv } from "@/lib/env";
 
 const siteUrl = readPublicEnv("NEXT_PUBLIC_SITE_URL") || "https://wurder.app";
 
-const routes = ["", "/join", "/contact", "/privacy", "/terms"];
+const routes = ["", "/download", "/contact", "/privacy", "/terms"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();

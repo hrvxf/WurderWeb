@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isValidWurderId, mapSignupError } from "@/lib/auth/auth-helpers";
+import { isValidWurderId, mapSignupError, normalizePersonName } from "@/lib/auth/auth-helpers";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 
 export default function SignupForm() {
@@ -106,6 +106,7 @@ export default function SignupForm() {
             <input
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
+              onBlur={(event) => setFirstName(normalizePersonName(event.target.value))}
               className="input-dark mt-2"
               autoComplete="given-name"
               autoCapitalize="words"
@@ -118,6 +119,7 @@ export default function SignupForm() {
             <input
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
+              onBlur={(event) => setLastName(normalizePersonName(event.target.value))}
               className="input-dark mt-2"
               autoComplete="family-name"
               autoCapitalize="words"

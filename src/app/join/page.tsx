@@ -1,13 +1,12 @@
-import JoinHandoffCard from "@/components/join/JoinHandoffCard";
-import { extractGameCodeFromPayload } from "@/domain/join/joinLink";
+import type { Metadata } from "next";
+import JoinPageClient from "@/app/join/page.client";
 
-export default async function JoinEntryPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ code?: string }>;
-}) {
-  const params = await searchParams;
-  const initialCode = extractGameCodeFromPayload(params.code || "");
+export const metadata: Metadata = {
+  title: "Join",
+  description: "Create a Wurder game QR to share with players.",
+  alternates: { canonical: "/join" },
+};
 
-  return <JoinHandoffCard initialCode={initialCode} />;
+export default function JoinPage() {
+  return <JoinPageClient />;
 }

@@ -9,7 +9,13 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
-import { buildName, isValidWurderId, normalizeEmail, normalizeWurderId } from "@/lib/auth/auth-helpers";
+import {
+  buildName,
+  isValidWurderId,
+  normalizeEmail,
+  normalizePersonName,
+  normalizeWurderId,
+} from "@/lib/auth/auth-helpers";
 import { isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
 
@@ -43,6 +49,12 @@ function cleanText(value?: string | null): string | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
+function cleanName(value?: string | null): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const normalized = normalizePersonName(value);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function normalizeStats(stats: unknown): WurderUserProfile["stats"] {
   if (!stats || typeof stats !== "object") {
     return { ...DEFAULT_PROFILE_STATS };
@@ -51,6 +63,12 @@ function normalizeStats(stats: unknown): WurderUserProfile["stats"] {
     ...DEFAULT_PROFILE_STATS,
     ...(stats as Record<string, number>),
   };
+}
+
+function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined)
+  ) as T;
 }
 
 function normalizeProfile(
@@ -141,11 +159,11 @@ export async function ensureUserProfile(
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
 
-  const firstName = cleanText(seed.firstName);
-  const lastName = cleanText(seed.lastName);
-  const authDisplayName = cleanText(user.displayName);
+  const firstName = cleanName(seed.firstName);
+  const lastName = cleanName(seed.lastName);
+  const authDisplayName = cleanName(user.displayName);
   const fallbackName = buildName(firstName, lastName);
-  const name = cleanText(seed.name) ?? authDisplayName ?? cleanText(fallbackName);
+  const name = cleanName(seed.name) ?? authDisplayName ?? cleanName(fallbackName);
   const email = user.email ? normalizeEmail(user.email) : null;
   const avatar = seed.avatar ?? user.photoURL ?? null;
 
@@ -159,7 +177,7 @@ export async function ensureUserProfile(
     : undefined;
 
   if (!snapshot.exists()) {
-    const createdProfile: WurderUserProfile = {
+    const createdProfile = withoutUndefined({
       uid,
       email,
       firstName: firstName ?? "",
@@ -170,7 +188,7 @@ export async function ensureUserProfile(
       stats: { ...DEFAULT_PROFILE_STATS },
       activeGame: null,
       onboarding: { profileComplete: false },
-    };
+    }) as WurderUserProfile;
 
     if (requestedWurderId && requestedWurderIdLower) {
       createdProfile.wurderId = requestedWurderId;
@@ -179,7 +197,7 @@ export async function ensureUserProfile(
 
     const profileComplete = isProfileComplete(createdProfile);
 
-    await setDoc(userRef, {
+    await setDoc(userRef, withoutUndefined({
       ...createdProfile,
       onboarding: {
         ...(createdProfile.onboarding ?? {}),
@@ -187,7 +205,7 @@ export async function ensureUserProfile(
       },
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    }));
 
     return {
       ...createdProfile,
@@ -283,19 +301,19 @@ export async function updateUserProfile(
   const memoryUpdates: Partial<WurderUserProfile> = {};
 
   if ("firstName" in input) {
-    const firstName = cleanText(input.firstName) ?? "";
+    const firstName = cleanName(input.firstName) ?? "";
     firestoreUpdates.firstName = firstName;
     memoryUpdates.firstName = firstName;
   }
 
   if ("lastName" in input) {
-    const lastName = cleanText(input.lastName) ?? "";
+    const lastName = cleanName(input.lastName) ?? "";
     firestoreUpdates.lastName = lastName;
     memoryUpdates.lastName = lastName;
   }
 
   if ("name" in input) {
-    const name = cleanText(input.name) ?? "";
+    const name = cleanName(input.name) ?? "";
     firestoreUpdates.name = name;
     memoryUpdates.name = name;
   }

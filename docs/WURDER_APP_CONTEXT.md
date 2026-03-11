@@ -98,7 +98,7 @@ Also ensure web host serves:
 
 ### Required Web Behavior
 
-When web generates a QR for joining, encode the universal join URL:
+When web displays a QR for joining, encode the universal join URL:
 
 - `https://wurder.app/join/{GAME_CODE}`
 
