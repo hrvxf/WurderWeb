@@ -37,6 +37,15 @@ function parseNumber(value: unknown): number {
   return 0;
 }
 
+function parseNullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function parseString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
@@ -118,11 +127,11 @@ function normalizePlayers(value: unknown): ManagerPlayerPerformance[] {
     return {
       playerId: parseString(player.playerId) || `row-${index}`,
       displayName: parseString(player.displayName) || "Unknown",
-      kills: parseNumber(player.kills),
-      deaths: parseNumber(player.deaths),
-      kdRatio: parseNumber(player.kdRatio),
-      accuracyPct: parseNumber(player.accuracyPct),
-      sessionCount: parseNumber(player.sessionCount),
+      kills: parseNullableNumber(player.kills),
+      deaths: parseNullableNumber(player.deaths),
+      kdRatio: parseNullableNumber(player.kdRatio),
+      accuracyPct: parseNullableNumber(player.accuracyPct),
+      sessionCount: parseNullableNumber(player.sessionCount),
     };
   });
 }
@@ -132,8 +141,8 @@ function normalizeSessionSummary(value: unknown): ManagerSessionSummary {
 
   return {
     totalSessions: parseNumber(summary.totalSessions),
-    avgSessionLengthSeconds: parseNumber(summary.avgSessionLengthSeconds),
-    longestSessionSeconds: parseNumber(summary.longestSessionSeconds),
+    avgSessionLengthSeconds: parseNullableNumber(summary.avgSessionLengthSeconds),
+    longestSessionSeconds: parseNullableNumber(summary.longestSessionSeconds),
     lastSessionAt: parseNullableString(summary.lastSessionAt),
   };
 }
