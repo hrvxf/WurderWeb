@@ -4,6 +4,7 @@ import type { ManagerPlayerPerformance } from "@/components/admin/types";
 
 type PlayerPerformanceTableProps = {
   players: ManagerPlayerPerformance[];
+  mode?: string | null;
 };
 
 function formatPercent(value: number | null): string {
@@ -21,9 +22,12 @@ function formatCount(value: number | null): string {
   return (value ?? 0).toLocaleString();
 }
 
-export default function PlayerPerformanceTable({ players }: PlayerPerformanceTableProps) {
+function isClassicMode(mode: string | null | undefined): boolean {
+  return (mode ?? "").trim().toLowerCase() === "classic";
+}
+
+export default function PlayerPerformanceTable({ players, mode }: PlayerPerformanceTableProps) {
   const hasDeathsData = players.some((player) => player.deaths != null);
-  const hasKdData = players.some((player) => player.kdRatio != null);
   const sortedPlayers = useMemo(
     () =>
       [...players].sort(
@@ -37,6 +41,9 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Player Performance</h2>
+      {isClassicMode(mode) ? (
+        <p className="mt-1 text-xs text-slate-500">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>
+      ) : null}
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -44,7 +51,7 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
               <th className="px-3 py-2">{hasDeathsData ? "Deaths" : "Deaths (Unavailable)"}</th>
-              <th className="px-3 py-2">{hasKdData ? "K/D" : "K/D (Unavailable)"}</th>
+              <th className="px-3 py-2">K/D</th>
               <th className="px-3 py-2">Accuracy</th>
               <th className="px-3 py-2">Sessions</th>
             </tr>

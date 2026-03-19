@@ -475,7 +475,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
             </section>
           )}
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-            <PlayerPerformanceTable players={analytics.playerPerformance} />
+            <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
             {entitlements?.managerSummaries ? (
               <SessionSummary
                 summary={analytics.sessionSummary}
