@@ -1,10 +1,11 @@
 import "server-only";
 
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { normalizeProductTier, type ProductTier } from "@/lib/product/entitlements";
 import type {
+  FirestoreDateValue,
   OrgBranding,
   OrgDoc,
   OrgGameLinkDoc,
@@ -48,6 +49,14 @@ function asNumber(value: unknown): number | null {
     const parsed = Number(value.trim());
     if (Number.isFinite(parsed)) return parsed;
   }
+  return null;
+}
+
+function asFirestoreDateValue(value: unknown): FirestoreDateValue {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  if (value instanceof Timestamp) return value;
+  if (value instanceof FieldValue) return value;
   return null;
 }
 
@@ -340,7 +349,7 @@ export async function listOrganizationTemplates(input: { orgId: string }): Promi
       metricsEnabled,
       managerDefaults: normalizeTemplateManagerDefaults(data.managerDefaults),
       createdByAccountId: "unknown",
-      createdAt: data.createdAt ?? null,
+      createdAt: asFirestoreDateValue(data.createdAt),
     };
 
     if (!templateMap.has(id)) {
