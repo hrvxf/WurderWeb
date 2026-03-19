@@ -1,4 +1,4 @@
-import type { ManagerGameOverview } from "@/admin/types";
+import type { ManagerGameOverview } from "@/components/admin/types";
 
 type GameOverviewPanelProps = {
   overview: ManagerGameOverview;

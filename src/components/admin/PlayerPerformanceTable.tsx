@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import type { ManagerPlayerPerformance } from "@/admin/types";
+import type { ManagerPlayerPerformance } from "@/components/admin/types";
 
 type PlayerPerformanceTableProps = {
   players: ManagerPlayerPerformance[];
