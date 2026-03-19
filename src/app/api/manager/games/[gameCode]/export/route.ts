@@ -195,7 +195,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     await assertManagerAccessForGame(request.headers.get("authorization"), normalizedCode);
 
     const gameDoc = await adminDb.collection("games").doc(normalizedCode).get();
-    const gameData = (gameDoc.data() ?? {}) as { orgId?: unknown };
+    const gameData = (gameDoc.data() ?? {}) as { orgId?: unknown; started?: unknown; ended?: unknown; mode?: unknown };
     const orgId = typeof gameData.orgId === "string" ? gameData.orgId.trim() : "";
     const tier: ProductTier = orgId ? await resolveOrganizationTier(orgId) : "basic";
     const branding = orgId ? await resolveOrgBranding(orgId) : null;
