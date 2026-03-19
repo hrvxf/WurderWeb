@@ -41,12 +41,12 @@ function formatPercent(value: number | null): string {
 }
 
 function findTopPerformer(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const eligible = players.filter((player) => player.kills != null && player.kdRatio != null && player.sessionCount != null);
+  const eligible = players.filter((player) => player.kills != null && player.sessionCount != null);
   if (eligible.length === 0) return null;
   return [...eligible].sort((a, b) => {
     if ((b.kills ?? 0) !== (a.kills ?? 0)) return (b.kills ?? 0) - (a.kills ?? 0);
-    if ((b.kdRatio ?? 0) !== (a.kdRatio ?? 0)) return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
     if ((b.accuracyPct ?? 0) !== (a.accuracyPct ?? 0)) return (b.accuracyPct ?? 0) - (a.accuracyPct ?? 0);
+    if ((b.kdRatio ?? 0) !== (a.kdRatio ?? 0)) return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
     return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
   })[0] ?? null;
 }
@@ -119,7 +119,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
   const topPerformer = findTopPerformer(players);
   const communicator = findCommunicator(players);
   const coachingRisk = findCoachingRisk(players);
-  const hasSummaryCandidates = Boolean(topPerformer && communicator && coachingRisk);
+  const availableFindings = [topPerformer, communicator, coachingRisk].filter(Boolean).length;
   const appliesTeamMode = isTeamMode(overview, insights);
   const teamMetrics = teamInsights(insights).slice(0, 2);
 
@@ -141,25 +141,31 @@ export default function SessionSummary({ summary, overview, insights, players }:
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Session Summary</h2>
       <div className="mt-4 grid gap-3">
-        {hasSummaryCandidates ? (
+        {availableFindings > 0 ? (
           <>
+            {topPerformer ? (
             <Finding
               label="Top Performer"
-              headline={`${topPerformer!.displayName}: ${topPerformer!.kills} eliminations, ${topPerformer!.kdRatio?.toFixed(2)} K/D`}
-              interpretation={`Highest output in the current roster across ${topPerformer!.sessionCount} sessions.`}
+              headline={`${topPerformer.displayName}: ${topPerformer.kills} eliminations${topPerformer.kdRatio != null ? `, ${topPerformer.kdRatio.toFixed(2)} K/D` : ""}`}
+              interpretation={`Highest output in the current roster across ${topPerformer.sessionCount} sessions.`}
             />
+            ) : null}
 
+            {communicator ? (
             <Finding
               label="Most Effective Communicator"
-              headline={`${communicator!.displayName}: ${formatPercent(communicator!.accuracyPct)} accuracy`}
-              interpretation={`Best precision signal across ${communicator!.sessionCount} sessions, supporting reliable callout execution.`}
+              headline={`${communicator.displayName}: ${formatPercent(communicator.accuracyPct)} accuracy`}
+              interpretation={`Best precision signal across ${communicator.sessionCount} sessions, supporting reliable callout execution.`}
             />
+            ) : null}
 
+            {coachingRisk ? (
             <Finding
               label="Risk / Coaching Needed"
-              headline={`${coachingRisk!.displayName}: ${coachingRisk!.deaths} deaths, ${coachingRisk!.kdRatio?.toFixed(2)} K/D`}
+              headline={`${coachingRisk.displayName}: ${coachingRisk.deaths} deaths, ${coachingRisk.kdRatio?.toFixed(2)} K/D`}
               interpretation="Highest death load in the roster; prioritize positioning and trade-timing coaching."
             />
+            ) : null}
           </>
         ) : (
           <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
