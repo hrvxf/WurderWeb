@@ -18,6 +18,17 @@ type SessionRow = {
   successRate: number | null;
   disputeRate: number | null;
   avgResolutionTimeMs: number | null;
+  analyticsAccess: {
+    visibility: "limited_live" | "full_post_session";
+    allowedSections: {
+      overview: boolean;
+      insights: boolean;
+      playerComparison: boolean;
+      sessionSummary: boolean;
+      exports: boolean;
+    };
+    message: string | null;
+  };
 };
 
 type TrendRow = {
@@ -27,6 +38,7 @@ type TrendRow = {
   successRate: number | null;
   disputeRate: number | null;
   avgResolutionTimeMs: number | null;
+  analyticsAccess: SessionRow["analyticsAccess"];
 };
 
 type OrgDashboardData = {
@@ -107,6 +119,53 @@ function normalizePayload(payload: ApiPayload): OrgDashboardData {
       successRate: asNumber(row.successRate),
       disputeRate: asNumber(row.disputeRate),
       avgResolutionTimeMs: asNumber(row.avgResolutionTimeMs),
+      analyticsAccess:
+        row.analyticsAccess && typeof row.analyticsAccess === "object"
+          ? {
+              visibility:
+                asString((row.analyticsAccess as Record<string, unknown>).visibility) === "full_post_session"
+                  ? "full_post_session"
+                  : "limited_live",
+              allowedSections:
+                (row.analyticsAccess as Record<string, unknown>).allowedSections &&
+                typeof (row.analyticsAccess as Record<string, unknown>).allowedSections === "object"
+                  ? {
+                      overview: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).overview
+                      ),
+                      insights: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).insights
+                      ),
+                      playerComparison: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).playerComparison
+                      ),
+                      sessionSummary: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).sessionSummary
+                      ),
+                      exports: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).exports
+                      ),
+                    }
+                  : {
+                      overview: true,
+                      insights: false,
+                      playerComparison: false,
+                      sessionSummary: false,
+                      exports: false,
+                    },
+              message: asString((row.analyticsAccess as Record<string, unknown>).message),
+            }
+          : {
+              visibility: "limited_live",
+              allowedSections: {
+                overview: true,
+                insights: false,
+                playerComparison: false,
+                sessionSummary: false,
+                exports: false,
+              },
+              message: "Full analytics unlock after the session ends.",
+            },
     };
   });
 
@@ -119,6 +178,53 @@ function normalizePayload(payload: ApiPayload): OrgDashboardData {
       successRate: asNumber(row.successRate),
       disputeRate: asNumber(row.disputeRate),
       avgResolutionTimeMs: asNumber(row.avgResolutionTimeMs),
+      analyticsAccess:
+        row.analyticsAccess && typeof row.analyticsAccess === "object"
+          ? {
+              visibility:
+                asString((row.analyticsAccess as Record<string, unknown>).visibility) === "full_post_session"
+                  ? "full_post_session"
+                  : "limited_live",
+              allowedSections:
+                (row.analyticsAccess as Record<string, unknown>).allowedSections &&
+                typeof (row.analyticsAccess as Record<string, unknown>).allowedSections === "object"
+                  ? {
+                      overview: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).overview
+                      ),
+                      insights: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).insights
+                      ),
+                      playerComparison: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).playerComparison
+                      ),
+                      sessionSummary: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).sessionSummary
+                      ),
+                      exports: Boolean(
+                        ((row.analyticsAccess as Record<string, unknown>).allowedSections as Record<string, unknown>).exports
+                      ),
+                    }
+                  : {
+                      overview: true,
+                      insights: false,
+                      playerComparison: false,
+                      sessionSummary: false,
+                      exports: false,
+                    },
+              message: asString((row.analyticsAccess as Record<string, unknown>).message),
+            }
+          : {
+              visibility: "limited_live",
+              allowedSections: {
+                overview: true,
+                insights: false,
+                playerComparison: false,
+                sessionSummary: false,
+                exports: false,
+              },
+              message: "Full analytics unlock after the session ends.",
+            },
     };
   });
 
@@ -371,9 +477,15 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
                         <td className="px-3 py-2">{trend.index}</td>
                         <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{trend.gameCode}</td>
                         <td className="whitespace-nowrap px-3 py-2">{formatDate(trend.createdAt)}</td>
-                        <td className="px-3 py-2">{formatPercent(trend.successRate)}</td>
-                        <td className="px-3 py-2">{formatPercent(trend.disputeRate)}</td>
-                        <td className="px-3 py-2">{formatDurationMs(trend.avgResolutionTimeMs)}</td>
+                        <td className="px-3 py-2">
+                          {trend.analyticsAccess.allowedSections.insights ? formatPercent(trend.successRate) : "Locked"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {trend.analyticsAccess.allowedSections.insights ? formatPercent(trend.disputeRate) : "Locked"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {trend.analyticsAccess.allowedSections.sessionSummary ? formatDurationMs(trend.avgResolutionTimeMs) : "Locked"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -409,13 +521,26 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
                           <div>End: {formatDate(session.endedAt)}</div>
                         </td>
                         <td className="px-3 py-2">{session.playerCount.toLocaleString()}</td>
-                        <td className="px-3 py-2">{displayMetric(session.claims)}</td>
-                        <td className="px-3 py-2">{displayMetric(session.disputes)}</td>
-                        <td className="px-3 py-2">{formatPercent(session.successRate)}</td>
                         <td className="px-3 py-2">
-                          <Link className="font-medium text-blue-700 hover:text-blue-900" href={`/manager/${encodeURIComponent(session.gameCode)}`}>
-                            Open
-                          </Link>
+                          {session.analyticsAccess.allowedSections.insights ? displayMetric(session.claims) : "Locked"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {session.analyticsAccess.allowedSections.insights ? displayMetric(session.disputes) : "Locked"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {session.analyticsAccess.allowedSections.insights ? formatPercent(session.successRate) : "Locked"}
+                        </td>
+                        <td className="px-3 py-2">
+                          {session.analyticsAccess.allowedSections.overview ? (
+                            <Link className="font-medium text-blue-700 hover:text-blue-900" href={`/manager/${encodeURIComponent(session.gameCode)}`}>
+                              Open
+                            </Link>
+                          ) : (
+                            <span className="text-slate-500">Unavailable</span>
+                          )}
+                          {session.analyticsAccess.message ? (
+                            <p className="mt-1 text-xs text-amber-700">{session.analyticsAccess.message}</p>
+                          ) : null}
                         </td>
                       </tr>
                     ))}

@@ -28,6 +28,18 @@ type ManagerBranding = {
   brandThemeLabel: string | null;
 };
 
+type AnalyticsAccessState = {
+  visibility: "limited_live" | "full_post_session";
+  allowedSections: {
+    overview: boolean;
+    insights: boolean;
+    playerComparison: boolean;
+    sessionSummary: boolean;
+    exports: boolean;
+  };
+  message: string | null;
+};
+
 function parseNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -176,11 +188,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const [analytics, setAnalytics] = useState<ManagerAnalyticsDocument | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "missing" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [entitlements, setEntitlements] = useState<{
-    managerInsights: boolean;
-    managerSummaries: boolean;
-    exports: boolean;
-  } | null>(null);
+  const [analyticsAccess, setAnalyticsAccess] = useState<AnalyticsAccessState | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "downloading">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
@@ -198,7 +206,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     if (guard.status !== "allowed") {
       setStatus("idle");
       setStatusMessage(null);
-      setEntitlements(null);
+      setAnalyticsAccess(null);
       setExportMessage(null);
       setBranding(null);
       setAnalytics(null);
@@ -232,7 +240,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         });
         const payload = (await response.json().catch(() => ({}))) as {
           analytics?: unknown;
-          entitlements?: unknown;
+          analyticsAccess?: unknown;
           branding?: unknown;
           code?: unknown;
           message?: unknown;
@@ -250,14 +258,24 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
             }
           }
           setAnalytics(normalizeAnalytics(payload.analytics, normalizedCode));
-        const normalizedEntitlements =
-            payload.entitlements && typeof payload.entitlements === "object"
-              ? (payload.entitlements as Record<string, unknown>)
+          const normalizedAccess =
+            payload.analyticsAccess && typeof payload.analyticsAccess === "object"
+              ? (payload.analyticsAccess as Record<string, unknown>)
               : {};
-          setEntitlements({
-            managerInsights: Boolean(normalizedEntitlements.managerInsights),
-            managerSummaries: Boolean(normalizedEntitlements.managerSummaries),
-            exports: Boolean(normalizedEntitlements.exports),
+          const normalizedAllowedSections =
+            normalizedAccess.allowedSections && typeof normalizedAccess.allowedSections === "object"
+              ? (normalizedAccess.allowedSections as Record<string, unknown>)
+              : {};
+          setAnalyticsAccess({
+            visibility: parseString(normalizedAccess.visibility) === "full_post_session" ? "full_post_session" : "limited_live",
+            allowedSections: {
+              overview: Boolean(normalizedAllowedSections.overview),
+              insights: Boolean(normalizedAllowedSections.insights),
+              playerComparison: Boolean(normalizedAllowedSections.playerComparison),
+              sessionSummary: Boolean(normalizedAllowedSections.sessionSummary),
+              exports: Boolean(normalizedAllowedSections.exports),
+            },
+            message: parseNullableString(normalizedAccess.message),
           });
           const normalizedBranding =
             payload.branding && typeof payload.branding === "object"
@@ -395,7 +413,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-sm font-semibold text-slate-900">Reporting Exports</h2>
-            {entitlements?.exports ? (
+            {analyticsAccess?.allowedSections.exports ? (
               <>
                 <button
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
@@ -415,7 +433,9 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 </button>
               </>
             ) : (
-              <p className="text-sm text-amber-900">Exports are available on Enterprise tier.</p>
+              <p className="text-sm text-amber-900">
+                {analyticsAccess?.message ?? "Exports are unavailable for this session right now."}
+              </p>
             )}
           </div>
           {exportMessage ? <p className="mt-2 text-sm text-red-700">{exportMessage}</p> : null}
@@ -466,17 +486,28 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "allowed" && status === "ready" && analytics ? (
         <div className="grid gap-6">
-          <GameOverviewPanel overview={analytics.overview} />
-          {entitlements?.managerInsights ? (
+          {analyticsAccess?.message ? (
+            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+              {analyticsAccess.message}
+            </section>
+          ) : null}
+          {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
+          {analyticsAccess?.allowedSections.insights ? (
             <InsightCards insights={analytics.insights} />
           ) : (
             <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-              Insights are available on Pro and Enterprise tiers.
+              {analyticsAccess?.message ?? "Insights are unavailable for this session right now."}
             </section>
           )}
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-            <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
-            {entitlements?.managerSummaries ? (
+            {analyticsAccess?.allowedSections.playerComparison ? (
+              <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
+            ) : (
+              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+                {analyticsAccess?.message ?? "Player comparison unlocks after this session ends."}
+              </section>
+            )}
+            {analyticsAccess?.allowedSections.sessionSummary ? (
               <SessionSummary
                 summary={analytics.sessionSummary}
                 overview={analytics.overview}
@@ -485,7 +516,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               />
             ) : (
               <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-                Session summaries are available on Pro and Enterprise tiers.
+                {analyticsAccess?.message ?? "Session summaries are unavailable for this session right now."}
               </section>
             )}
           </div>

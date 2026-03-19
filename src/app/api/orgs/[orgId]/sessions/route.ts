@@ -60,6 +60,17 @@ type SessionAggregate = {
   successRate: number | null;
   disputeRate: number | null;
   avgResolutionTimeMs: number | null;
+  analyticsAccess: {
+    visibility: "limited_live" | "full_post_session";
+    allowedSections: {
+      overview: boolean;
+      insights: boolean;
+      playerComparison: boolean;
+      sessionSummary: boolean;
+      exports: boolean;
+    };
+    message: string | null;
+  };
 };
 
 function asNonEmptyString(value: unknown): string | null {
@@ -123,6 +134,35 @@ function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
 function sumEventCounts(value: unknown): number {
   if (!value || typeof value !== "object") return 0;
   return Object.values(value as Record<string, unknown>).reduce<number>((sum, entry) => sum + (asNumber(entry) ?? 0), 0);
+}
+
+function buildSessionAnalyticsAccess(game: GameDoc): SessionAggregate["analyticsAccess"] {
+  const ended = Boolean(game.ended);
+  if (ended) {
+    return {
+      visibility: "full_post_session",
+      allowedSections: {
+        overview: true,
+        insights: true,
+        playerComparison: true,
+        sessionSummary: true,
+        exports: true,
+      },
+      message: null,
+    };
+  }
+
+  return {
+    visibility: "limited_live",
+    allowedSections: {
+      overview: true,
+      insights: false,
+      playerComparison: false,
+      sessionSummary: false,
+      exports: false,
+    },
+    message: "Full analytics unlock after the session ends.",
+  };
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
@@ -249,6 +289,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
           successRate,
           disputeRate,
           avgResolutionTimeMs,
+          analyticsAccess: buildSessionAnalyticsAccess(game),
         };
 
         return session;
@@ -294,6 +335,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
         successRate: session.successRate,
         disputeRate: session.disputeRate,
         avgResolutionTimeMs: session.avgResolutionTimeMs,
+        analyticsAccess: session.analyticsAccess,
       })),
       sessions,
     });
