@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { entitlementsForTier, type ProductTier } from "@/lib/product/entitlements";
@@ -12,6 +13,32 @@ import {
 } from "@/lib/manager/access";
 
 export const runtime = "nodejs";
+
+type GameDoc = {
+  name?: unknown;
+  status?: unknown;
+  mode?: unknown;
+  started?: unknown;
+  ended?: unknown;
+};
+
+type PlayerAnalyticsDoc = {
+  playerId?: unknown;
+  userId?: unknown;
+  displayName?: unknown;
+  eventsTotal?: unknown;
+  eventCounts?: unknown;
+  kills?: unknown;
+  deaths?: unknown;
+  accuracyPct?: unknown;
+  sessionCount?: unknown;
+  updatedAt?: unknown;
+};
+
+type AnalyticsEventDoc = {
+  eventType?: unknown;
+  type?: unknown;
+};
 
 type OrgBranding = {
   companyName?: unknown;
@@ -72,27 +99,135 @@ async function resolveOrgBranding(orgId: string): Promise<{
   };
 }
 
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function asString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function toIso(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const date = (value as Timestamp).toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  return null;
+}
+
+function eventLabel(eventType: string): string {
+  const normalized = eventType.trim().toLowerCase();
+  const labelMap: Record<string, string> = {
+    game_started: "Game Started",
+    game_ended: "Game Ended",
+    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
+    admin_deny_kill_claim: "Admin Deny Kill Claim",
+  };
+  if (labelMap[normalized]) return labelMap[normalized];
+  return normalized
+    .split("_")
+    .filter((token) => token.length > 0)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ gameCode: string }> }) {
   try {
     const { gameCode } = await params;
     const normalizedCode = gameCode.trim();
     const access = await assertManagerAccessForGame(request.headers.get("authorization"), normalizedCode);
-    const gameDoc = await adminDb.collection("games").doc(normalizedCode).get();
-    const gameData = (gameDoc.data() ?? {}) as { orgId?: unknown };
+    const gameSnapshot = await adminDb.collection("games").doc(normalizedCode).get();
+    const gameData = (gameSnapshot.data() ?? {}) as { orgId?: unknown };
     const orgId = typeof gameData.orgId === "string" ? gameData.orgId.trim() : "";
     const tier: ProductTier = orgId ? await resolveOrganizationTier(orgId) : "basic";
     const branding = orgId ? await resolveOrgBranding(orgId) : null;
 
-    const analyticsDoc = await adminDb.collection("gameAnalytics").doc(normalizedCode).get();
-    if (!analyticsDoc.exists) {
+    const [playerAnalyticsSnap, analyticsEventsSnap] = await Promise.all([
+      adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
+      adminDb.collection("analyticsEvents").where("gameCode", "==", normalizedCode).limit(500).get(),
+    ]);
+    const hasPlayerAnalytics = !playerAnalyticsSnap.empty;
+    const hasAnalyticsEvents = !analyticsEventsSnap.empty;
+    if (!hasPlayerAnalytics && !hasAnalyticsEvents) {
       return NextResponse.json(
         {
           code: "ANALYTICS_NOT_FOUND",
-          message: "Aggregated analytics were not found for this game.",
+          message: "Game exists, but aggregated analytics are not generated yet.",
         },
         { status: 404 }
       );
     }
+
+    const game = (gameSnapshot.data() ?? {}) as GameDoc;
+    const perEventTotals = new Map<string, number>();
+    const playerPerformance = playerAnalyticsSnap.docs.map((doc) => {
+      const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+      const playerId = asString(data.playerId) ?? asString(data.userId) ?? doc.id;
+      const displayName = asString(data.displayName) ?? playerId;
+      const eventCounts =
+        data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
+      for (const [eventType, rawCount] of Object.entries(eventCounts)) {
+        const count = asNumber(rawCount) ?? 0;
+        perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + count);
+      }
+      const kills = asNumber(data.kills) ?? asNumber(eventCounts.kill) ?? asNumber(eventCounts.kill_claim) ?? 0;
+      const deaths = asNumber(data.deaths) ?? asNumber(eventCounts.death) ?? 0;
+      const sessionCount = Math.max(1, asNumber(data.sessionCount) ?? 1);
+      const accuracyPct = asNumber(data.accuracyPct) ?? 0;
+      const kdRatio = deaths > 0 ? kills / deaths : kills;
+      return {
+        playerId,
+        displayName,
+        kills,
+        deaths,
+        kdRatio,
+        accuracyPct,
+        sessionCount,
+      };
+    });
+
+    if (!hasPlayerAnalytics) {
+      for (const doc of analyticsEventsSnap.docs) {
+        const data = (doc.data() ?? {}) as AnalyticsEventDoc;
+        const eventType = asString(data.eventType) ?? asString(data.type);
+        if (!eventType) continue;
+        perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + 1);
+      }
+    }
+
+    const totalEventsFromPlayers = playerAnalyticsSnap.docs.reduce((sum, doc) => {
+      const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+      return sum + (asNumber(data.eventsTotal) ?? 0);
+    }, 0);
+    const totalEventsFromCounts = [...perEventTotals.values()].reduce((sum, value) => sum + value, 0);
+    const totalEvents = totalEventsFromPlayers > 0 ? totalEventsFromPlayers : totalEventsFromCounts;
+    const startedAt = toIso(game.started);
+    const endedAt = toIso(game.ended);
+    const updatedAt = toIso(
+      playerAnalyticsSnap.docs
+        .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
+        .find((value) => value != null) ?? null
+    );
+    const insights = [...perEventTotals.entries()]
+      .map(([eventType, value]) => ({ label: eventLabel(eventType), value }))
+      .sort((a, b) => b.value - a.value);
+    const claims = perEventTotals.get("admin_confirm_kill_claim") ?? perEventTotals.get("kill_claim") ?? null;
+    const disputes = perEventTotals.get("admin_deny_kill_claim") ?? perEventTotals.get("kill_claim_denied") ?? null;
+    if (claims != null) insights.unshift({ label: "Claims", value: claims });
+    if (disputes != null) insights.unshift({ label: "Disputes", value: disputes });
 
     return NextResponse.json({
       gameCode: normalizedCode,
@@ -100,7 +235,30 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       entitlements: entitlementsForTier(tier),
       ownershipSource: access.ownershipSource,
       branding,
-      analytics: analyticsDoc.data() ?? {},
+      analytics: {
+        overview: {
+          gameCode: normalizedCode,
+          gameName: asString(game.name) ?? normalizedCode,
+          status: asString(game.status) ?? (endedAt ? "ended" : startedAt ? "active" : "not_started"),
+          mode: asString(game.mode),
+          startedAt,
+          endedAt,
+          totalPlayers: playerAnalyticsSnap.size,
+          activePlayers: playerAnalyticsSnap.size,
+          totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+        },
+        insights,
+        playerPerformance,
+        sessionSummary: {
+          totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+          avgSessionLengthSeconds: 0,
+          longestSessionSeconds: 0,
+          lastSessionAt: endedAt ?? startedAt,
+        },
+        eventTotals: Object.fromEntries(perEventTotals.entries()),
+        totalEvents,
+        updatedAt,
+      },
     });
   } catch (error) {
     if (error instanceof ManagerUnauthenticatedError) {

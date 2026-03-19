@@ -38,6 +38,18 @@ type AnalyticsDoc = {
   sessionSummary?: unknown;
   updatedAt?: unknown;
 };
+type PlayerAnalyticsDoc = {
+  playerId?: unknown;
+  userId?: unknown;
+  displayName?: unknown;
+  eventsTotal?: unknown;
+  eventCounts?: unknown;
+  kills?: unknown;
+  deaths?: unknown;
+  accuracyPct?: unknown;
+  sessionCount?: unknown;
+  updatedAt?: unknown;
+};
 
 type OrgBrandingDoc = {
   companyName?: unknown;
@@ -79,46 +91,20 @@ function asNullableString(value: unknown): string | null {
   return parsed.length > 0 ? parsed : null;
 }
 
-function normalizeInsights(value: unknown): Array<{ label: string; value: number }> {
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-        return { label: asString(row.label).trim(), value: asNumber(row.value) };
-      })
-      .filter((row) => row.label.length > 0);
-  }
-  if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([label, metric]) => ({ label: label.trim(), value: asNumber(metric) }))
-      .filter((row) => row.label.length > 0);
-  }
-  return [];
-}
-
-function normalizePlayers(value: unknown): ManagerPlayer[] {
-  const rows: unknown[] = Array.isArray(value)
-    ? value
-    : value && typeof value === "object"
-      ? Object.entries(value as Record<string, unknown>).map(([playerId, player]) =>
-          player && typeof player === "object"
-            ? ({ playerId, ...(player as Record<string, unknown>) } as Record<string, unknown>)
-            : { playerId }
-        )
-      : [];
-
-  return rows.map((item, index) => {
-    const row = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-    return {
-      playerId: asString(row.playerId) || `row-${index}`,
-      displayName: asString(row.displayName) || "Unknown",
-      kills: asNumber(row.kills),
-      deaths: asNumber(row.deaths),
-      kdRatio: asNumber(row.kdRatio),
-      accuracyPct: asNumber(row.accuracyPct),
-      sessionCount: asNumber(row.sessionCount),
-    };
-  });
+function eventLabel(eventType: string): string {
+  const normalized = eventType.trim().toLowerCase();
+  const labelMap: Record<string, string> = {
+    game_started: "Game Started",
+    game_ended: "Game Ended",
+    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
+    admin_deny_kill_claim: "Admin Deny Kill Claim",
+  };
+  if (labelMap[normalized]) return labelMap[normalized];
+  return normalized
+    .split("_")
+    .filter((token) => token.length > 0)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
 }
 
 function toCsvCell(value: string | number | null): string {
@@ -209,7 +195,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     await assertManagerAccessForGame(request.headers.get("authorization"), normalizedCode);
 
     const gameDoc = await adminDb.collection("games").doc(normalizedCode).get();
-    const gameData = (gameDoc.data() ?? {}) as { orgId?: unknown };
+    const gameData = (gameDoc.data() ?? {}) as { orgId?: unknown; started?: unknown; ended?: unknown; mode?: unknown };
     const orgId = typeof gameData.orgId === "string" ? gameData.orgId.trim() : "";
     const tier: ProductTier = orgId ? await resolveOrganizationTier(orgId) : "basic";
     const branding = orgId ? await resolveOrgBranding(orgId) : null;
@@ -223,26 +209,68 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       );
     }
 
-    const analyticsSnap = await adminDb.collection("gameAnalytics").doc(normalizedCode).get();
-    if (!analyticsSnap.exists) {
+    const [playerAnalyticsSnap, analyticsEventsSnap] = await Promise.all([
+      adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
+      adminDb.collection("analyticsEvents").where("gameCode", "==", normalizedCode).limit(500).get(),
+    ]);
+    if (playerAnalyticsSnap.empty && analyticsEventsSnap.empty) {
       return NextResponse.json(
         {
           code: "ANALYTICS_NOT_FOUND",
-          message: "Aggregated analytics were not found for this game.",
+          message: "Game exists, but aggregated analytics are not generated yet.",
         },
         { status: 404 }
       );
     }
 
-    const payload = (analyticsSnap.data() ?? {}) as AnalyticsDoc;
-    const overview = (payload.overview && typeof payload.overview === "object"
-      ? payload.overview
-      : {}) as AnalyticsOverview;
-    const summary = (payload.sessionSummary && typeof payload.sessionSummary === "object"
-      ? payload.sessionSummary
-      : {}) as AnalyticsSessionSummary;
-    const insights = normalizeInsights(payload.insights);
-    const players = normalizePlayers(payload.playerPerformance);
+    const perEventTotals = new Map<string, number>();
+    const players = playerAnalyticsSnap.docs.map((doc, index) => {
+      const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+      const eventCounts =
+        data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
+      for (const [eventType, rawCount] of Object.entries(eventCounts)) {
+        perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + asNumber(rawCount));
+      }
+      const kills = asNumber(data.kills) || asNumber(eventCounts.kill) || asNumber(eventCounts.kill_claim);
+      const deaths = asNumber(data.deaths) || asNumber(eventCounts.death);
+      const kdRatio = deaths > 0 ? kills / deaths : kills;
+      return {
+        playerId: asString(data.playerId) || asString(data.userId) || `row-${index}`,
+        displayName: asString(data.displayName) || "Unknown",
+        kills,
+        deaths,
+        kdRatio,
+        accuracyPct: asNumber(data.accuracyPct),
+        sessionCount: Math.max(1, asNumber(data.sessionCount) || 1),
+      };
+    });
+    if (playerAnalyticsSnap.empty) {
+      for (const doc of analyticsEventsSnap.docs) {
+        const row = doc.data() as Record<string, unknown>;
+        const eventType = asNullableString(row.eventType) ?? asNullableString(row.type);
+        if (!eventType) continue;
+        perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + 1);
+      }
+    }
+    const insights = [...perEventTotals.entries()].map(([type, value]) => ({ label: eventLabel(type), value }));
+    const gameOverview: AnalyticsOverview = {
+      gameName: normalizedCode,
+      status: gameData.ended ? "ended" : gameData.started ? "active" : "not_started",
+      mode: asString((gameData as Record<string, unknown>).mode),
+      startedAt: asString((gameData as Record<string, unknown>).started),
+      endedAt: asString((gameData as Record<string, unknown>).ended),
+      totalPlayers: playerAnalyticsSnap.size,
+      activePlayers: playerAnalyticsSnap.size,
+      totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+    };
+    const summary: AnalyticsSessionSummary = {
+      totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+      avgSessionLengthSeconds: 0,
+      longestSessionSeconds: 0,
+      lastSessionAt: asString((gameData as Record<string, unknown>).ended) || asString((gameData as Record<string, unknown>).started),
+    };
+    const payload: AnalyticsDoc = { overview: gameOverview, sessionSummary: summary, insights, playerPerformance: players, updatedAt: null };
+    const overview = gameOverview;
 
     const topPerformer = findTopPerformer(players);
     const coachingRisk = findCoachingRisk(players);
