@@ -18,6 +18,10 @@ const defaultForm = {
   wordDifficulty: "medium",
   teamsEnabled: false,
   metricsEnabled: "",
+  minSecondsBeforeClaim: 0,
+  minSecondsBetweenClaims: 0,
+  maxActiveClaimsPerPlayer: 1,
+  freeRefreshCooldownSeconds: 0,
 };
 
 export default function CreateCompanyGamePage() {
@@ -62,6 +66,10 @@ export default function CreateCompanyGamePage() {
           wordDifficulty: form.wordDifficulty,
           teamsEnabled: form.teamsEnabled,
           metricsEnabled: metricsList,
+          minSecondsBeforeClaim: Number(form.minSecondsBeforeClaim),
+          minSecondsBetweenClaims: Number(form.minSecondsBetweenClaims),
+          maxActiveClaimsPerPlayer: Number(form.maxActiveClaimsPerPlayer),
+          freeRefreshCooldownSeconds: Number(form.freeRefreshCooldownSeconds),
         }),
       });
 
@@ -138,6 +146,52 @@ export default function CreateCompanyGamePage() {
           placeholder="Metrics enabled (comma-separated)"
           value={form.metricsEnabled}
           onChange={(event) => setForm((prev) => ({ ...prev, metricsEnabled: event.target.value }))}
+        />
+        <input
+          className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
+          type="number"
+          min={0}
+          step={1}
+          placeholder="Min seconds before claim"
+          value={form.minSecondsBeforeClaim}
+          onChange={(event) => setForm((prev) => ({ ...prev, minSecondsBeforeClaim: Number(event.target.value || 0) }))}
+          required
+        />
+        <input
+          className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
+          type="number"
+          min={0}
+          step={1}
+          placeholder="Min seconds between claims"
+          value={form.minSecondsBetweenClaims}
+          onChange={(event) =>
+            setForm((prev) => ({ ...prev, minSecondsBetweenClaims: Number(event.target.value || 0) }))
+          }
+          required
+        />
+        <input
+          className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
+          type="number"
+          min={1}
+          step={1}
+          placeholder="Max active claims per player"
+          value={form.maxActiveClaimsPerPlayer}
+          onChange={(event) =>
+            setForm((prev) => ({ ...prev, maxActiveClaimsPerPlayer: Number(event.target.value || 0) }))
+          }
+          required
+        />
+        <input
+          className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
+          type="number"
+          min={0}
+          step={1}
+          placeholder="Free refresh cooldown (seconds)"
+          value={form.freeRefreshCooldownSeconds}
+          onChange={(event) =>
+            setForm((prev) => ({ ...prev, freeRefreshCooldownSeconds: Number(event.target.value || 0) }))
+          }
+          required
         />
 
         <button className="rounded-xl border border-white/30 px-4 py-2" type="submit" disabled={busy || loading || !user}>

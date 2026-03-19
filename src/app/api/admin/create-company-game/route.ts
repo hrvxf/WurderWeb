@@ -19,7 +19,19 @@ type CreateCompanyGameBody = {
   wordDifficulty: string;
   teamsEnabled: boolean;
   metricsEnabled?: string[];
+  minSecondsBeforeClaim: number;
+  minSecondsBetweenClaims: number;
+  maxActiveClaimsPerPlayer: number;
+  freeRefreshCooldownSeconds: number;
 };
+
+function toValidIntegerField(value: unknown, fieldName: string, minimum: number): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < minimum) {
+    throw new Error(`Missing or invalid ${fieldName}.`);
+  }
+  return parsed;
+}
 
 function toValidBody(raw: unknown): CreateCompanyGameBody {
   if (!raw || typeof raw !== "object") {
@@ -36,6 +48,10 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
   const metricsEnabled = Array.isArray(body.metricsEnabled)
     ? body.metricsEnabled.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean)
     : [];
+  const minSecondsBeforeClaim = toValidIntegerField(body.minSecondsBeforeClaim, "minSecondsBeforeClaim", 0);
+  const minSecondsBetweenClaims = toValidIntegerField(body.minSecondsBetweenClaims, "minSecondsBetweenClaims", 0);
+  const maxActiveClaimsPerPlayer = toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
+  const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
 
   if (!orgName || !templateName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Missing or invalid create-company-game fields.");
@@ -49,6 +65,10 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     wordDifficulty,
     teamsEnabled,
     metricsEnabled,
+    minSecondsBeforeClaim,
+    minSecondsBetweenClaims,
+    maxActiveClaimsPerPlayer,
+    freeRefreshCooldownSeconds,
   };
 }
 
@@ -86,6 +106,10 @@ export async function POST(request: Request) {
         wordDifficulty: body.wordDifficulty,
         teamsEnabled: body.teamsEnabled,
         metricsEnabled: body.metricsEnabled ?? [],
+        minSecondsBeforeClaim: body.minSecondsBeforeClaim,
+        minSecondsBetweenClaims: body.minSecondsBetweenClaims,
+        maxActiveClaimsPerPlayer: body.maxActiveClaimsPerPlayer,
+        freeRefreshCooldownSeconds: body.freeRefreshCooldownSeconds,
       },
     });
 

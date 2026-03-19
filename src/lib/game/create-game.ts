@@ -16,6 +16,10 @@ export type ManagerConfig = {
   wordDifficulty: string;
   teamsEnabled: boolean;
   metricsEnabled: string[];
+  minSecondsBeforeClaim: number;
+  minSecondsBetweenClaims: number;
+  maxActiveClaimsPerPlayer: number;
+  freeRefreshCooldownSeconds: number;
 };
 
 type CreateGameForHostUidInput = {
