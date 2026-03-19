@@ -43,9 +43,9 @@ type AnalyticsOverview = {
   totalPlayers?: unknown;
 };
 
-type AnalyticsDoc = {
-  overview?: unknown;
-  insights?: unknown;
+type PlayerAnalyticsDoc = {
+  eventsTotal?: unknown;
+  eventCounts?: unknown;
 };
 
 type SessionAggregate = {
@@ -107,41 +107,6 @@ function timestampToIso(value: unknown): string | null {
   return null;
 }
 
-function normalizeInsights(value: unknown): Array<{ label: string; value: number }> {
-  if (Array.isArray(value)) {
-    return value
-      .map((entry) => {
-        const row = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
-        const label = asNonEmptyString(row.label);
-        const metricValue = asNumber(row.value);
-        if (!label || metricValue == null) return null;
-        return { label: label.toLowerCase(), value: metricValue };
-      })
-      .filter((entry): entry is { label: string; value: number } => Boolean(entry));
-  }
-
-  if (value && typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([label, metricValue]) => {
-        const normalizedLabel = asNonEmptyString(label);
-        const normalizedValue = asNumber(metricValue);
-        if (!normalizedLabel || normalizedValue == null) return null;
-        return { label: normalizedLabel.toLowerCase(), value: normalizedValue };
-      })
-      .filter((entry): entry is { label: string; value: number } => Boolean(entry));
-  }
-
-  return [];
-}
-
-function findInsightMetric(insights: Array<{ label: string; value: number }>, ...tokens: string[]): number | null {
-  for (const item of insights) {
-    if (tokens.every((token) => item.label.includes(token))) {
-      return item.value;
-    }
-  }
-  return null;
-}
 
 function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
   const explicit = asNonEmptyString(overview.status);
@@ -153,6 +118,11 @@ function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
   if (ended) return "ended";
   if (started) return "active";
   return "not_started";
+}
+
+function sumEventCounts(value: unknown): number {
+  if (!value || typeof value !== "object") return 0;
+  return Object.values(value as Record<string, unknown>).reduce((sum, entry) => sum + (asNumber(entry) ?? 0), 0);
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
@@ -227,46 +197,55 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
 
     const gameCodes = [...linkMap.keys()];
 
+    const orgUserAnalyticsSnap = await adminDb.collection("orgAnalytics").doc(access.orgId).collection("users").get();
+    const orgUserMetrics = orgUserAnalyticsSnap.docs.map((doc) => (doc.data() ?? {}) as Record<string, unknown>);
+    const orgSuccessRates = orgUserMetrics
+      .map((row) => asNumber(row.successRate) ?? asNumber(row.averageSuccessRate))
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const orgDisputeRates = orgUserMetrics
+      .map((row) => asNumber(row.disputeRate) ?? asNumber(row.averageDisputeRate))
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const orgResolutionTimes = orgUserMetrics
+      .map((row) => asNumber(row.avgResolutionTimeMs) ?? asNumber(row.averageResolutionTimeMs))
+      .filter((value): value is number => value != null && Number.isFinite(value));
+
     const sessions = await Promise.all(
       gameCodes.map(async (gameCode) => {
-        const [gameDoc, analyticsDoc] = await Promise.all([
+        const [gameDoc, playerAnalyticsSnap] = await Promise.all([
           adminDb.collection("games").doc(gameCode).get(),
-          adminDb.collection("gameAnalytics").doc(gameCode).get(),
+          adminDb.collection("playerAnalytics").where("gameCode", "==", gameCode).get(),
         ]);
 
         const game = (gameDoc.data() ?? {}) as GameDoc;
-        const analytics = (analyticsDoc.data() ?? {}) as AnalyticsDoc;
-        const overview = (analytics.overview && typeof analytics.overview === "object"
-          ? analytics.overview
-          : {}) as AnalyticsOverview;
-        const insights = normalizeInsights(analytics.insights);
-
-        const claims = findInsightMetric(insights, "claim");
-        const disputes = findInsightMetric(insights, "dispute");
-        const successRateRaw =
-          findInsightMetric(insights, "success", "rate") ?? findInsightMetric(insights, "completion", "rate");
-        const successRate =
-          successRateRaw == null ? null : successRateRaw > 0 && successRateRaw <= 1 ? successRateRaw * 100 : successRateRaw;
-        const disputeRateRaw = findInsightMetric(insights, "dispute", "rate");
-        const disputeRate =
-          disputeRateRaw == null
-            ? claims && claims > 0 && disputes != null
-              ? (disputes / claims) * 100
-              : null
-            : disputeRateRaw > 0 && disputeRateRaw <= 1
-              ? disputeRateRaw * 100
-              : disputeRateRaw;
-        const avgResolutionTimeMs = findInsightMetric(insights, "avg", "resolution", "time");
+        const claims = playerAnalyticsSnap.docs.reduce((sum, doc) => {
+          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+          const eventCounts =
+            data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
+          return sum + (asNumber(eventCounts.admin_confirm_kill_claim) ?? asNumber(eventCounts.kill_claim) ?? 0);
+        }, 0);
+        const disputes = playerAnalyticsSnap.docs.reduce((sum, doc) => {
+          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+          const eventCounts =
+            data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
+          return sum + (asNumber(eventCounts.admin_deny_kill_claim) ?? asNumber(eventCounts.kill_claim_denied) ?? 0);
+        }, 0);
+        const totalEvents = playerAnalyticsSnap.docs.reduce((sum, doc) => {
+          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+          return sum + (asNumber(data.eventsTotal) ?? sumEventCounts(data.eventCounts));
+        }, 0);
+        const successRate = claims > 0 ? ((claims - disputes) / claims) * 100 : null;
+        const disputeRate = claims > 0 ? (disputes / claims) * 100 : null;
+        const avgResolutionTimeMs = null;
 
         const session: SessionAggregate = {
           gameCode,
-          status: deriveStatus(game, overview),
+          status: deriveStatus(game, {}),
           createdAt: linkMap.get(gameCode)?.createdAt ?? timestampToIso(game.createdAt),
-          startedAt: timestampToIso(overview.startedAt),
-          endedAt: timestampToIso(overview.endedAt),
-          playerCount: asNumber(overview.totalPlayers) ?? 0,
-          claims,
-          disputes,
+          startedAt: timestampToIso(game.started),
+          endedAt: timestampToIso(game.ended),
+          playerCount: playerAnalyticsSnap.size,
+          claims: claims > 0 ? claims : totalEvents > 0 ? 0 : null,
+          disputes: disputes > 0 ? disputes : claims > 0 ? 0 : null,
           successRate,
           disputeRate,
           avgResolutionTimeMs,
@@ -304,9 +283,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
       entitlements,
       summary: {
         totalSessions: sessions.length,
-        averageSuccessRate: average(successRates),
-        averageDisputeRate: average(disputeRates),
-        averageResolutionTimeMs: average(resolutionTimes),
+        averageSuccessRate: orgSuccessRates.length > 0 ? average(orgSuccessRates) : average(successRates),
+        averageDisputeRate: orgDisputeRates.length > 0 ? average(orgDisputeRates) : average(disputeRates),
+        averageResolutionTimeMs: orgResolutionTimes.length > 0 ? average(orgResolutionTimes) : average(resolutionTimes),
       },
       trends: sessions.slice(0, 12).map((session, index) => ({
         index: index + 1,
