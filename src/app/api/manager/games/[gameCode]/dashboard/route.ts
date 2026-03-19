@@ -22,6 +22,8 @@ type GameDoc = {
   endedAt?: unknown;
   started?: unknown;
   ended?: unknown;
+  analyticsVisibility?: unknown;
+  analyticsAccess?: unknown;
 };
 
 type PlayerAnalyticsDoc = {
@@ -192,6 +194,40 @@ function normalizeMode(value: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
 
+type AnalyticsVisibility = "limited_live" | "full_post_session";
+
+type AnalyticsAccess = {
+  visibility: AnalyticsVisibility;
+  allowedSections: {
+    overview: boolean;
+    insights: boolean;
+    playerComparison: boolean;
+    sessionSummary: boolean;
+    exports: boolean;
+  };
+  message: string | null;
+};
+
+function normalizeVisibility(value: unknown): AnalyticsVisibility | null {
+  const normalized = asString(value)?.toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "limited_live" || normalized === "limited") return "limited_live";
+  if (normalized === "full_post_session" || normalized === "full" || normalized === "post_game_full") return "full_post_session";
+  return null;
+}
+
+function normalizeAllowedSections(value: unknown): AnalyticsAccess["allowedSections"] | null {
+  if (!value || typeof value !== "object") return null;
+  const section = value as Record<string, unknown>;
+  return {
+    overview: asBoolean(section.overview) ?? false,
+    insights: asBoolean(section.insights) ?? false,
+    playerComparison: asBoolean(section.playerComparison) ?? false,
+    sessionSummary: asBoolean(section.sessionSummary) ?? false,
+    exports: asBoolean(section.exports) ?? false,
+  };
+}
+
 async function queryPlayerAnalyticsByCode(normalizedCode: string) {
   const snapshots = await Promise.all([
     adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
@@ -342,6 +378,38 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const started = asBoolean(game.started) ?? startedAt != null;
     const ended = asBoolean(game.ended) ?? endedAt != null;
     const lifecycleStatus = ended ? "completed" : started ? "in_progress" : "not_started";
+    const tierEntitlements = entitlementsForTier(tier);
+    const analyticsAccessFromDoc =
+      game.analyticsAccess && typeof game.analyticsAccess === "object"
+        ? (game.analyticsAccess as Record<string, unknown>)
+        : null;
+    const explicitVisibility =
+      normalizeVisibility(analyticsAccessFromDoc?.visibility) ??
+      normalizeVisibility(game.analyticsVisibility);
+    const visibility: AnalyticsVisibility = explicitVisibility ?? (ended ? "full_post_session" : "limited_live");
+    const fallbackAllowedSections: AnalyticsAccess["allowedSections"] =
+      visibility === "full_post_session"
+        ? {
+            overview: true,
+            insights: tierEntitlements.managerInsights,
+            playerComparison: true,
+            sessionSummary: tierEntitlements.managerSummaries,
+            exports: tierEntitlements.exports,
+          }
+        : {
+            overview: true,
+            insights: false,
+            playerComparison: false,
+            sessionSummary: false,
+            exports: false,
+          };
+    const analyticsAccess: AnalyticsAccess = {
+      visibility,
+      allowedSections: normalizeAllowedSections(analyticsAccessFromDoc?.allowedSections) ?? fallbackAllowedSections,
+      message:
+        asString(analyticsAccessFromDoc?.message) ??
+        (visibility === "limited_live" ? "Full analytics unlock after the session ends." : null),
+    };
     const updatedAt = toIso(
       playerAnalyticsDocs
         .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
@@ -358,9 +426,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     return NextResponse.json({
       gameCode: normalizedCode,
       tier,
-      entitlements: entitlementsForTier(tier),
+      entitlements: tierEntitlements,
       ownershipSource: access.ownershipSource,
       branding,
+      analyticsAccess,
       analytics: {
         overview: {
           gameCode: normalizedCode,
