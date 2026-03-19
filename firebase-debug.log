@@ -1,0 +1,92 @@
+[debug] [2026-03-19T03:50:54.949Z] ----------------------------------------------------------------------
+[debug] [2026-03-19T03:50:54.965Z] Command:       C:\Users\adamj\AppData\Local\nodejs\node.exe C:\Users\adamj\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules
+[debug] [2026-03-19T03:50:54.966Z] CLI Version:   14.20.0
+[debug] [2026-03-19T03:50:54.966Z] Platform:      win32
+[debug] [2026-03-19T03:50:54.966Z] Node Version:  v20.19.4
+[debug] [2026-03-19T03:50:54.967Z] Time:          Thu Mar 19 2026 03:50:54 GMT+0000 (Greenwich Mean Time)
+[debug] [2026-03-19T03:50:54.968Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-19T03:50:54.971Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[error] 
+[error] Error: No currently active project.
+To run this command, you need to specify a project. You have two options:
+- Run this command with --project <alias_or_project_id>.
+- Set an active project by running firebase use --add, then rerun this command.
+To list all the Firebase projects to which you have access, run firebase projects:list.
+To learn about active projects for the CLI, visit https://firebase.google.com/docs/cli#project_aliases
+
+
+[debug] [2026-03-19T03:50:55.618Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-03-19T03:51:22.916Z] ----------------------------------------------------------------------
+[debug] [2026-03-19T03:51:22.921Z] Command:       C:\Users\adamj\AppData\Local\nodejs\node.exe C:\Users\adamj\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules --project wurderv-1
+[debug] [2026-03-19T03:51:22.921Z] CLI Version:   14.20.0
+[debug] [2026-03-19T03:51:22.922Z] Platform:      win32
+[debug] [2026-03-19T03:51:22.922Z] Node Version:  v20.19.4
+[debug] [2026-03-19T03:51:22.922Z] Time:          Thu Mar 19 2026 03:51:22 GMT+0000 (Greenwich Mean Time)
+[debug] [2026-03-19T03:51:22.922Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-19T03:51:23.155Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-19T03:51:23.156Z] > authorizing via signed-in user (hsajame3@gmail.com)
+[debug] [2026-03-19T03:51:23.156Z] [iam] checking project wurderv-1 for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-03-19T03:51:23.158Z] Checked if tokens are valid: false, expires at: 1773858498385
+[debug] [2026-03-19T03:51:23.158Z] Checked if tokens are valid: false, expires at: 1773858498385
+[debug] [2026-03-19T03:51:23.159Z] > refreshing access token with scopes: []
+[debug] [2026-03-19T03:51:23.175Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-03-19T03:51:23.176Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-19T03:51:23.313Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-03-19T03:51:23.314Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-03-19T03:51:23.341Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/wurderv-1:testIamPermissions [none]
+[debug] [2026-03-19T03:51:23.341Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/wurderv-1:testIamPermissions x-goog-quota-user=projects/wurderv-1
+[debug] [2026-03-19T03:51:23.342Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/wurderv-1:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-03-19T03:51:23.938Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/wurderv-1:testIamPermissions 200
+[debug] [2026-03-19T03:51:23.938Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/wurderv-1:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'wurderv-1'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-03-19T03:51:23.949Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:23.949Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:23.950Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/wurderv-1/databases/(default) [none]
+[debug] [2026-03-19T03:51:24.060Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/wurderv-1/databases/(default) 200
+[debug] [2026-03-19T03:51:24.060Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/wurderv-1/databases/(default) {"name":"projects/wurderv-1/databases/(default)","uid":"f631208b-2a31-46ca-9ee8-c68c6d5d6880","createTime":"2026-02-11T04:04:46.946354Z","updateTime":"2026-02-11T04:04:46.946354Z","locationId":"europe-west2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-03-19T02:51:23.958258Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"g","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IOKB0tuHq5MDMNmQ2bqc15ID"}
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-03-19T03:51:24.063Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:24.064Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:24.064Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1:test [none]
+[debug] [2026-03-19T03:51:24.064Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1:test [omitted]
+[debug] [2026-03-19T03:51:24.878Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1:test 200
+[debug] [2026-03-19T03:51:24.878Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1:test {}
+[info] +  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-03-19T03:51:24.882Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:24.882Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:24.886Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases pageSize=10&pageToken=
+[debug] [2026-03-19T03:51:25.526Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases 200
+[debug] [2026-03-19T03:51:25.526Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases {"releases":[{"name":"projects/wurderv-1/releases/cloud.firestore","rulesetName":"projects/wurderv-1/rulesets/0a6f57eb-7e6d-4b8d-8166-82b6bef781bc","createTime":"2026-02-11T04:04:52.777339Z","updateTime":"2026-03-18T17:31:07.703340Z"},{"name":"projects/wurderv-1/releases/firebase.storage/wurderv-1.firebasestorage.app","rulesetName":"projects/wurderv-1/rulesets/9f00a621-c44d-4542-a05b-cf3ac4c5bbe4","createTime":"2026-02-22T04:03:52.419346Z","updateTime":"2026-02-22T04:04:29.020587Z"}]}
+[debug] [2026-03-19T03:51:25.578Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:25.578Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:25.578Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets/0a6f57eb-7e6d-4b8d-8166-82b6bef781bc [none]
+[debug] [2026-03-19T03:51:26.260Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets/0a6f57eb-7e6d-4b8d-8166-82b6bef781bc 200
+[debug] [2026-03-19T03:51:26.260Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets/0a6f57eb-7e6d-4b8d-8166-82b6bef781bc [omitted]
+[info] i  firestore: uploading rules firestore.rules... 
+[debug] [2026-03-19T03:51:26.264Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:26.264Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:26.265Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets [none]
+[debug] [2026-03-19T03:51:26.265Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets [omitted]
+[debug] [2026-03-19T03:51:27.071Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets 200
+[debug] [2026-03-19T03:51:27.072Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/wurderv-1/rulesets {"name":"projects/wurderv-1/rulesets/65f64a4e-53c2-43e7-8b56-a48afdcd067e","source":{"files":[{"content":"rules_version = '2';\r\nservice cloud.firestore {\r\n  match /databases/{database}/documents {\r\n    function signedIn() {\r\n      return request.auth != null;\r\n    }\r\n\r\n    function isOwner(uid) {\r\n      return signedIn() && request.auth.uid == uid;\r\n    }\r\n\r\n    match /users/{uid} {\r\n      allow read: if isOwner(uid);\r\n      allow create: if isOwner(uid) && request.resource.data.uid == request.auth.uid;\r\n      allow update: if isOwner(uid) && request.resource.data.uid == request.auth.uid;\r\n      allow delete: if false;\r\n\r\n      match /games/{gameId} {\r\n        allow read, write: if isOwner(uid);\r\n      }\r\n    }\r\n\r\n\r\n    match /accounts/{uid} {\r\n      allow read: if isOwner(uid);\r\n      allow create, update, delete: if false;\r\n    }\r\n\r\n    match /usernames/{usernameLower} {\r\n      allow read: if true;\r\n      allow create: if signedIn()\r\n        && request.resource.data.uid == request.auth.uid\r\n        && request.resource.data.usernameLower == usernameLower;\r\n      allow update, delete: if false;\r\n    }\r\n\r\n    match /{document=**} {\r\n      allow read, write: if false;\r\n    }\r\n  }\r\n}\r\n","name":"firestore.rules"}]},"createTime":"2026-03-19T03:51:26.897103Z","metadata":{"services":["cloud.firestore"]}}
+[debug] [2026-03-19T03:51:27.072Z] [rules] created ruleset projects/wurderv-1/rulesets/65f64a4e-53c2-43e7-8b56-a48afdcd067e
+[debug] [2026-03-19T03:51:27.073Z] [rules] releasing cloud.firestore/(default) with ruleset projects/wurderv-1/rulesets/65f64a4e-53c2-43e7-8b56-a48afdcd067e
+[debug] [2026-03-19T03:51:27.074Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:27.075Z] Checked if tokens are valid: true, expires at: 1773895882314
+[debug] [2026-03-19T03:51:27.076Z] >>> [apiv2][query] PATCH https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases/cloud.firestore/(default) [none]
+[debug] [2026-03-19T03:51:27.076Z] >>> [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases/cloud.firestore/(default) {"release":{"name":"projects/wurderv-1/releases/cloud.firestore/(default)","rulesetName":"projects/wurderv-1/rulesets/65f64a4e-53c2-43e7-8b56-a48afdcd067e"}}
+[debug] [2026-03-19T03:51:27.907Z] <<< [apiv2][status] PATCH https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases/cloud.firestore/(default) 200
+[debug] [2026-03-19T03:51:27.908Z] <<< [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/wurderv-1/releases/cloud.firestore/(default) {"name":"projects/wurderv-1/releases/cloud.firestore","rulesetName":"projects/wurderv-1/rulesets/65f64a4e-53c2-43e7-8b56-a48afdcd067e","createTime":"2026-02-11T04:04:52.777339Z","updateTime":"2026-03-19T03:51:27.732077Z"}
+[debug] [2026-03-19T03:51:27.908Z] [rules] updated release projects/wurderv-1/releases/cloud.firestore
+[info] +  firestore: released rules firestore.rules to cloud.firestore 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/wurderv-1/overview
