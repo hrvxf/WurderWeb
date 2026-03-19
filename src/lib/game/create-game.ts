@@ -10,6 +10,22 @@ import {
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
+export type ManagerConfig = {
+  mode: string;
+  durationMinutes: number;
+  wordDifficulty: string;
+  teamsEnabled: boolean;
+  metricsEnabled: string[];
+};
+
+type CreateGameForHostUidInput = {
+  hostUid: string;
+  orgId?: string;
+  templateId?: string;
+  analyticsEnabled?: boolean;
+  managerConfig?: ManagerConfig;
+};
+
 export class UnauthenticatedCreateGameError extends Error {
   constructor(message = "Authentication required.") {
     super(message);
@@ -68,7 +84,10 @@ export async function verifyFirebaseAuthHeader(authorization: string | null): Pr
   }
 }
 
-export async function createGameForHostUid(hostUid: string): Promise<{ gameCode: string }> {
+export async function createGameForHostUid(input: string | CreateGameForHostUidInput): Promise<{ gameCode: string }> {
+  const payload: CreateGameForHostUidInput = typeof input === "string" ? { hostUid: input } : input;
+  const { hostUid } = payload;
+
   if (!hostUid) {
     throw new UnauthenticatedCreateGameError("Missing authenticated host uid.");
   }
@@ -86,18 +105,27 @@ export async function createGameForHostUid(hostUid: string): Promise<{ gameCode:
           throw new GameCodeCollisionError("Generated game code already exists.");
         }
 
-        tx.set(
-          gameRef,
-          buildInitialGameDoc({
-            gameCode,
-            hostPlayerId: hostUid,
-            createdAt: FieldValue.serverTimestamp(),
-            wordGroupId,
-            lastActionAt: Date.now(),
-            classicMaxHuntersPerVictim: 3,
-            classicPointsToWin: 25,
-          })
-        );
+        const baseDoc = buildInitialGameDoc({
+          gameCode,
+          hostPlayerId: hostUid,
+          createdAt: FieldValue.serverTimestamp(),
+          wordGroupId,
+          lastActionAt: Date.now(),
+          classicMaxHuntersPerVictim: 3,
+          classicPointsToWin: 25,
+        });
+
+        const companyFields =
+          payload.orgId && payload.templateId && payload.managerConfig
+            ? {
+                orgId: payload.orgId,
+                templateId: payload.templateId,
+                analyticsEnabled: payload.analyticsEnabled ?? false,
+                managerConfig: payload.managerConfig,
+              }
+            : {};
+
+        tx.set(gameRef, { ...baseDoc, ...companyFields });
       });
 
       return { gameCode };
