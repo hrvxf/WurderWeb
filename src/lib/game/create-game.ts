@@ -30,6 +30,11 @@ type CreateGameForHostUidInput = {
   managerConfig?: ManagerConfig;
 };
 
+type AccountIdentityDoc = {
+  usernameLower?: unknown;
+  username?: unknown;
+};
+
 export class UnauthenticatedCreateGameError extends Error {
   constructor(message = "Authentication required.") {
     super(message);
@@ -97,6 +102,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   }
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
+  const hostPlayerId = await resolveCanonicalPlayerId(hostUid);
 
   for (let attempt = 0; attempt < MAX_GAME_CODE_ATTEMPTS; attempt += 1) {
     const gameCode = generateGameCode();
@@ -111,7 +117,8 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
         const baseDoc = buildInitialGameDoc({
           gameCode,
-          hostPlayerId: hostUid,
+          hostPlayerId,
+          createdByAccountId: hostUid,
           createdAt: FieldValue.serverTimestamp(),
           wordGroupId,
           lastActionAt: Date.now(),
@@ -142,4 +149,23 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   }
 
   throw new GameCodeCollisionError();
+}
+
+async function resolveCanonicalPlayerId(uid: string): Promise<string> {
+  try {
+    const accountSnapshot = await adminDb.collection("accounts").doc(uid).get();
+    const account = (accountSnapshot.data() ?? {}) as AccountIdentityDoc;
+
+    if (typeof account.usernameLower === "string" && account.usernameLower.trim()) {
+      return account.usernameLower.trim();
+    }
+
+    if (typeof account.username === "string" && account.username.trim()) {
+      return account.username.trim();
+    }
+  } catch {
+    // Fall back to uid if account lookup fails.
+  }
+
+  return uid;
 }
