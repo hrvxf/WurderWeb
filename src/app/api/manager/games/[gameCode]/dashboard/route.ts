@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { Timestamp } from "firebase-admin/firestore";
+import { FieldPath, type Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { entitlementsForTier, type ProductTier } from "@/lib/product/entitlements";
@@ -28,16 +28,25 @@ type PlayerAnalyticsDoc = {
   playerId?: unknown;
   userId?: unknown;
   displayName?: unknown;
+  gameCode?: unknown;
+  gameId?: unknown;
   eventsTotal?: unknown;
   eventCounts?: unknown;
   kills?: unknown;
   deaths?: unknown;
   deathCount?: unknown;
+  deniedCount?: unknown;
+  disputeCount?: unknown;
   claimCount?: unknown;
+  claimsCount?: unknown;
+  totalClaims?: unknown;
   confirmedCount?: unknown;
   convertedClaimCount?: unknown;
   convertedCount?: unknown;
+  successRate?: unknown;
+  accuracy?: unknown;
   accuracyPct?: unknown;
+  sessions?: unknown;
   sessionCount?: unknown;
   updatedAt?: unknown;
 };
@@ -169,10 +178,32 @@ function pickFirstNumber(...values: unknown[]): number | null {
   return null;
 }
 
+function toUpperTrimmed(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+async function queryPlayerAnalyticsByCode(normalizedCode: string) {
+  const snapshots = await Promise.all([
+    adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
+    adminDb.collection("playerAnalytics").where("gameId", "==", normalizedCode).get(),
+    adminDb.collection("playerAnalytics").orderBy(FieldPath.documentId()).startAt(`${normalizedCode}_`).endAt(`${normalizedCode}_\uf8ff`).get(),
+    adminDb.collection("playerAnalytics").orderBy(FieldPath.documentId()).startAt(`${normalizedCode}:`).endAt(`${normalizedCode}:\uf8ff`).get(),
+    adminDb.collection("playerAnalytics").orderBy(FieldPath.documentId()).startAt(`${normalizedCode}-`).endAt(`${normalizedCode}-\uf8ff`).get(),
+  ]);
+
+  const byId = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
+  for (const snap of snapshots) {
+    for (const doc of snap.docs) {
+      byId.set(doc.id, doc);
+    }
+  }
+  return [...byId.values()];
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ gameCode: string }> }) {
   try {
     const { gameCode } = await params;
-    const normalizedCode = gameCode.trim();
+    const normalizedCode = toUpperTrimmed(gameCode);
     const access = await assertManagerAccessForGame(request.headers.get("authorization"), normalizedCode);
     const gameSnapshot = await adminDb.collection("games").doc(normalizedCode).get();
     const gameData = (gameSnapshot.data() ?? {}) as { orgId?: unknown };
@@ -180,11 +211,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const tier: ProductTier = orgId ? await resolveOrganizationTier(orgId) : "basic";
     const branding = orgId ? await resolveOrgBranding(orgId) : null;
 
-    const [playerAnalyticsSnap, analyticsEventsSnap] = await Promise.all([
-      adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
+    const [playerAnalyticsDocs, analyticsEventsSnap] = await Promise.all([
+      queryPlayerAnalyticsByCode(normalizedCode),
       adminDb.collection("analyticsEvents").where("gameCode", "==", normalizedCode).limit(500).get(),
     ]);
-    const hasPlayerAnalytics = !playerAnalyticsSnap.empty;
+    const hasPlayerAnalytics = playerAnalyticsDocs.length > 0;
     const hasAnalyticsEvents = !analyticsEventsSnap.empty;
     if (!hasPlayerAnalytics && !hasAnalyticsEvents) {
       return NextResponse.json(
@@ -198,7 +229,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
 
     const game = (gameSnapshot.data() ?? {}) as GameDoc;
     const perEventTotals = new Map<string, number>();
-    const playerPerformance = playerAnalyticsSnap.docs.map((doc) => {
+    const playerPerformance = playerAnalyticsDocs.map((doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
       const playerId = asString(data.playerId) ?? asString(data.userId) ?? doc.id;
       const displayName = asString(data.displayName) ?? playerId;
@@ -213,19 +244,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         data.convertedClaimCount,
         data.convertedCount,
         eventCounts.admin_confirm_kill_claim,
-        eventCounts.kill_claim
+        eventCounts.kill_claim_confirmed
       );
       const claimCount = pickFirstNumber(
         data.claimCount,
+        data.claimsCount,
+        data.totalClaims,
         eventCounts.kill_claim,
+        eventCounts.kill_claim_submitted,
         eventCounts.admin_confirm_kill_claim
       );
       const kills = pickFirstNumber(data.kills, confirmedCount);
       const deaths = pickFirstNumber(data.deaths, data.deathCount, eventCounts.death);
-      const sessionCount = asNumber(data.sessionCount);
-      const accuracyPct =
-        confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null;
+      const deniedCount = pickFirstNumber(data.deniedCount, data.disputeCount, eventCounts.admin_deny_kill_claim, eventCounts.kill_claim_denied);
+      const successRate = pickFirstNumber(data.successRate, data.accuracy, data.accuracyPct);
+      const sessionCount = pickFirstNumber(data.sessionCount, data.sessions, data.eventsTotal != null || claimCount != null ? 1 : null);
+      const accuracyPct = successRate ?? (confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null);
       const kdRatio = kills != null ? (deaths != null && deaths > 0 ? kills / deaths : kills) : null;
+      if (deniedCount != null) {
+        perEventTotals.set("admin_deny_kill_claim", (perEventTotals.get("admin_deny_kill_claim") ?? 0) + deniedCount);
+      }
+      if (claimCount != null && !eventCounts.kill_claim) {
+        perEventTotals.set("kill_claim", (perEventTotals.get("kill_claim") ?? 0) + claimCount);
+      }
+      if (confirmedCount != null && !eventCounts.admin_confirm_kill_claim) {
+        perEventTotals.set("admin_confirm_kill_claim", (perEventTotals.get("admin_confirm_kill_claim") ?? 0) + confirmedCount);
+      }
       return {
         playerId,
         displayName,
@@ -246,7 +290,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       }
     }
 
-    const totalEventsFromPlayers = playerAnalyticsSnap.docs.reduce((sum, doc) => {
+    const totalEventsFromPlayers = playerAnalyticsDocs.reduce((sum, doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
       return sum + (asNumber(data.eventsTotal) ?? 0);
     }, 0);
@@ -258,7 +302,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const ended = asBoolean(game.ended) ?? endedAt != null;
     const lifecycleStatus = ended ? "completed" : started ? "in_progress" : "not_started";
     const updatedAt = toIso(
-      playerAnalyticsSnap.docs
+      playerAnalyticsDocs
         .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
         .find((value) => value != null) ?? null
     );
@@ -284,14 +328,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
           mode: asString(game.mode),
           startedAt,
           endedAt,
-          totalPlayers: playerAnalyticsSnap.size,
-          activePlayers: playerAnalyticsSnap.size,
-          totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+          totalPlayers: playerAnalyticsDocs.length,
+          activePlayers: playerAnalyticsDocs.length,
+          totalSessions: playerAnalyticsDocs.length > 0 ? 1 : 0,
         },
         insights,
         playerPerformance,
         sessionSummary: {
-          totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
+          totalSessions: playerAnalyticsDocs.length > 0 ? 1 : 0,
           avgSessionLengthSeconds: null,
           longestSessionSeconds: null,
           lastSessionAt: endedAt ?? startedAt,
