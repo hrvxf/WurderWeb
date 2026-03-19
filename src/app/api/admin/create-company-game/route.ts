@@ -50,7 +50,8 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     : [];
   const minSecondsBeforeClaim = toValidIntegerField(body.minSecondsBeforeClaim, "minSecondsBeforeClaim", 0);
   const minSecondsBetweenClaims = toValidIntegerField(body.minSecondsBetweenClaims, "minSecondsBetweenClaims", 0);
-  const maxActiveClaimsPerPlayer = toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
+  const maxActiveClaimsPerPlayer =
+    body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
 
   if (!orgName || !templateName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {

@@ -39,7 +39,6 @@ type FormState = {
   metricsEnabled: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
-  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
 };
 
@@ -79,7 +78,6 @@ const defaultForm: FormState = {
   metricsEnabled: ["successRate", "disputeRate", "avgResolutionTimeMs", "cleanKillRatio"],
   minSecondsBeforeClaim: 0,
   minSecondsBetweenClaims: 0,
-  maxActiveClaimsPerPlayer: 1,
   freeRefreshCooldownSeconds: 0,
 };
 
@@ -97,10 +95,6 @@ function fieldError(form: FormState) {
       Number.isFinite(form.minSecondsBetweenClaims) && form.minSecondsBetweenClaims >= 0
         ? ""
         : "Cooldown between claims cannot be negative.",
-    maxActiveClaimsPerPlayer:
-      Number.isFinite(form.maxActiveClaimsPerPlayer) && form.maxActiveClaimsPerPlayer >= 1
-        ? ""
-        : "Max active claims per player must be at least 1.",
     freeRefreshCooldownSeconds:
       Number.isFinite(form.freeRefreshCooldownSeconds) && form.freeRefreshCooldownSeconds >= 0
         ? ""
@@ -162,7 +156,6 @@ export default function CreateCompanyGamePage() {
           metricsEnabled: form.metricsEnabled,
           minSecondsBeforeClaim: Number(form.minSecondsBeforeClaim),
           minSecondsBetweenClaims: Number(form.minSecondsBetweenClaims),
-          maxActiveClaimsPerPlayer: Number(form.maxActiveClaimsPerPlayer),
           freeRefreshCooldownSeconds: Number(form.freeRefreshCooldownSeconds),
         }),
       });
@@ -214,7 +207,6 @@ export default function CreateCompanyGamePage() {
       ["Metrics", `${form.metricsEnabled.length} selected`],
       ["Min before claim", `${form.minSecondsBeforeClaim}s`],
       ["Claim cooldown", `${form.minSecondsBetweenClaims}s`],
-      ["Max active claims", String(form.maxActiveClaimsPerPlayer)],
       ["Refresh cooldown", `${form.freeRefreshCooldownSeconds}s`],
     ],
     [form, selectedMode?.label]
@@ -485,22 +477,6 @@ export default function CreateCompanyGamePage() {
                 />
                 <p className="mt-1 text-xs text-soft">Prevents rapid back-to-back claims.</p>
                 <InputMessage message={submitted ? errors.minSecondsBetweenClaims : ""} />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">Max active claims per player</label>
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
-                  value={form.maxActiveClaimsPerPlayer}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, maxActiveClaimsPerPlayer: Number(event.target.value || 0) }))
-                  }
-                />
-                <p className="mt-1 text-xs text-soft">Usually keep this at 1 to encourage focus.</p>
-                <InputMessage message={submitted ? errors.maxActiveClaimsPerPlayer : ""} />
               </div>
 
               <div>
