@@ -399,7 +399,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       return NextResponse.json({ code: "UNAUTHENTICATED", message: "Sign in before exporting this report." }, { status: 401 });
     }
     if (error instanceof ManagerForbiddenError) {
-      return NextResponse.json({ code: "FORBIDDEN", message: "This account is not authorized to export this report." }, { status: 403 });
+      return NextResponse.json(
+        { code: "FORBIDDEN", message: error.message || "This account is not authorized to export this report." },
+        { status: 403 }
+      );
     }
     if (error instanceof ManagerGameNotFoundError) {
       return NextResponse.json({ code: "NOT_FOUND", message: "Game not found." }, { status: 404 });

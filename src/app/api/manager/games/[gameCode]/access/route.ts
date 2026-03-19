@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       return NextResponse.json(
         {
           code: "FORBIDDEN",
-          message: "This account is not authorized to manage this game.",
+          message: error.message || "This account is not authorized to manage this game.",
         },
         { status: 403 }
       );

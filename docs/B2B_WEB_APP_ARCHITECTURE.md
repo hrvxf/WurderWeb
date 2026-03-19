@@ -101,3 +101,7 @@ For manager/org analytics surfaces, prefer:
 - API response assembled server-side from aggregated docs
 - lightweight client rendering with defensive normalization
 - no direct client reads of raw gameplay events
+
+## Related Spec
+
+- Identity mapping policy: [docs/IDENTITY_MAPPING.md](/c:/Users/adamj/Documents/Wurder/wurder-website/docs/IDENTITY_MAPPING.md)

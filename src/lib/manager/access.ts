@@ -1,21 +1,13 @@
 import "server-only";
 
-import { adminDb } from "@/lib/firebase/admin";
 import {
-  CreateGameAuthInfrastructureError,
-  UnauthenticatedCreateGameError,
-  verifyFirebaseAuthHeader,
-} from "@/lib/game/create-game";
-
-type GameAccessDoc = {
-  createdByAccountId?: unknown;
-  managerAccountId?: unknown;
-  orgId?: unknown;
-};
-
-type OrganizationAccessDoc = {
-  ownerAccountId?: unknown;
-};
+  assertManagerRouteAccess,
+  GuardAuthInfrastructureError,
+  GuardForbiddenError,
+  GuardNotFoundError,
+  GuardUnauthenticatedError,
+  type ManagerGuardOwnershipSource,
+} from "@/lib/auth/guards";
 
 export class ManagerUnauthenticatedError extends Error {
   constructor(message = "Authentication required.") {
@@ -45,81 +37,37 @@ export class ManagerAccessInfrastructureError extends Error {
   }
 }
 
-export type ManagerOwnershipSource =
-  | "game.createdByAccountId"
-  | "game.managerAccountId"
-  | "orgs.ownerAccountId"
-  | "organizations.ownerAccountId";
+export type ManagerOwnershipSource = ManagerGuardOwnershipSource;
 
 export type ManagerAccessResult = {
   uid: string;
   ownershipSource: ManagerOwnershipSource;
 };
 
-function asNonEmptyString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 export async function assertManagerAccessForGame(
   authorizationHeader: string | null,
   gameCode: string
 ): Promise<ManagerAccessResult> {
-  let uid: string;
   try {
-    uid = await verifyFirebaseAuthHeader(authorizationHeader);
+    const access = await assertManagerRouteAccess({ authorizationHeader, gameCode });
+    return { uid: access.uid, ownershipSource: access.ownershipSource };
   } catch (error) {
-    if (error instanceof UnauthenticatedCreateGameError) {
+    if (error instanceof GuardUnauthenticatedError) {
       throw new ManagerUnauthenticatedError(error.message);
     }
 
-    if (error instanceof CreateGameAuthInfrastructureError) {
+    if (error instanceof GuardAuthInfrastructureError) {
       throw new ManagerAccessInfrastructureError(error.message);
+    }
+
+    if (error instanceof GuardNotFoundError && error.code === "GAME_NOT_FOUND") {
+      throw new ManagerGameNotFoundError(error.message);
+    }
+
+    if (error instanceof GuardForbiddenError) {
+      throw new ManagerForbiddenError(error.message);
     }
 
     throw error;
   }
-
-  const normalizedCode = gameCode.trim();
-  const gameRef = adminDb.collection("games").doc(normalizedCode);
-  const gameDoc = await gameRef.get();
-
-  if (!gameDoc.exists) {
-    throw new ManagerGameNotFoundError();
-  }
-
-  const gameData = (gameDoc.data() ?? {}) as GameAccessDoc;
-  const createdByAccountId = asNonEmptyString(gameData.createdByAccountId);
-  if (createdByAccountId && createdByAccountId === uid) {
-    return { uid, ownershipSource: "game.createdByAccountId" };
-  }
-
-  const managerAccountId = asNonEmptyString(gameData.managerAccountId);
-  if (managerAccountId && managerAccountId === uid) {
-    return { uid, ownershipSource: "game.managerAccountId" };
-  }
-
-  const orgId = asNonEmptyString(gameData.orgId);
-  if (orgId) {
-    const canonicalOrgDoc = await adminDb.collection("orgs").doc(orgId).get();
-    if (canonicalOrgDoc.exists) {
-      const orgData = (canonicalOrgDoc.data() ?? {}) as OrganizationAccessDoc;
-      const ownerAccountId = asNonEmptyString(orgData.ownerAccountId);
-      if (ownerAccountId && ownerAccountId === uid) {
-        return { uid, ownershipSource: "orgs.ownerAccountId" };
-      }
-    }
-
-    const legacyOrgDoc = await adminDb.collection("organizations").doc(orgId).get();
-    if (legacyOrgDoc.exists) {
-      const orgData = (legacyOrgDoc.data() ?? {}) as OrganizationAccessDoc;
-      const ownerAccountId = asNonEmptyString(orgData.ownerAccountId);
-      if (ownerAccountId && ownerAccountId === uid) {
-        return { uid, ownershipSource: "organizations.ownerAccountId" };
-      }
-    }
-  }
-
-  throw new ManagerForbiddenError();
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import GameOverviewPanel from "@/components/admin/GameOverviewPanel";
 import InsightCards from "@/components/admin/InsightCards";
@@ -146,6 +147,7 @@ function formatUpdatedAt(value: string | null): string {
 }
 
 export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageProps) {
+  const router = useRouter();
   const [analytics, setAnalytics] = useState<ManagerAnalyticsDocument | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "missing" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -159,6 +161,12 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
   const { user } = useAuth();
   const guard = useManagerRouteGuard(gameCode);
+
+  useEffect(() => {
+    if (guard.status !== "unauthenticated") return;
+    const next = encodeURIComponent(`/manager/${gameCode.trim()}`);
+    router.replace(`/login?next=${next}`);
+  }, [gameCode, guard.status, router]);
 
   useEffect(() => {
     const normalizedCode = gameCode.trim();

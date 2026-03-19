@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -57,7 +58,7 @@ type DashboardState =
   | { status: "forbidden"; message: string }
   | { status: "not-found"; message: string }
   | { status: "error"; message: string }
-  | { status: "ready"; data: OrgDashboardData };
+  | { status: "allowed"; data: OrgDashboardData };
 
 type ApiPayload = {
   org?: unknown;
@@ -182,6 +183,7 @@ function statusLabel(rawStatus: string): string {
 }
 
 export default function OrganizationDashboardPage({ orgId }: OrganizationDashboardPageProps) {
+  const router = useRouter();
   const { user, loading } = useAuth();
   const [state, setState] = useState<DashboardState>({ status: "loading-auth" });
 
@@ -219,7 +221,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
         if (isCancelled) return;
 
         if (response.ok) {
-          setState({ status: "ready", data: normalizePayload(payload) });
+          setState({ status: "allowed", data: normalizePayload(payload) });
           return;
         }
 
@@ -252,8 +254,14 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
     };
   }, [loading, orgId, user]);
 
+  useEffect(() => {
+    if (state.status !== "unauthenticated") return;
+    const next = encodeURIComponent(`/org/${orgId.trim()}`);
+    router.replace(`/login?next=${next}`);
+  }, [orgId, router, state.status]);
+
   const orgName = useMemo(() => {
-    if (state.status !== "ready") return null;
+    if (state.status !== "allowed") return null;
     return state.data.org.branding?.companyName ?? state.data.org.name ?? state.data.org.orgId;
   }, [state]);
 
@@ -262,13 +270,13 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
       <header
         className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
         style={
-          state.status === "ready" && state.data.org.branding?.brandAccentColor
+          state.status === "allowed" && state.data.org.branding?.brandAccentColor
             ? { borderTopWidth: "4px", borderTopColor: state.data.org.branding.brandAccentColor }
             : undefined
         }
       >
         <div className="flex items-center gap-3">
-          {state.status === "ready" && state.data.org.branding?.companyLogoUrl ? (
+          {state.status === "allowed" && state.data.org.branding?.companyLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={state.data.org.branding.companyLogoUrl}
@@ -279,7 +287,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Organization Dashboard</h1>
             <p className="mt-1 text-sm text-slate-600">Organization: {orgName ?? orgId}</p>
-            {state.status === "ready" && state.data.org.branding?.brandThemeLabel ? (
+            {state.status === "allowed" && state.data.org.branding?.brandThemeLabel ? (
               <p className="text-xs uppercase tracking-wide text-slate-500">
                 Theme: {state.data.org.branding.brandThemeLabel}
               </p>
@@ -318,7 +326,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
         </section>
       ) : null}
 
-      {state.status === "ready" ? (
+      {state.status === "allowed" ? (
         state.data.sessions.length > 0 ? (
           <div className="space-y-6">
             <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
