@@ -22,6 +22,8 @@ function formatCount(value: number | null): string {
 }
 
 export default function PlayerPerformanceTable({ players }: PlayerPerformanceTableProps) {
+  const hasDeathsData = players.some((player) => player.deaths != null);
+  const hasKdData = players.some((player) => player.kdRatio != null);
   const sortedPlayers = useMemo(
     () =>
       [...players].sort(
@@ -41,8 +43,8 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
-              <th className="px-3 py-2">Deaths</th>
-              <th className="px-3 py-2">K/D</th>
+              <th className="px-3 py-2">{hasDeathsData ? "Deaths" : "Deaths (Unavailable)"}</th>
+              <th className="px-3 py-2">{hasKdData ? "K/D" : "K/D (Unavailable)"}</th>
               <th className="px-3 py-2">Accuracy</th>
               <th className="px-3 py-2">Sessions</th>
             </tr>
