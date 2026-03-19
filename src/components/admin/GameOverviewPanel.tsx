@@ -5,10 +5,10 @@ type GameOverviewPanelProps = {
 };
 
 function formatDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "--";
 
   const asDate = new Date(value);
-  if (Number.isNaN(asDate.getTime())) return "—";
+  if (Number.isNaN(asDate.getTime())) return "--";
 
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -17,6 +17,13 @@ function formatDate(value: string | null): string {
 }
 
 export default function GameOverviewPanel({ overview }: GameOverviewPanelProps) {
+  const normalizedStatus = overview.status.trim().toLowerCase();
+  const sessionState = overview.endedAt
+    ? "Ended session"
+    : overview.startedAt || normalizedStatus === "active" || normalizedStatus === "in_progress"
+      ? "Active session"
+      : "Session not started";
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Game Overview</h2>
@@ -28,6 +35,7 @@ export default function GameOverviewPanel({ overview }: GameOverviewPanelProps) 
         <div className="rounded-md bg-slate-50 p-3">
           <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
           <p className="mt-1 text-sm font-medium capitalize text-slate-900">{overview.status}</p>
+          <p className="mt-1 text-xs text-slate-600">{sessionState}</p>
         </div>
         <div className="rounded-md bg-slate-50 p-3">
           <p className="text-xs uppercase tracking-wide text-slate-500">Players</p>

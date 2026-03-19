@@ -54,6 +54,15 @@ Routes:
 
 See [docs/MEMBERS_AREA.md](docs/MEMBERS_AREA.md) for setup details, auth behavior, and caveats.
 
+## B2B Manager Documentation
+
+- [docs/MANAGER_ACCESS_CONTROL.md](docs/MANAGER_ACCESS_CONTROL.md)
+- [docs/ORG_DATA_MODEL.md](docs/ORG_DATA_MODEL.md)
+- [docs/TEMPLATE_REUSE.md](docs/TEMPLATE_REUSE.md)
+- [docs/PRODUCT_TIERS.md](docs/PRODUCT_TIERS.md)
+- [docs/REPORTING_EXPORTS.md](docs/REPORTING_EXPORTS.md)
+- [docs/B2B_WEB_APP_ARCHITECTURE.md](docs/B2B_WEB_APP_ARCHITECTURE.md)
+
 ## Scripts
 
 - `npm run dev` - start local dev server.

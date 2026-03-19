@@ -2,6 +2,7 @@ export type ManagerGameOverview = {
   gameCode: string;
   gameName: string;
   status: string;
+  mode?: string | null;
   startedAt: string | null;
   endedAt: string | null;
   totalPlayers: number;

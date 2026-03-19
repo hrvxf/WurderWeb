@@ -16,14 +16,19 @@ vi.mock("@/lib/firebase", () => ({
 }));
 
 vi.mock("firebase/firestore", () => {
+  type MockTransaction = {
+    get: (ref: unknown) => Promise<{ exists: () => boolean; data: () => LookupDoc | undefined }>;
+    set: (ref: unknown, payload: Record<string, unknown>) => void;
+  };
+
   return {
     doc: vi.fn((_db: unknown, collection: string, id: string) => ({ collection, id })),
     getDoc: vi.fn(),
     setDoc: vi.fn(),
     serverTimestamp: vi.fn(() => "ts"),
-    runTransaction: vi.fn(async (_db: unknown, updater: (tx: any) => Promise<void>) => {
+    runTransaction: vi.fn(async (_db: unknown, updater: (tx: MockTransaction) => Promise<void>) => {
       state.setCalls = [];
-      const tx = {
+      const tx: MockTransaction = {
         get: vi.fn(async () => {
           if (!state.existingLookup) {
             return {
@@ -108,4 +113,3 @@ describe("claimUsernameForUser", () => {
     expect(state.setCalls).toHaveLength(0);
   });
 });
-

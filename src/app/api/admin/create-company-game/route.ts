@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { createGameTemplate, createOrganization } from "@/lib/game/company-config";
+import {
+  assertOrganizationOwner,
+  createGameTemplate,
+  createOrganization,
+  findOrganizationByOwnerAndName,
+  findOrganizationTemplateById,
+  linkGameToOrganization,
+  updateOrganizationBranding,
+} from "@/lib/game/company-config";
+import { hasFeature } from "@/lib/product/entitlements";
 import {
   CreateGameAuthInfrastructureError,
   createGameForHostUid,
@@ -12,8 +21,14 @@ import {
 export const runtime = "nodejs";
 
 type CreateCompanyGameBody = {
+  orgId?: string;
   orgName: string;
+  companyLogoUrl?: string;
+  brandAccentColor?: string;
+  brandThemeLabel?: string;
+  templateId?: string;
   templateName: string;
+  saveTemplate?: boolean;
   mode: string;
   durationMinutes: number;
   wordDifficulty: string;
@@ -39,8 +54,14 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
   }
 
   const body = raw as Partial<CreateCompanyGameBody>;
+  const orgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
   const orgName = typeof body.orgName === "string" ? body.orgName.trim() : "";
+  const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
   const templateName = typeof body.templateName === "string" ? body.templateName.trim() : "";
+  const companyLogoUrl = typeof body.companyLogoUrl === "string" ? body.companyLogoUrl.trim() : "";
+  const brandAccentColor = typeof body.brandAccentColor === "string" ? body.brandAccentColor.trim() : "";
+  const brandThemeLabel = typeof body.brandThemeLabel === "string" ? body.brandThemeLabel.trim() : "";
+  const saveTemplate = body.saveTemplate !== false;
   const mode = typeof body.mode === "string" ? body.mode.trim() : "";
   const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
   const durationMinutes = Number(body.durationMinutes);
@@ -54,13 +75,38 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
 
-  if (!orgName || !templateName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+  if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Missing or invalid create-company-game fields.");
   }
 
+  if (!templateId && saveTemplate && !templateName) {
+    throw new Error("Template name is required when saving a template.");
+  }
+
+  if (companyLogoUrl) {
+    try {
+      const parsedUrl = new URL(companyLogoUrl);
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        throw new Error();
+      }
+    } catch {
+      throw new Error("Invalid companyLogoUrl. Use an http/https URL.");
+    }
+  }
+
+  if (brandAccentColor && !/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(brandAccentColor)) {
+    throw new Error("Invalid brandAccentColor. Use #RGB or #RRGGBB.");
+  }
+
   return {
+    orgId: orgId || undefined,
     orgName,
+    companyLogoUrl: companyLogoUrl || undefined,
+    brandAccentColor: brandAccentColor || undefined,
+    brandThemeLabel: brandThemeLabel || undefined,
+    templateId: templateId || undefined,
     templateName,
+    saveTemplate,
     mode,
     durationMinutes,
     wordDifficulty,
@@ -78,23 +124,84 @@ export async function POST(request: Request) {
     const hostUid = await verifyFirebaseAuthHeader(request.headers.get("authorization"));
     const body = toValidBody(await request.json());
 
-    const { orgId } = await createOrganization({
-      name: body.orgName,
-      ownerAccountId: hostUid,
-      plan: "b2b",
-    });
+    const existingOrg = body.orgId
+      ? { orgId: body.orgId, name: body.orgName }
+      : await findOrganizationByOwnerAndName({ ownerAccountId: hostUid, name: body.orgName });
+    const orgId =
+      existingOrg?.orgId ??
+      (
+        await createOrganization({
+          name: body.orgName,
+          ownerAccountId: hostUid,
+          plan: "b2b",
+          branding: {
+            companyName: body.orgName,
+            companyLogoUrl: body.companyLogoUrl ?? null,
+            brandAccentColor: body.brandAccentColor ?? null,
+            brandThemeLabel: body.brandThemeLabel ?? null,
+          },
+        })
+      ).orgId;
 
-    const { templateId } = await createGameTemplate({
-      orgId,
-      name: body.templateName,
-      config: {
-        mode: body.mode,
-        durationMinutes: body.durationMinutes,
-        wordDifficulty: body.wordDifficulty,
-        teamsEnabled: body.teamsEnabled,
-      },
-      metricsEnabled: body.metricsEnabled ?? [],
-    });
+    if (existingOrg?.orgId) {
+      await updateOrganizationBranding({
+        orgId,
+        companyName: body.orgName,
+        companyLogoUrl: body.companyLogoUrl ?? null,
+        brandAccentColor: body.brandAccentColor ?? null,
+        brandThemeLabel: body.brandThemeLabel ?? null,
+      });
+    }
+
+    const access = await assertOrganizationOwner({ orgId, ownerAccountId: hostUid });
+
+    let templateId: string | undefined = body.templateId;
+    if (templateId || body.saveTemplate) {
+      if (!hasFeature(access.tier, "templateReuse")) {
+        return NextResponse.json(
+          {
+            code: "FEATURE_LOCKED",
+            message: "Template reuse is available on Enterprise tier.",
+            tier: access.tier,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
+    if (templateId) {
+      const template = await findOrganizationTemplateById({ orgId, templateId });
+      if (!template) {
+        return NextResponse.json(
+          {
+            code: "TEMPLATE_NOT_FOUND",
+            message: "The selected template does not exist for this organization.",
+          },
+          { status: 404 }
+        );
+      }
+    } else if (body.saveTemplate) {
+      templateId = (
+        await createGameTemplate({
+          orgId,
+          name: body.templateName,
+          config: {
+            mode: body.mode,
+            durationMinutes: body.durationMinutes,
+            wordDifficulty: body.wordDifficulty,
+            teamsEnabled: body.teamsEnabled,
+          },
+          metricsEnabled: body.metricsEnabled ?? [],
+          managerDefaults: {
+            minSecondsBeforeClaim: body.minSecondsBeforeClaim,
+            minSecondsBetweenClaims: body.minSecondsBetweenClaims,
+            maxActiveClaimsPerPlayer: body.maxActiveClaimsPerPlayer,
+            freeRefreshCooldownSeconds: body.freeRefreshCooldownSeconds,
+          },
+          createdByAccountId: hostUid,
+        })
+      ).templateId;
+    }
 
     const { gameCode } = await createGameForHostUid({
       hostUid,
@@ -114,7 +221,14 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ gameCode, orgId, templateId }, { status: 201 });
+    await linkGameToOrganization({
+      orgId,
+      gameCode,
+      createdByAccountId: hostUid,
+      templateId: templateId ?? null,
+    });
+
+    return NextResponse.json({ gameCode, orgId, templateId: templateId ?? null }, { status: 201 });
   } catch (error) {
     if (error instanceof UnauthenticatedCreateGameError) {
       return NextResponse.json(

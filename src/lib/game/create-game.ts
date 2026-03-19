@@ -126,15 +126,11 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           classicPointsToWin: 25,
         });
 
-        const companyFields =
-          payload.orgId && payload.templateId && payload.managerConfig
-            ? {
-                orgId: payload.orgId,
-                templateId: payload.templateId,
-                analyticsEnabled: payload.analyticsEnabled ?? false,
-                managerConfig: payload.managerConfig,
-              }
-            : {};
+        const companyFields: Record<string, unknown> = {};
+        if (payload.orgId) companyFields.orgId = payload.orgId;
+        if (payload.templateId) companyFields.templateId = payload.templateId;
+        if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
+        if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
 
         tx.set(gameRef, { ...baseDoc, ...companyFields });
       });

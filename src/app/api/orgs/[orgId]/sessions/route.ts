@@ -1,0 +1,341 @@
+import { NextResponse } from "next/server";
+import type { Timestamp } from "firebase-admin/firestore";
+
+import { adminDb } from "@/lib/firebase/admin";
+import { entitlementsForTier, hasFeature } from "@/lib/product/entitlements";
+import {
+  assertOrgAccess,
+  OrgAccessInfrastructureError,
+  OrgForbiddenError,
+  OrgNotFoundError,
+  OrgUnauthenticatedError,
+} from "@/lib/org/access";
+
+export const runtime = "nodejs";
+
+type OrgGameLinkDoc = {
+  gameCode?: unknown;
+  createdAt?: unknown;
+};
+
+type OrgDoc = {
+  name?: unknown;
+  branding?: unknown;
+};
+
+type OrgBranding = {
+  companyName?: unknown;
+  companyLogoUrl?: unknown;
+  brandAccentColor?: unknown;
+  brandThemeLabel?: unknown;
+};
+
+type GameDoc = {
+  started?: unknown;
+  ended?: unknown;
+  createdAt?: unknown;
+};
+
+type AnalyticsOverview = {
+  status?: unknown;
+  startedAt?: unknown;
+  endedAt?: unknown;
+  totalPlayers?: unknown;
+};
+
+type AnalyticsDoc = {
+  overview?: unknown;
+  insights?: unknown;
+};
+
+type SessionAggregate = {
+  gameCode: string;
+  status: string;
+  createdAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  playerCount: number;
+  claims: number | null;
+  disputes: number | null;
+  successRate: number | null;
+  disputeRate: number | null;
+  avgResolutionTimeMs: number | null;
+};
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function normalizeOrgBranding(value: unknown): {
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  brandAccentColor: string | null;
+  brandThemeLabel: string | null;
+} {
+  const branding = value && typeof value === "object" ? (value as OrgBranding) : {};
+  return {
+    companyName: asNonEmptyString(branding.companyName),
+    companyLogoUrl: asNonEmptyString(branding.companyLogoUrl),
+    brandAccentColor: asNonEmptyString(branding.brandAccentColor),
+    brandThemeLabel: asNonEmptyString(branding.brandThemeLabel),
+  };
+}
+
+function timestampToIso(value: unknown): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "string") {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+  }
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const ts = value as Timestamp;
+    const date = ts.toDate();
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+  return null;
+}
+
+function normalizeInsights(value: unknown): Array<{ label: string; value: number }> {
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => {
+        const row = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {};
+        const label = asNonEmptyString(row.label);
+        const metricValue = asNumber(row.value);
+        if (!label || metricValue == null) return null;
+        return { label: label.toLowerCase(), value: metricValue };
+      })
+      .filter((entry): entry is { label: string; value: number } => Boolean(entry));
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([label, metricValue]) => {
+        const normalizedLabel = asNonEmptyString(label);
+        const normalizedValue = asNumber(metricValue);
+        if (!normalizedLabel || normalizedValue == null) return null;
+        return { label: normalizedLabel.toLowerCase(), value: normalizedValue };
+      })
+      .filter((entry): entry is { label: string; value: number } => Boolean(entry));
+  }
+
+  return [];
+}
+
+function findInsightMetric(insights: Array<{ label: string; value: number }>, ...tokens: string[]): number | null {
+  for (const item of insights) {
+    if (tokens.every((token) => item.label.includes(token))) {
+      return item.value;
+    }
+  }
+  return null;
+}
+
+function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
+  const explicit = asNonEmptyString(overview.status);
+  if (explicit) return explicit;
+
+  const ended = Boolean(game.ended);
+  const started = Boolean(game.started);
+
+  if (ended) return "ended";
+  if (started) return "active";
+  return "not_started";
+}
+
+export async function GET(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
+  try {
+    const { orgId } = await params;
+    const access = await assertOrgAccess(request.headers.get("authorization"), orgId);
+    const [canonicalOrgDoc, legacyOrgDoc] = await Promise.all([
+      adminDb.collection("orgs").doc(access.orgId).get(),
+      adminDb.collection("organizations").doc(access.orgId).get(),
+    ]);
+    const orgSourceDoc = canonicalOrgDoc.exists ? canonicalOrgDoc : legacyOrgDoc;
+    const orgSourceData = (orgSourceDoc.data() ?? {}) as OrgDoc;
+    const orgBranding = normalizeOrgBranding(orgSourceData.branding);
+    const orgName = access.orgName ?? asNonEmptyString(orgSourceData.name);
+    const entitlements = entitlementsForTier(access.tier);
+    if (!hasFeature(access.tier, "orgDashboard")) {
+      return NextResponse.json(
+        {
+          code: "FEATURE_LOCKED",
+          message: "Organization dashboard is available on Enterprise tier.",
+          org: {
+            orgId: access.orgId,
+            name: orgName,
+            tier: access.tier,
+            ownershipSource: access.ownershipSource,
+            branding: orgBranding,
+          },
+          entitlements,
+          sessions: [],
+          trends: [],
+          summary: {
+            totalSessions: 0,
+            averageSuccessRate: null,
+            averageDisputeRate: null,
+            averageResolutionTimeMs: null,
+          },
+        },
+        { status: 403 }
+      );
+    }
+
+    const canonicalOrgGamesSnap = await adminDb.collection("orgs").doc(access.orgId).collection("games").get();
+    const legacyOrgGamesSnap = await adminDb.collection("organizations").doc(access.orgId).collection("games").get();
+
+    const linkMap = new Map<string, { createdAt: string | null }>();
+
+    const collectLinks = (docs: Array<{ id: string; data: () => OrgGameLinkDoc }>) => {
+      for (const doc of docs) {
+        const data = (doc.data() ?? {}) as OrgGameLinkDoc;
+        const gameCode = asNonEmptyString(data.gameCode) ?? asNonEmptyString(doc.id);
+        if (!gameCode) continue;
+
+        const createdAt = timestampToIso(data.createdAt);
+        const existing = linkMap.get(gameCode);
+        if (!existing || (!existing.createdAt && createdAt)) {
+          linkMap.set(gameCode, { createdAt });
+        }
+      }
+    };
+
+    collectLinks(canonicalOrgGamesSnap.docs);
+    collectLinks(legacyOrgGamesSnap.docs);
+
+    if (linkMap.size === 0) {
+      const fallbackGames = await adminDb.collection("games").where("orgId", "==", access.orgId).limit(100).get();
+      for (const gameDoc of fallbackGames.docs) {
+        if (!linkMap.has(gameDoc.id)) {
+          linkMap.set(gameDoc.id, { createdAt: timestampToIso((gameDoc.data() ?? {}).createdAt) });
+        }
+      }
+    }
+
+    const gameCodes = [...linkMap.keys()];
+
+    const sessions = await Promise.all(
+      gameCodes.map(async (gameCode) => {
+        const [gameDoc, analyticsDoc] = await Promise.all([
+          adminDb.collection("games").doc(gameCode).get(),
+          adminDb.collection("gameAnalytics").doc(gameCode).get(),
+        ]);
+
+        const game = (gameDoc.data() ?? {}) as GameDoc;
+        const analytics = (analyticsDoc.data() ?? {}) as AnalyticsDoc;
+        const overview = (analytics.overview && typeof analytics.overview === "object"
+          ? analytics.overview
+          : {}) as AnalyticsOverview;
+        const insights = normalizeInsights(analytics.insights);
+
+        const claims = findInsightMetric(insights, "claim");
+        const disputes = findInsightMetric(insights, "dispute");
+        const successRateRaw =
+          findInsightMetric(insights, "success", "rate") ?? findInsightMetric(insights, "completion", "rate");
+        const successRate =
+          successRateRaw == null ? null : successRateRaw > 0 && successRateRaw <= 1 ? successRateRaw * 100 : successRateRaw;
+        const disputeRateRaw = findInsightMetric(insights, "dispute", "rate");
+        const disputeRate =
+          disputeRateRaw == null
+            ? claims && claims > 0 && disputes != null
+              ? (disputes / claims) * 100
+              : null
+            : disputeRateRaw > 0 && disputeRateRaw <= 1
+              ? disputeRateRaw * 100
+              : disputeRateRaw;
+        const avgResolutionTimeMs = findInsightMetric(insights, "avg", "resolution", "time");
+
+        const session: SessionAggregate = {
+          gameCode,
+          status: deriveStatus(game, overview),
+          createdAt: linkMap.get(gameCode)?.createdAt ?? timestampToIso(game.createdAt),
+          startedAt: timestampToIso(overview.startedAt),
+          endedAt: timestampToIso(overview.endedAt),
+          playerCount: asNumber(overview.totalPlayers) ?? 0,
+          claims,
+          disputes,
+          successRate,
+          disputeRate,
+          avgResolutionTimeMs,
+        };
+
+        return session;
+      })
+    );
+
+    sessions.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    const average = (values: number[]) => (values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null);
+    const successRates = sessions
+      .map((session) => session.successRate)
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const disputeRates = sessions
+      .map((session) => session.disputeRate)
+      .filter((value): value is number => value != null && Number.isFinite(value));
+    const resolutionTimes = sessions
+      .map((session) => session.avgResolutionTimeMs)
+      .filter((value): value is number => value != null && Number.isFinite(value));
+
+    return NextResponse.json({
+      org: {
+        orgId: access.orgId,
+        name: orgName,
+        tier: access.tier,
+        ownershipSource: access.ownershipSource,
+        branding: orgBranding,
+      },
+      entitlements,
+      summary: {
+        totalSessions: sessions.length,
+        averageSuccessRate: average(successRates),
+        averageDisputeRate: average(disputeRates),
+        averageResolutionTimeMs: average(resolutionTimes),
+      },
+      trends: sessions.slice(0, 12).map((session, index) => ({
+        index: index + 1,
+        gameCode: session.gameCode,
+        createdAt: session.createdAt,
+        successRate: session.successRate,
+        disputeRate: session.disputeRate,
+        avgResolutionTimeMs: session.avgResolutionTimeMs,
+      })),
+      sessions,
+    });
+  } catch (error) {
+    if (error instanceof OrgUnauthenticatedError) {
+      return NextResponse.json({ code: "UNAUTHENTICATED", message: "Sign in before accessing this organization." }, { status: 401 });
+    }
+
+    if (error instanceof OrgForbiddenError) {
+      return NextResponse.json({ code: "FORBIDDEN", message: "This account cannot access this organization." }, { status: 403 });
+    }
+
+    if (error instanceof OrgNotFoundError) {
+      return NextResponse.json({ code: "NOT_FOUND", message: "Organization not found." }, { status: 404 });
+    }
+
+    if (error instanceof OrgAccessInfrastructureError) {
+      return NextResponse.json({ code: "AUTH_VERIFICATION_FAILED", message: "Server could not verify Firebase auth." }, { status: 500 });
+    }
+
+    console.error("[org:sessions] Failed", error);
+    return NextResponse.json({ code: "INTERNAL", message: "Unable to load organization sessions." }, { status: 500 });
+  }
+}
