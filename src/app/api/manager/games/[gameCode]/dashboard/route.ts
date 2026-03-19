@@ -286,12 +286,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         eventCounts.kill_claim_confirmed_against,
         eventCounts.victim_confirmed_claim
       );
-      const deaths = eliminationDeaths;
       const deniedCount = pickFirstNumber(data.deniedCount, data.disputeCount, eventCounts.admin_deny_kill_claim, eventCounts.kill_claim_denied);
       const successRate = pickFirstNumber(data.successRate, data.accuracy, data.accuracyPct);
       const sessionCount = pickFirstNumber(data.sessionCount, data.sessions, data.eventsTotal != null || claimCount != null ? 1 : null);
       const accuracyPct = successRate ?? (confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null);
       const kdDenominator = normalizedMode === "classic" ? confirmedAgainst : normalizedMode === "elimination" ? eliminationDeaths : pickFirstNumber(eliminationDeaths, confirmedAgainst);
+      const deaths = kdDenominator;
       const kdRatio =
         kills != null
           ? kdDenominator != null && kdDenominator > 0
