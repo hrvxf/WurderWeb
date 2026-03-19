@@ -45,6 +45,22 @@ function parseNullableString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+function formatInsightLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const labelMap: Record<string, string> = {
+    game_started: "Game Started",
+    game_ended: "Game Ended",
+    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
+    admin_deny_kill_claim: "Admin Deny Kill Claim",
+  };
+  if (labelMap[normalized]) return labelMap[normalized];
+  return normalized
+    .split("_")
+    .filter((token) => token.length > 0)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
+}
+
 function normalizeOverview(value: unknown, gameCode: string): ManagerGameOverview {
   const overview = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
@@ -67,7 +83,7 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
       .map((item) => {
         const insight = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
         return {
-          label: parseString(insight.label),
+          label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
         };
       })
@@ -77,7 +93,7 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
       .map(([label, insightValue]) => ({
-        label: parseString(label),
+        label: formatInsightLabel(parseString(label)),
         value: parseNumber(insightValue),
       }))
       .filter((item) => item.label.length > 0);
@@ -423,7 +439,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "allowed" && status === "loading" && (
         <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-          Loading aggregated analytics...
+          Loading analytics...
         </section>
       )}
 
