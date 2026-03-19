@@ -21,7 +21,7 @@ type CreateCompanyGameBody = {
   metricsEnabled?: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
-  maxActiveClaimsPerPlayer?: number;
+  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
 };
 
