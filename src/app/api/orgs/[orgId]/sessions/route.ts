@@ -122,7 +122,7 @@ function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
 
 function sumEventCounts(value: unknown): number {
   if (!value || typeof value !== "object") return 0;
-  return Object.values(value as Record<string, unknown>).reduce((sum, entry) => sum + (asNumber(entry) ?? 0), 0);
+  return Object.values(value as Record<string, unknown>).reduce<number>((sum, entry) => sum + (asNumber(entry) ?? 0), 0);
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
