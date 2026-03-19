@@ -11,6 +11,7 @@ describe("game create helpers", () => {
     const gameDoc = buildInitialGameDoc({
       gameCode: "ABC123",
       hostPlayerId: "uid-1",
+      createdByAccountId: "uid-1",
       createdAt: "timestamp" as never,
       wordGroupId: "classic-default",
       lastActionAt: 123456789,
@@ -19,6 +20,7 @@ describe("game create helpers", () => {
     });
 
     expect(gameDoc.hostPlayerId).toBe("uid-1");
+    expect(gameDoc.createdByAccountId).toBe("uid-1");
     expect(gameDoc.started).toBe(false);
     expect(gameDoc.ended).toBe(false);
     expect(gameDoc.mode).toBe("classic");
