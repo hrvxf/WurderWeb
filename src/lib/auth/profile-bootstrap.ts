@@ -27,6 +27,16 @@ type EnsureProfileInput = {
   avatar?: string | null;
 };
 
+type AppAccountProfile = {
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  wurderId?: string;
+  wurderIdLower?: string;
+  avatar?: string | null;
+  avatarUrl?: string | null;
+};
+
 export type UpdateUserProfileInput = {
   firstName?: string;
   lastName?: string;
@@ -86,14 +96,152 @@ function normalizeProfile(
   };
 }
 
+function hasRequiredIdentityFields(profile: Partial<WurderUserProfile> | null): boolean {
+  if (!profile) return false;
+  return Boolean(cleanText(profile.firstName) && cleanText(profile.lastName) && cleanText(profile.wurderId));
+}
+
+function needsAccountFallback(profile: Partial<WurderUserProfile> | null): boolean {
+  if (!profile) return true;
+  return !hasRequiredIdentityFields(profile);
+}
+
+function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
+  const source = data as Record<string, unknown>;
+  const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
+  const lastName = cleanName(typeof source.secondName === "string" ? source.secondName : undefined);
+  const wurderId = cleanText(typeof source.username === "string" ? source.username : undefined);
+  const avatarUrl = cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined) ?? null;
+
+  return {
+    firstName,
+    lastName,
+    name: cleanName(typeof source.name === "string" ? source.name : undefined) ?? cleanName(buildName(firstName, lastName)),
+    wurderId,
+    wurderIdLower: wurderId ? normalizeWurderId(wurderId) : undefined,
+    avatar: avatarUrl,
+    avatarUrl,
+  };
+}
+
+async function readAppAccountProfile(uid: string): Promise<AppAccountProfile | null> {
+  try {
+    const accountRef = doc(db, "accounts", uid);
+    const snapshot = await getDoc(accountRef);
+    if (!snapshot.exists()) return null;
+    return normalizeAppAccountProfile(snapshot.data());
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[auth] Failed to read fallback account profile for uid ${uid}`, error);
+    }
+    return null;
+  }
+}
+
+function mergeProfiles(
+  uid: string,
+  userProfile: WurderUserProfile | null,
+  accountProfile: AppAccountProfile | null
+): WurderUserProfile | null {
+  if (!userProfile && !accountProfile) return null;
+
+  const merged = {
+    ...(accountProfile ?? {}),
+    ...(userProfile ?? {}),
+    uid,
+    email: userProfile?.email ?? null,
+    stats: normalizeStats(userProfile?.stats),
+  } as WurderUserProfile;
+
+  if (!cleanText(merged.firstName) && accountProfile?.firstName) {
+    merged.firstName = accountProfile.firstName;
+  }
+  if (!cleanText(merged.lastName) && accountProfile?.lastName) {
+    merged.lastName = accountProfile.lastName;
+  }
+  if (!cleanText(merged.wurderId) && accountProfile?.wurderId) {
+    merged.wurderId = accountProfile.wurderId;
+    merged.wurderIdLower = accountProfile.wurderIdLower;
+  }
+  if (!cleanText(merged.name)) {
+    merged.name = cleanName(buildName(merged.firstName, merged.lastName));
+  }
+  if (!merged.avatarUrl && accountProfile?.avatarUrl) {
+    merged.avatarUrl = accountProfile.avatarUrl;
+  }
+  if (!merged.avatar && (merged.avatarUrl ?? accountProfile?.avatar)) {
+    merged.avatar = merged.avatarUrl ?? accountProfile?.avatar ?? null;
+  }
+
+  return merged;
+}
+
+async function backfillUsersFromMergedProfile(
+  uid: string,
+  usersProfile: WurderUserProfile | null,
+  mergedProfile: WurderUserProfile,
+  accountProfile: AppAccountProfile | null
+): Promise<void> {
+  if (!accountProfile) return;
+
+  const userRef = doc(db, "users", uid);
+  const firestoreUpdates: Record<string, unknown> = {
+    uid,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (!usersProfile) {
+    firestoreUpdates.email = mergedProfile.email ?? null;
+    firestoreUpdates.stats = normalizeStats(mergedProfile.stats);
+    firestoreUpdates.activeGame = mergedProfile.activeGame ?? null;
+  }
+
+  if (!cleanText(usersProfile?.firstName) && cleanText(mergedProfile.firstName)) {
+    firestoreUpdates.firstName = mergedProfile.firstName;
+  }
+  if (!cleanText(usersProfile?.lastName) && cleanText(mergedProfile.lastName)) {
+    firestoreUpdates.lastName = mergedProfile.lastName;
+  }
+  if (!cleanText(usersProfile?.name) && cleanText(mergedProfile.name)) {
+    firestoreUpdates.name = mergedProfile.name;
+  }
+  if (!cleanText(usersProfile?.wurderId) && cleanText(mergedProfile.wurderId)) {
+    firestoreUpdates.wurderId = mergedProfile.wurderId;
+    firestoreUpdates.wurderIdLower =
+      cleanText(mergedProfile.wurderIdLower) ?? normalizeWurderId(mergedProfile.wurderId ?? "");
+  }
+  if (!usersProfile?.avatarUrl && mergedProfile.avatarUrl) {
+    firestoreUpdates.avatarUrl = mergedProfile.avatarUrl;
+  }
+  if (!usersProfile?.avatar && mergedProfile.avatar) {
+    firestoreUpdates.avatar = mergedProfile.avatar;
+  }
+
+  const hasChanges = Object.keys(firestoreUpdates).length > 2 || !usersProfile;
+  if (!hasChanges) return;
+
+  const profileComplete = isProfileComplete(mergedProfile);
+  firestoreUpdates.onboarding = {
+    ...(usersProfile?.onboarding ?? {}),
+    profileComplete,
+  };
+
+  await setDoc(userRef, firestoreUpdates, { merge: true });
+}
+
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
   const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
+  const userSnapshot = await getDoc(userRef);
+  const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
+  const accountProfile = needsAccountFallback(usersProfile) ? await readAppAccountProfile(uid) : null;
+  const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
-  if (!snapshot.exists()) return null;
+  if (!profile) return null;
 
-  const profile = normalizeProfile(uid, snapshot.data(), null);
   const profileComplete = isProfileComplete(profile);
+
+  await backfillUsersFromMergedProfile(uid, usersProfile, profile, accountProfile);
+
   return {
     ...profile,
     onboarding: {
@@ -158,14 +306,24 @@ export async function ensureUserProfile(
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
+  const accountProfile = needsAccountFallback(
+    snapshot.exists() ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null) : null
+  )
+    ? await readAppAccountProfile(uid)
+    : null;
 
   const firstName = cleanName(seed.firstName);
   const lastName = cleanName(seed.lastName);
   const authDisplayName = cleanName(user.displayName);
   const fallbackName = buildName(firstName, lastName);
-  const name = cleanName(seed.name) ?? authDisplayName ?? cleanName(fallbackName);
+  const name =
+    cleanName(seed.name) ??
+    cleanName(accountProfile?.name) ??
+    authDisplayName ??
+    cleanName(fallbackName) ??
+    cleanName(buildName(accountProfile?.firstName, accountProfile?.lastName));
   const email = user.email ? normalizeEmail(user.email) : null;
-  const avatar = seed.avatar ?? user.photoURL ?? null;
+  const avatar = seed.avatar ?? user.photoURL ?? accountProfile?.avatarUrl ?? null;
 
   const requestedWurderId = cleanText(seed.wurderId);
   const requestedWurderIdLower = requestedWurderId
@@ -175,13 +333,14 @@ export async function ensureUserProfile(
         wurderId: requestedWurderId,
       })
     : undefined;
+  const fallbackWurderId = cleanText(accountProfile?.wurderId);
 
   if (!snapshot.exists()) {
     const createdProfile = withoutUndefined({
       uid,
       email,
-      firstName: firstName ?? "",
-      lastName: lastName ?? "",
+      firstName: firstName ?? accountProfile?.firstName ?? "",
+      lastName: lastName ?? accountProfile?.lastName ?? "",
       name,
       avatar,
       avatarUrl: avatar,
@@ -193,6 +352,9 @@ export async function ensureUserProfile(
     if (requestedWurderId && requestedWurderIdLower) {
       createdProfile.wurderId = requestedWurderId;
       createdProfile.wurderIdLower = requestedWurderIdLower;
+    } else if (fallbackWurderId) {
+      createdProfile.wurderId = fallbackWurderId;
+      createdProfile.wurderIdLower = normalizeWurderId(fallbackWurderId);
     }
 
     const profileComplete = isProfileComplete(createdProfile);
@@ -217,6 +379,7 @@ export async function ensureUserProfile(
   }
 
   const currentProfile = normalizeProfile(uid, snapshot.data(), email);
+  const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
 
   const firestoreUpdates: Record<string, unknown> = {
     uid,
@@ -229,36 +392,40 @@ export async function ensureUserProfile(
     memoryUpdates.email = email;
   }
 
-  if (!currentProfile.name && name) {
-    firestoreUpdates.name = name;
-    memoryUpdates.name = name;
+  if (!cleanText(currentProfile.name) && cleanText(mergedCurrentProfile.name)) {
+    firestoreUpdates.name = mergedCurrentProfile.name;
+    memoryUpdates.name = mergedCurrentProfile.name;
   }
 
-  if (!cleanText(currentProfile.firstName) && firstName) {
-    firestoreUpdates.firstName = firstName;
-    memoryUpdates.firstName = firstName;
+  if (!cleanText(currentProfile.firstName) && cleanText(mergedCurrentProfile.firstName)) {
+    firestoreUpdates.firstName = mergedCurrentProfile.firstName;
+    memoryUpdates.firstName = mergedCurrentProfile.firstName;
   }
 
-  if (!cleanText(currentProfile.lastName) && lastName) {
-    firestoreUpdates.lastName = lastName;
-    memoryUpdates.lastName = lastName;
+  if (!cleanText(currentProfile.lastName) && cleanText(mergedCurrentProfile.lastName)) {
+    firestoreUpdates.lastName = mergedCurrentProfile.lastName;
+    memoryUpdates.lastName = mergedCurrentProfile.lastName;
   }
 
-  if (!currentProfile.avatar && avatar) {
-    firestoreUpdates.avatar = avatar;
-    memoryUpdates.avatar = avatar;
+  if (!currentProfile.avatar && mergedCurrentProfile.avatar) {
+    firestoreUpdates.avatar = mergedCurrentProfile.avatar;
+    memoryUpdates.avatar = mergedCurrentProfile.avatar;
   }
 
-  if (!currentProfile.avatarUrl && avatar) {
-    firestoreUpdates.avatarUrl = avatar;
-    memoryUpdates.avatarUrl = avatar;
+  if (!currentProfile.avatarUrl && mergedCurrentProfile.avatarUrl) {
+    firestoreUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
+    memoryUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
   }
 
-  if (!cleanText(currentProfile.wurderId) && requestedWurderId && requestedWurderIdLower) {
-    firestoreUpdates.wurderId = requestedWurderId;
-    firestoreUpdates.wurderIdLower = requestedWurderIdLower;
-    memoryUpdates.wurderId = requestedWurderId;
-    memoryUpdates.wurderIdLower = requestedWurderIdLower;
+  if (!cleanText(currentProfile.wurderId) && cleanText(mergedCurrentProfile.wurderId)) {
+    firestoreUpdates.wurderId = mergedCurrentProfile.wurderId;
+    firestoreUpdates.wurderIdLower =
+      cleanText(mergedCurrentProfile.wurderIdLower) ??
+      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
+    memoryUpdates.wurderId = mergedCurrentProfile.wurderId;
+    memoryUpdates.wurderIdLower =
+      cleanText(mergedCurrentProfile.wurderIdLower) ??
+      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
   }
 
   const nextProfile: WurderUserProfile = {
