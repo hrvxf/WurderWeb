@@ -1,4 +1,4 @@
-import type { ManagerInsight } from "@/admin/types";
+import type { ManagerInsight } from "@/components/admin/types";
 
 type InsightCardsProps = {
   insights: ManagerInsight[];

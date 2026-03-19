@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { doc, onSnapshot } from "firebase/firestore";
 
-import GameOverviewPanel from "@/admin/GameOverviewPanel";
-import InsightCards from "@/admin/InsightCards";
-import PlayerPerformanceTable from "@/admin/PlayerPerformanceTable";
-import SessionSummary from "@/admin/SessionSummary";
+import GameOverviewPanel from "@/components/admin/GameOverviewPanel";
+import InsightCards from "@/components/admin/InsightCards";
+import PlayerPerformanceTable from "@/components/admin/PlayerPerformanceTable";
+import SessionSummary from "@/components/admin/SessionSummary";
 import type {
   ManagerAnalyticsDocument,
   ManagerGameOverview,
   ManagerInsight,
   ManagerPlayerPerformance,
   ManagerSessionSummary,
-} from "@/admin/types";
+} from "@/components/admin/types";
 import { db } from "@/lib/firebase/client";
 
 type ManagerDashboardPageProps = {

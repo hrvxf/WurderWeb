@@ -1,4 +1,4 @@
-import type { ManagerSessionSummary } from "@/admin/types";
+import type { ManagerSessionSummary } from "@/components/admin/types";
 
 type SessionSummaryProps = {
   summary: ManagerSessionSummary;
