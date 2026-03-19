@@ -43,6 +43,12 @@ type PlayerAnalyticsDoc = {
   confirmedCount?: unknown;
   convertedClaimCount?: unknown;
   convertedCount?: unknown;
+  confirmedAgainst?: unknown;
+  confirmedAgainstCount?: unknown;
+  claimsAgainstConfirmed?: unknown;
+  claimsConfirmedAgainst?: unknown;
+  eliminationDeaths?: unknown;
+  eliminationDeathCount?: unknown;
   successRate?: unknown;
   accuracy?: unknown;
   accuracyPct?: unknown;
@@ -182,6 +188,10 @@ function toUpperTrimmed(value: string): string {
   return value.trim().toUpperCase();
 }
 
+function normalizeMode(value: string | null): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
 async function queryPlayerAnalyticsByCode(normalizedCode: string) {
   const snapshots = await Promise.all([
     adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
@@ -228,6 +238,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     }
 
     const game = (gameSnapshot.data() ?? {}) as GameDoc;
+    const mode = asString(game.mode);
+    const normalizedMode = normalizeMode(mode);
     const perEventTotals = new Map<string, number>();
     const playerPerformance = playerAnalyticsDocs.map((doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
@@ -255,12 +267,41 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         eventCounts.admin_confirm_kill_claim
       );
       const kills = pickFirstNumber(data.kills, confirmedCount);
-      const deaths = pickFirstNumber(data.deaths, data.deathCount, eventCounts.death);
+      const eliminationDeaths = pickFirstNumber(
+        data.eliminationDeaths,
+        data.eliminationDeathCount,
+        data.deaths,
+        data.deathCount,
+        eventCounts.elimination_death,
+        eventCounts.eliminated,
+        eventCounts.death
+      );
+      const confirmedAgainst = pickFirstNumber(
+        data.confirmedAgainst,
+        data.confirmedAgainstCount,
+        data.claimsAgainstConfirmed,
+        data.claimsConfirmedAgainst,
+        eventCounts.confirmed_against,
+        eventCounts.admin_confirm_kill_claim_against,
+        eventCounts.kill_claim_confirmed_against,
+        eventCounts.victim_confirmed_claim
+      );
+      const deaths = eliminationDeaths;
       const deniedCount = pickFirstNumber(data.deniedCount, data.disputeCount, eventCounts.admin_deny_kill_claim, eventCounts.kill_claim_denied);
       const successRate = pickFirstNumber(data.successRate, data.accuracy, data.accuracyPct);
       const sessionCount = pickFirstNumber(data.sessionCount, data.sessions, data.eventsTotal != null || claimCount != null ? 1 : null);
       const accuracyPct = successRate ?? (confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null);
-      const kdRatio = kills != null ? (deaths != null && deaths > 0 ? kills / deaths : kills) : null;
+      const kdDenominator = normalizedMode === "classic" ? confirmedAgainst : normalizedMode === "elimination" ? eliminationDeaths : pickFirstNumber(eliminationDeaths, confirmedAgainst);
+      const kdRatio =
+        kills != null
+          ? kdDenominator != null && kdDenominator > 0
+            ? kills / kdDenominator
+            : kdDenominator === 0
+              ? kills > 0
+                ? kills
+                : null
+              : null
+          : null;
       if (deniedCount != null) {
         perEventTotals.set("admin_deny_kill_claim", (perEventTotals.get("admin_deny_kill_claim") ?? 0) + deniedCount);
       }
@@ -325,7 +366,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
           gameCode: normalizedCode,
           gameName: asString(game.name) ?? normalizedCode,
           status: lifecycleStatus,
-          mode: asString(game.mode),
+          mode,
           startedAt,
           endedAt,
           totalPlayers: playerAnalyticsDocs.length,
