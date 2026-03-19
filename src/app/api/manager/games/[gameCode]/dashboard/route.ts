@@ -18,6 +18,8 @@ type GameDoc = {
   name?: unknown;
   status?: unknown;
   mode?: unknown;
+  startedAt?: unknown;
+  endedAt?: unknown;
   started?: unknown;
   ended?: unknown;
 };
@@ -30,6 +32,11 @@ type PlayerAnalyticsDoc = {
   eventCounts?: unknown;
   kills?: unknown;
   deaths?: unknown;
+  deathCount?: unknown;
+  claimCount?: unknown;
+  confirmedCount?: unknown;
+  convertedClaimCount?: unknown;
+  convertedCount?: unknown;
   accuracyPct?: unknown;
   sessionCount?: unknown;
   updatedAt?: unknown;
@@ -114,6 +121,16 @@ function asString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+function asBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+  }
+  return null;
+}
+
 function toIso(value: unknown): string | null {
   if (!value) return null;
   if (value instanceof Date) return value.toISOString();
@@ -142,6 +159,14 @@ function eventLabel(eventType: string): string {
     .filter((token) => token.length > 0)
     .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
     .join(" ");
+}
+
+function pickFirstNumber(...values: unknown[]): number | null {
+  for (const value of values) {
+    const parsed = asNumber(value);
+    if (parsed != null) return parsed;
+  }
+  return null;
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ gameCode: string }> }) {
@@ -183,11 +208,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         const count = asNumber(rawCount) ?? 0;
         perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + count);
       }
-      const kills = asNumber(data.kills) ?? asNumber(eventCounts.kill) ?? asNumber(eventCounts.kill_claim) ?? 0;
-      const deaths = asNumber(data.deaths) ?? asNumber(eventCounts.death) ?? 0;
-      const sessionCount = Math.max(1, asNumber(data.sessionCount) ?? 1);
-      const accuracyPct = asNumber(data.accuracyPct) ?? 0;
-      const kdRatio = deaths > 0 ? kills / deaths : kills;
+      const confirmedCount = pickFirstNumber(
+        data.confirmedCount,
+        data.convertedClaimCount,
+        data.convertedCount,
+        eventCounts.admin_confirm_kill_claim,
+        eventCounts.kill_claim
+      );
+      const claimCount = pickFirstNumber(
+        data.claimCount,
+        eventCounts.kill_claim,
+        eventCounts.admin_confirm_kill_claim
+      );
+      const kills = pickFirstNumber(data.kills, confirmedCount);
+      const deaths = pickFirstNumber(data.deaths, data.deathCount, eventCounts.death);
+      const sessionCount = asNumber(data.sessionCount);
+      const accuracyPct =
+        confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null;
+      const kdRatio = kills != null ? (deaths != null && deaths > 0 ? kills / deaths : kills) : null;
       return {
         playerId,
         displayName,
@@ -214,8 +252,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     }, 0);
     const totalEventsFromCounts = [...perEventTotals.values()].reduce((sum, value) => sum + value, 0);
     const totalEvents = totalEventsFromPlayers > 0 ? totalEventsFromPlayers : totalEventsFromCounts;
-    const startedAt = toIso(game.started);
-    const endedAt = toIso(game.ended);
+    const startedAt = toIso(game.startedAt) ?? toIso(game.started);
+    const endedAt = toIso(game.endedAt) ?? toIso(game.ended);
+    const started = asBoolean(game.started) ?? startedAt != null;
+    const ended = asBoolean(game.ended) ?? endedAt != null;
+    const lifecycleStatus = ended ? "completed" : started ? "in_progress" : "not_started";
     const updatedAt = toIso(
       playerAnalyticsSnap.docs
         .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
@@ -239,7 +280,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         overview: {
           gameCode: normalizedCode,
           gameName: asString(game.name) ?? normalizedCode,
-          status: asString(game.status) ?? (endedAt ? "ended" : startedAt ? "active" : "not_started"),
+          status: lifecycleStatus,
           mode: asString(game.mode),
           startedAt,
           endedAt,
@@ -251,8 +292,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         playerPerformance,
         sessionSummary: {
           totalSessions: playerAnalyticsSnap.size > 0 ? 1 : 0,
-          avgSessionLengthSeconds: 0,
-          longestSessionSeconds: 0,
+          avgSessionLengthSeconds: null,
+          longestSessionSeconds: null,
           lastSessionAt: endedAt ?? startedAt,
         },
         eventTotals: Object.fromEntries(perEventTotals.entries()),

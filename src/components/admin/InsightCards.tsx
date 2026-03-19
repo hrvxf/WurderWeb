@@ -7,7 +7,7 @@ type InsightCardsProps = {
 export default function InsightCards({ insights }: InsightCardsProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-lg font-semibold text-slate-900">Insights</h2>
+      <h2 className="text-lg font-semibold text-slate-900">Activity Summary</h2>
       {insights.length > 0 ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {insights.map((insight) => (

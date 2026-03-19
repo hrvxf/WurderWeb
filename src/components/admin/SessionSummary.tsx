@@ -12,11 +12,12 @@ type SessionSummaryProps = {
   players: ManagerPlayerPerformance[];
 };
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0m";
+function formatDuration(seconds: number | null): string {
+  if (!Number.isFinite(seconds ?? NaN) || (seconds ?? 0) <= 0) return "--";
+  const durationSeconds = seconds ?? 0;
 
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.floor((durationSeconds % 3600) / 60);
 
   if (hours <= 0) return `${minutes}m`;
   return `${hours}h ${minutes}m`;
@@ -34,42 +35,43 @@ function formatDate(value: string | null): string {
   }).format(asDate);
 }
 
-function formatPercent(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return "0%";
-  return `${Math.round(value)}%`;
+function formatPercent(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN) || (value ?? 0) <= 0) return "--";
+  return `${Math.round(value ?? 0)}%`;
 }
 
 function findTopPerformer(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  if (players.length === 0) return null;
-  return [...players].sort((a, b) => {
-    if (b.kills !== a.kills) return b.kills - a.kills;
-    if (b.kdRatio !== a.kdRatio) return b.kdRatio - a.kdRatio;
-    if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
-    return b.sessionCount - a.sessionCount;
+  const eligible = players.filter((player) => player.kills != null && player.kdRatio != null && player.sessionCount != null);
+  if (eligible.length === 0) return null;
+  return [...eligible].sort((a, b) => {
+    if ((b.kills ?? 0) !== (a.kills ?? 0)) return (b.kills ?? 0) - (a.kills ?? 0);
+    if ((b.kdRatio ?? 0) !== (a.kdRatio ?? 0)) return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
+    if ((b.accuracyPct ?? 0) !== (a.accuracyPct ?? 0)) return (b.accuracyPct ?? 0) - (a.accuracyPct ?? 0);
+    return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
   })[0] ?? null;
 }
 
 function findCommunicator(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const active = players.filter((player) => player.sessionCount > 0);
+  const active = players.filter((player) => (player.sessionCount ?? 0) > 0 && player.accuracyPct != null);
   if (active.length === 0) return null;
 
   return [...active].sort((a, b) => {
-    if (b.accuracyPct !== a.accuracyPct) return b.accuracyPct - a.accuracyPct;
-    if (b.sessionCount !== a.sessionCount) return b.sessionCount - a.sessionCount;
-    if (b.kills !== a.kills) return b.kills - a.kills;
-    return b.kdRatio - a.kdRatio;
+    if ((b.accuracyPct ?? 0) !== (a.accuracyPct ?? 0)) return (b.accuracyPct ?? 0) - (a.accuracyPct ?? 0);
+    if ((b.sessionCount ?? 0) !== (a.sessionCount ?? 0)) return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
+    if ((b.kills ?? 0) !== (a.kills ?? 0)) return (b.kills ?? 0) - (a.kills ?? 0);
+    return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
   })[0] ?? null;
 }
 
 function findCoachingRisk(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const active = players.filter((player) => player.sessionCount > 0);
+  const active = players.filter((player) => (player.sessionCount ?? 0) > 0 && player.deaths != null && player.kdRatio != null);
   if (active.length === 0) return null;
 
   return [...active].sort((a, b) => {
-    if (b.deaths !== a.deaths) return b.deaths - a.deaths;
-    if (a.kdRatio !== b.kdRatio) return a.kdRatio - b.kdRatio;
-    if (a.accuracyPct !== b.accuracyPct) return a.accuracyPct - b.accuracyPct;
-    return b.sessionCount - a.sessionCount;
+    if ((b.deaths ?? 0) !== (a.deaths ?? 0)) return (b.deaths ?? 0) - (a.deaths ?? 0);
+    if ((a.kdRatio ?? 0) !== (b.kdRatio ?? 0)) return (a.kdRatio ?? 0) - (b.kdRatio ?? 0);
+    if ((a.accuracyPct ?? 0) !== (b.accuracyPct ?? 0)) return (a.accuracyPct ?? 0) - (b.accuracyPct ?? 0);
+    return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
   })[0] ?? null;
 }
 
@@ -117,11 +119,12 @@ export default function SessionSummary({ summary, overview, insights, players }:
   const topPerformer = findTopPerformer(players);
   const communicator = findCommunicator(players);
   const coachingRisk = findCoachingRisk(players);
+  const hasSummaryCandidates = Boolean(topPerformer && communicator && coachingRisk);
   const appliesTeamMode = isTeamMode(overview, insights);
   const teamMetrics = teamInsights(insights).slice(0, 2);
 
-  const totalKills = players.reduce((acc, player) => acc + player.kills, 0);
-  const totalDeaths = players.reduce((acc, player) => acc + player.deaths, 0);
+  const totalKills = players.reduce((acc, player) => acc + (player.kills ?? 0), 0);
+  const totalDeaths = players.reduce((acc, player) => acc + (player.deaths ?? 0), 0);
   const disputes = findMetric(insights, "dispute");
   const claims = findMetric(insights, "claim");
   const singlePlayer = players.length === 1;
@@ -138,47 +141,31 @@ export default function SessionSummary({ summary, overview, insights, players }:
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Session Summary</h2>
       <div className="mt-4 grid gap-3">
-        <Finding
-          label="Top Performer"
-          headline={
-            topPerformer
-              ? `${topPerformer.displayName}: ${topPerformer.kills} eliminations, ${topPerformer.kdRatio.toFixed(2)} K/D`
-              : "No player performance data yet"
-          }
-          interpretation={
-            topPerformer
-              ? `Highest output in the current roster across ${topPerformer.sessionCount} sessions.`
-              : "The aggregated analytics doc has no player rows to rank."
-          }
-        />
+        {hasSummaryCandidates ? (
+          <>
+            <Finding
+              label="Top Performer"
+              headline={`${topPerformer!.displayName}: ${topPerformer!.kills} eliminations, ${topPerformer!.kdRatio?.toFixed(2)} K/D`}
+              interpretation={`Highest output in the current roster across ${topPerformer!.sessionCount} sessions.`}
+            />
 
-        <Finding
-          label="Most Effective Communicator"
-          headline={
-            communicator
-              ? `${communicator.displayName}: ${formatPercent(communicator.accuracyPct)} accuracy`
-              : "No communication proxy available yet"
-          }
-          interpretation={
-            communicator
-              ? `Best precision signal across ${communicator.sessionCount} sessions, supporting reliable callout execution.`
-              : "No player with tracked sessions is available for accuracy-based comparison."
-          }
-        />
+            <Finding
+              label="Most Effective Communicator"
+              headline={`${communicator!.displayName}: ${formatPercent(communicator!.accuracyPct)} accuracy`}
+              interpretation={`Best precision signal across ${communicator!.sessionCount} sessions, supporting reliable callout execution.`}
+            />
 
-        <Finding
-          label="Risk / Coaching Needed"
-          headline={
-            coachingRisk
-              ? `${coachingRisk.displayName}: ${coachingRisk.deaths} deaths, ${coachingRisk.kdRatio.toFixed(2)} K/D`
-              : "No coaching risk identified"
-          }
-          interpretation={
-            coachingRisk
-              ? "Highest death load in the roster; prioritize positioning and trade-timing coaching."
-              : "No active-session player data is available for risk scoring."
-          }
-        />
+            <Finding
+              label="Risk / Coaching Needed"
+              headline={`${coachingRisk!.displayName}: ${coachingRisk!.deaths} deaths, ${coachingRisk!.kdRatio?.toFixed(2)} K/D`}
+              interpretation="Highest death load in the roster; prioritize positioning and trade-timing coaching."
+            />
+          </>
+        ) : (
+          <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
+            Not enough completed session data yet.
+          </p>
+        )}
 
         <Finding
           label="Session-Wide Observation"

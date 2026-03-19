@@ -6,19 +6,29 @@ type PlayerPerformanceTableProps = {
   players: ManagerPlayerPerformance[];
 };
 
-function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return "0.0%";
-  return `${value.toFixed(1)}%`;
+function formatPercent(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return `${(value ?? 0).toFixed(1)}%`;
 }
 
-function formatRatio(value: number): string {
-  if (!Number.isFinite(value)) return "0.00";
-  return value.toFixed(2);
+function formatRatio(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return (value ?? 0).toFixed(2);
+}
+
+function formatCount(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return (value ?? 0).toLocaleString();
 }
 
 export default function PlayerPerformanceTable({ players }: PlayerPerformanceTableProps) {
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => b.kills - a.kills || b.kdRatio - a.kdRatio),
+    () =>
+      [...players].sort(
+        (a, b) =>
+          (b.kills ?? Number.NEGATIVE_INFINITY) - (a.kills ?? Number.NEGATIVE_INFINITY) ||
+          (b.kdRatio ?? Number.NEGATIVE_INFINITY) - (a.kdRatio ?? Number.NEGATIVE_INFINITY)
+      ),
     [players]
   );
 
@@ -42,11 +52,11 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
               sortedPlayers.map((player) => (
                 <tr key={player.playerId} className="text-slate-700">
                   <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.displayName}</td>
-                  <td className="px-3 py-2">{player.kills.toLocaleString()}</td>
-                  <td className="px-3 py-2">{player.deaths.toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatCount(player.kills)}</td>
+                  <td className="px-3 py-2">{formatCount(player.deaths)}</td>
                   <td className="px-3 py-2">{formatRatio(player.kdRatio)}</td>
                   <td className="px-3 py-2">{formatPercent(player.accuracyPct)}</td>
-                  <td className="px-3 py-2">{player.sessionCount.toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatCount(player.sessionCount)}</td>
                 </tr>
               ))
             ) : (
