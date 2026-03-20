@@ -108,6 +108,29 @@ function normalizeOverview(value: unknown, gameCode: string): ManagerGameOvervie
 }
 
 function normalizeInsights(value: unknown): ManagerInsight[] {
+  const normalizeTriggeredBy = (
+    candidate: unknown
+  ): Array<{ metric: string; actual: number; expected: number; comparator: "<" | ">" | "<=" | ">=" | "=" }> => {
+    if (!Array.isArray(candidate)) return [];
+    return candidate
+      .map((item) => {
+        const trigger = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const metric = parseString(trigger.metric);
+        const actual = parseNullableNumber(trigger.actual);
+        const expected = parseNullableNumber(trigger.expected);
+        const comparator = parseString(trigger.comparator);
+        if (!metric || actual == null || expected == null) return null;
+        if (!["<", ">", "<=", ">=", "="].includes(comparator)) return null;
+        return {
+          metric,
+          actual,
+          expected,
+          comparator: comparator as "<" | ">" | "<=" | ">=" | "=",
+        };
+      })
+      .filter((item): item is { metric: string; actual: number; expected: number; comparator: "<" | ">" | "<=" | ">=" | "=" } => item != null);
+  };
+
   if (Array.isArray(value)) {
     return value
       .map((item) => {
@@ -115,6 +138,8 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
         return {
           label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
+          message: parseNullableString(insight.message),
+          triggeredBy: normalizeTriggeredBy(insight.triggeredBy),
         };
       })
       .filter((item) => item.label.length > 0);
