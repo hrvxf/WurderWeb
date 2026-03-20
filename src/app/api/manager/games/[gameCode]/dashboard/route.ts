@@ -208,6 +208,20 @@ type AnalyticsAccess = {
   message: string | null;
 };
 
+type InsightTrigger = {
+  metric: string;
+  actual: number;
+  expected: number;
+  comparator: "<" | "<=" | ">" | ">=" | "=";
+};
+
+type DashboardInsight = {
+  label: string;
+  value: number;
+  message: string;
+  triggeredBy?: InsightTrigger[];
+};
+
 function normalizeVisibility(value: unknown): AnalyticsVisibility | null {
   const normalized = asString(value)?.toLowerCase();
   if (!normalized) return null;
@@ -415,7 +429,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
         .find((value) => value != null) ?? null
     );
-    const insights = [...perEventTotals.entries()]
+    const insights: DashboardInsight[] = [...perEventTotals.entries()]
       .map(([eventType, value]) => ({ label: eventLabel(eventType), value, message: `${eventLabel(eventType)} occurred ${value} times.` }))
       .sort((a, b) => b.value - a.value);
     const claims = perEventTotals.get("admin_confirm_kill_claim") ?? perEventTotals.get("kill_claim") ?? null;
