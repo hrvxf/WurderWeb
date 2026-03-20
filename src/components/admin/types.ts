@@ -13,6 +13,12 @@ export type ManagerGameOverview = {
 export type ManagerInsight = {
   label: string;
   value: number;
+  message?: string | null;
+  triggeredBy?: Array<{
+    metric: string;
+    actual: number;
+    expected: number;
+  }>;
 };
 
 export type ManagerPlayerPerformance = {
