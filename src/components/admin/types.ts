@@ -18,6 +18,7 @@ export type ManagerInsight = {
     metric: string;
     actual: number;
     expected: number;
+    comparator: "<" | ">" | "<=" | ">=" | "=";
   }>;
 };
 

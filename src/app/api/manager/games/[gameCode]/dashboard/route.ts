@@ -416,12 +416,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         .find((value) => value != null) ?? null
     );
     const insights = [...perEventTotals.entries()]
-      .map(([eventType, value]) => ({ label: eventLabel(eventType), value }))
+      .map(([eventType, value]) => ({ label: eventLabel(eventType), value, message: `${eventLabel(eventType)} occurred ${value} times.` }))
       .sort((a, b) => b.value - a.value);
     const claims = perEventTotals.get("admin_confirm_kill_claim") ?? perEventTotals.get("kill_claim") ?? null;
     const disputes = perEventTotals.get("admin_deny_kill_claim") ?? perEventTotals.get("kill_claim_denied") ?? null;
-    if (claims != null) insights.unshift({ label: "Claims", value: claims });
-    if (disputes != null) insights.unshift({ label: "Disputes", value: disputes });
+    const disputeRate = claims != null && claims > 0 && disputes != null ? (disputes / claims) * 100 : null;
+    if (claims != null) insights.unshift({ label: "Claims", value: claims, message: `Players submitted ${claims} kill claims.` });
+    if (disputes != null) insights.unshift({ label: "Disputes", value: disputes, message: `${disputes} claims were disputed.` });
+    if (disputeRate != null) {
+      const normalizedRate = Number(disputeRate.toFixed(1));
+      const expectedDisputeRate = 30;
+      insights.unshift({
+        label: "Dispute Rate",
+        value: normalizedRate,
+        message:
+          normalizedRate > expectedDisputeRate
+            ? "Dispute rate is above the expected threshold."
+            : "Dispute rate is within the expected threshold.",
+        triggeredBy: [
+          {
+            metric: "Dispute rate",
+            actual: normalizedRate,
+            expected: expectedDisputeRate,
+            comparator: "<",
+          },
+        ],
+      });
+    }
 
     return NextResponse.json({
       gameCode: normalizedCode,
