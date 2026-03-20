@@ -7,6 +7,7 @@ import GameOverviewPanel from "@/components/admin/GameOverviewPanel";
 import InsightCards from "@/components/admin/InsightCards";
 import PlayerPerformanceTable from "@/components/admin/PlayerPerformanceTable";
 import SessionSummary from "@/components/admin/SessionSummary";
+import ManagerRecommendations from "@/components/admin/ManagerRecommendations";
 import SessionTimeline from "@/components/admin/SessionTimeline";
 import type {
   ManagerAnalyticsDocument,
@@ -583,12 +584,19 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               </section>
             )}
             {analyticsAccess?.allowedSections.sessionSummary ? (
-              <SessionSummary
-                summary={analytics.sessionSummary}
-                overview={analytics.overview}
-                insights={analytics.insights}
-                players={analytics.playerPerformance}
-              />
+              <div className="grid gap-4">
+                <SessionSummary
+                  summary={analytics.sessionSummary}
+                  overview={analytics.overview}
+                  insights={analytics.insights}
+                  players={analytics.playerPerformance}
+                />
+                <ManagerRecommendations
+                  summary={analytics.sessionSummary}
+                  insights={analytics.insights}
+                  players={analytics.playerPerformance}
+                />
+              </div>
             ) : (
               <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
                 {analyticsAccess?.message ?? "Session summaries are unavailable for this session right now."}
