@@ -135,6 +135,22 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
     return value
       .map((item) => {
         const insight = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const triggeredBy = Array.isArray(insight.triggeredBy)
+          ? insight.triggeredBy
+              .map((entry) => {
+                const candidate = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
+                if (!candidate) return null;
+                return {
+                  metric: parseString(candidate.metric),
+                  actual: parseNumber(candidate.actual),
+                  expected: parseNumber(candidate.expected),
+                };
+              })
+              .filter(
+                (entry): entry is { metric: string; actual: number; expected: number } =>
+                  entry != null && entry.metric.length > 0
+              )
+          : undefined;
         return {
           label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
@@ -150,6 +166,7 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
       .map(([label, insightValue]) => ({
         label: formatInsightLabel(parseString(label)),
         value: parseNumber(insightValue),
+        message: null,
       }))
       .filter((item) => item.label.length > 0);
   }
