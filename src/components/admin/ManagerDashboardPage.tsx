@@ -7,6 +7,7 @@ import GameOverviewPanel from "@/components/admin/GameOverviewPanel";
 import InsightCards from "@/components/admin/InsightCards";
 import PlayerPerformanceTable from "@/components/admin/PlayerPerformanceTable";
 import SessionSummary from "@/components/admin/SessionSummary";
+import SessionTimeline from "@/components/admin/SessionTimeline";
 import type {
   ManagerAnalyticsDocument,
   ManagerGameOverview,
@@ -38,6 +39,14 @@ type AnalyticsAccessState = {
     exports: boolean;
   };
   message: string | null;
+};
+
+type ReportAction = "csv" | "summary";
+
+type SummaryModalState = {
+  open: boolean;
+  title: string;
+  details: string;
 };
 
 function parseNumber(value: unknown): number {
@@ -191,6 +200,11 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const [analyticsAccess, setAnalyticsAccess] = useState<AnalyticsAccessState | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "downloading">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [summaryModal, setSummaryModal] = useState<SummaryModalState>({
+    open: false,
+    title: "Summary download",
+    details: "",
+  });
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
   const { user } = useAuth();
   const guard = useManagerRouteGuard(gameCode);
@@ -329,7 +343,18 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
 
-  const downloadExport = async (format: "csv" | "pdf") => {
+  const parseExportError = (errorPayload: { code?: unknown; message?: unknown }): string => {
+    const code = parseString(errorPayload.code);
+    if (code === "FEATURE_LOCKED") {
+      return "Your current plan does not include reporting exports.";
+    }
+    if (code === "FORBIDDEN") {
+      return "Summary downloads are only available after the session has ended.";
+    }
+    return parseString(errorPayload.message) || "Unable to export report.";
+  };
+
+  const callReportingExport = async (action: ReportAction) => {
     if (!user) {
       setExportMessage("Sign in before exporting this report.");
       return;
@@ -346,36 +371,44 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
     try {
       const token = await user.getIdToken();
-      const response = await fetch(
-        `/api/manager/games/${encodeURIComponent(normalizedCode)}/export?format=${encodeURIComponent(format)}`,
-        {
-          headers: {
-            authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const format = action === "csv" ? "csv" : "pdf";
+      const response = await fetch(`/api/manager/games/${encodeURIComponent(normalizedCode)}/export?format=${encodeURIComponent(format)}`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => ({}))) as { message?: unknown };
-        setExportMessage(parseString(errorPayload.message) || "Unable to export report.");
+        const errorPayload = (await response.json().catch(() => ({}))) as { code?: unknown; message?: unknown };
+        setExportMessage(parseExportError(errorPayload));
         return;
       }
 
-      const blob = await response.blob();
+      const content = await response.text();
+      const mimeType = action === "csv" ? "text/csv;charset=utf-8" : "text/html;charset=utf-8";
+      const blob = new Blob([content], { type: mimeType });
       const objectUrl = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      const extension = format === "csv" ? "csv" : "html";
+      const extension = action === "csv" ? "csv" : "html";
       anchor.href = objectUrl;
-      anchor.download = `session-report-${normalizedCode.toUpperCase()}.${extension}`;
+      anchor.download = `session-${action === "csv" ? "report" : "summary"}-${normalizedCode.toUpperCase()}.${extension}`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(objectUrl);
+
+      if (action === "summary") {
+        setSummaryModal({
+          open: true,
+          title: "Summary downloaded",
+          details: "Downloaded an HTML summary. PDF export can be added later using the same backend action.",
+        });
+      }
     } catch (error) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[manager] Export failed", {
           gameCode: normalizedCode,
-          format,
+          action,
           error,
         });
       }
@@ -418,7 +451,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 <button
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={exportStatus === "downloading"}
-                  onClick={() => void downloadExport("csv")}
+                  onClick={() => void callReportingExport("csv")}
                   type="button"
                 >
                   {exportStatus === "downloading" ? "Exporting..." : "Export CSV"}
@@ -426,10 +459,10 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 <button
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={exportStatus === "downloading"}
-                  onClick={() => void downloadExport("pdf")}
+                  onClick={() => void callReportingExport("summary")}
                   type="button"
                 >
-                  {exportStatus === "downloading" ? "Exporting..." : "Export PDF-ready"}
+                  {exportStatus === "downloading" ? "Exporting..." : "Download Summary"}
                 </button>
               </>
             ) : (
@@ -519,6 +552,25 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 {analyticsAccess?.message ?? "Session summaries are unavailable for this session right now."}
               </section>
             )}
+          </div>
+          <SessionTimeline gameCode={gameCode} />
+        </div>
+      ) : null}
+
+      {summaryModal.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-slate-900">{summaryModal.title}</h3>
+            <p className="mt-2 text-sm text-slate-600">{summaryModal.details}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setSummaryModal((current) => ({ ...current, open: false }))}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       ) : null}
