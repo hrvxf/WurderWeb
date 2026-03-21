@@ -5,11 +5,11 @@ import StatsPanel from "@/components/members/StatsPanel";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function MembersStatsPage() {
-  const { profile } = useAuth();
+  const { stats } = useAuth();
 
   return (
     <ProfileCompletionGuard>
-      <StatsPanel profile={profile} />
+      <StatsPanel stats={stats} />
     </ProfileCompletionGuard>
   );
 }
