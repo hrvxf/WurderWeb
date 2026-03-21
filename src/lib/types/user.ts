@@ -32,6 +32,11 @@ export type WurderUserProfile = {
   onboarding?: {
     profileComplete?: boolean;
   };
+  debugProfileResolution?: {
+    rawAccountFields?: Record<string, string | undefined> | null;
+    sourcePaths?: string[];
+    snapshotAt?: string;
+  };
 };
 
 export type UsernameLookup = {

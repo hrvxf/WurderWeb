@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, type ReactNode } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import LogoutButton from "@/components/auth/LogoutButton";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -24,7 +24,8 @@ function getDisplayName(firstName?: string, lastName?: string, fallbackName?: st
 
 export default function MemberShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const searchParams = useSearchParams();
+  const { user, profile } = useAuth();
 
   const displayName = getDisplayName(profile?.firstName, profile?.lastName, profile?.name);
   const renderState = resolveMemberRenderState(profile);
@@ -34,6 +35,9 @@ export default function MemberShell({ children }: { children: ReactNode }) {
     : renderState.missingFields.length
       ? `Profile incomplete: missing ${renderState.missingFields.join(", ")}`
       : "Wurder ID not set";
+  const [sessionDebugEnabled, setSessionDebugEnabled] = useState(false);
+  const configuredDebugUid = process.env.NEXT_PUBLIC_MEMBERS_DEBUG_UID?.trim();
+  const configuredDebugFlagUid = process.env.NEXT_PUBLIC_MEMBERS_DEBUG_FLAG_UID?.trim();
 
   useEffect(() => {
     if (process.env.NODE_ENV === "production") return;
@@ -52,6 +56,62 @@ export default function MemberShell({ children }: { children: ReactNode }) {
       missingFields: renderState.missingFields,
     });
   }, [missingFieldsKey, pathname, profile, renderState.complete, renderState.missingFields]);
+
+  useEffect(() => {
+    const uid = user?.uid?.trim();
+    if (!uid) {
+      setSessionDebugEnabled(false);
+      return;
+    }
+
+    const sessionKey = `members-debug-panel:${uid}`;
+    const debugParam = searchParams.get("membersDebug");
+
+    if (debugParam === "1" || debugParam === "true" || debugParam === "on") {
+      sessionStorage.setItem(sessionKey, "1");
+    } else if (debugParam === "0" || debugParam === "false" || debugParam === "off") {
+      sessionStorage.removeItem(sessionKey);
+    }
+
+    setSessionDebugEnabled(sessionStorage.getItem(sessionKey) === "1");
+  }, [searchParams, user?.uid]);
+
+  const showDebugPanel = useMemo(() => {
+    const uid = user?.uid?.trim();
+    if (!uid) return false;
+    const uidMatchesConfigured = Boolean(configuredDebugUid && uid === configuredDebugUid);
+    const uidMatchesSessionFlagTarget = Boolean(configuredDebugFlagUid && uid === configuredDebugFlagUid);
+    return uidMatchesConfigured || (uidMatchesSessionFlagTarget && sessionDebugEnabled);
+  }, [configuredDebugFlagUid, configuredDebugUid, sessionDebugEnabled, user?.uid]);
+
+  const debugPayload = useMemo(
+    () => ({
+      authContext: {
+        uid: user?.uid ?? null,
+        email: user?.email ?? null,
+      },
+      rawAccountFields: profile?.debugProfileResolution?.rawAccountFields ?? null,
+      resolvedCanonicalProfile: profile
+        ? {
+            uid: profile.uid,
+            email: profile.email,
+            firstName: profile.firstName ?? null,
+            lastName: profile.lastName ?? null,
+            name: profile.name ?? null,
+            wurderId: profile.wurderId ?? null,
+            wurderIdLower: profile.wurderIdLower ?? null,
+            avatarUrl: profile.avatarUrl ?? null,
+            avatarPath: profile.avatarPath ?? null,
+          }
+        : null,
+      completionStatus: renderState.complete,
+      missingFields: renderState.missingFields,
+      sourcePaths: profile?.debugProfileResolution?.sourcePaths ?? [],
+      snapshotAt: profile?.debugProfileResolution?.snapshotAt ?? null,
+      renderPath: pathname,
+    }),
+    [pathname, profile, renderState.complete, renderState.missingFields, user?.email, user?.uid]
+  );
 
   return (
     <section className="space-y-6">
@@ -83,6 +143,15 @@ export default function MemberShell({ children }: { children: ReactNode }) {
           })}
         </nav>
       </div>
+
+      {showDebugPanel ? (
+        <aside className="rounded-2xl border border-amber-300/50 bg-amber-100/10 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-200">Temporary members debug panel</p>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-xl bg-black/30 p-3 text-xs text-amber-100">
+            {JSON.stringify(debugPayload, null, 2)}
+          </pre>
+        </aside>
+      ) : null}
 
       {children}
     </section>
