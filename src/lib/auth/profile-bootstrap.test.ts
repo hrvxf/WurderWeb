@@ -15,10 +15,14 @@ type LookupDoc = {
 const state: {
   docs: Record<string, DocumentData | null>;
   existingLookup: LookupDoc | null;
+  failGetDocPaths: Record<string, Error>;
+  failSetDocPaths: Record<string, Error>;
   setCalls: Array<{ ref: MockDocRef; payload: Record<string, unknown>; options?: { merge?: boolean } }>;
 } = {
   docs: {},
   existingLookup: null,
+  failGetDocPaths: {},
+  failSetDocPaths: {},
   setCalls: [],
 };
 
@@ -46,14 +50,23 @@ vi.mock("firebase/firestore", () => {
   return {
     doc: vi.fn((_db: unknown, collection: string, id: string) => ({ collection, id } satisfies MockDocRef)),
     getDoc: vi.fn(async (ref: MockDocRef) => {
+      const key = pathFor(ref);
+      const configuredError = state.failGetDocPaths[key];
+      if (configuredError) {
+        throw configuredError;
+      }
       if (ref.collection === "usernames") {
         return state.existingLookup ? makeSnapshot(state.existingLookup as DocumentData) : makeSnapshot(null);
       }
-      return makeSnapshot(state.docs[pathFor(ref)] ?? null);
+      return makeSnapshot(state.docs[key] ?? null);
     }),
     setDoc: vi.fn(async (ref: MockDocRef, payload: Record<string, unknown>, options?: { merge?: boolean }) => {
-      state.setCalls.push({ ref, payload, options });
       const key = pathFor(ref);
+      const configuredError = state.failSetDocPaths[key];
+      if (configuredError) {
+        throw configuredError;
+      }
+      state.setCalls.push({ ref, payload, options });
       const current = state.docs[key] ?? null;
       if (options?.merge && current) {
         state.docs[key] = {
@@ -97,6 +110,8 @@ describe("profile bootstrap + persistence", () => {
   beforeEach(() => {
     state.docs = {};
     state.existingLookup = null;
+    state.failGetDocPaths = {};
+    state.failSetDocPaths = {};
     state.setCalls = [];
     vi.restoreAllMocks();
   });
@@ -393,5 +408,140 @@ describe("profile bootstrap + persistence", () => {
       avatarUrl: "https://avatar.test/a.png",
       onboarding: { profileComplete: true },
     });
+  });
+
+  it("does not collapse existing profile when optional bootstrap update write is denied", async () => {
+    state.docs["users/uid-1"] = {
+      uid: "uid-1",
+      email: "user@example.com",
+      firstName: "Alex",
+      lastName: "Mason",
+      name: "Alex Mason",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+      onboarding: { profileComplete: true },
+      stats: { gamesPlayed: 10 },
+    };
+    state.docs["accounts/uid-1"] = {
+      firstName: "Alex",
+      secondName: "Mason",
+      username: "Alex_1",
+      photoURL: "https://avatar.test/a.png",
+    };
+    state.failSetDocPaths["users/uid-1"] = Object.assign(
+      new Error("Missing or insufficient permissions."),
+      { code: "permission-denied" }
+    );
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const profile = await fetchUserProfile("uid-1");
+
+    expect(profile).toMatchObject({
+      uid: "uid-1",
+      firstName: "Alex",
+      lastName: "Mason",
+      wurderId: "Alex_1",
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[auth] bootstrap firestore operation failed",
+      expect.objectContaining({
+        op: "setDoc",
+        path: "users/uid-1",
+        stage: "fetchUserProfile.backfillUsers",
+        uid: "uid-1",
+        optional: true,
+        permissionDenied: true,
+        code: "permission-denied",
+      })
+    );
+  });
+
+  it("ensureUserProfile keeps existing profile when optional merge write is denied", async () => {
+    state.docs["users/uid-2"] = {
+      uid: "uid-2",
+      email: "user2@example.com",
+      firstName: "Alex",
+      lastName: "Mason",
+      name: "Alex Mason",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+      onboarding: { profileComplete: true },
+      stats: { gamesPlayed: 11 },
+    };
+    state.failSetDocPaths["users/uid-2"] = Object.assign(
+      new Error("Missing or insufficient permissions."),
+      { code: "permission-denied" }
+    );
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const result = await ensureUserProfile({
+      uid: "uid-2",
+      email: "user2@example.com",
+      displayName: "",
+      photoURL: null,
+    } as never);
+
+    expect(result).toMatchObject({
+      uid: "uid-2",
+      firstName: "Alex",
+      lastName: "Mason",
+      wurderId: "Alex_1",
+      onboarding: { profileComplete: true },
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[auth] bootstrap firestore operation failed",
+      expect.objectContaining({
+        op: "setDoc",
+        path: "users/uid-2",
+        stage: "ensureUserProfile.update",
+        uid: "uid-2",
+        optional: true,
+        permissionDenied: true,
+        code: "permission-denied",
+      })
+    );
+  });
+
+  it("bootstrap tolerates denied accounts read and still returns canonical users profile", async () => {
+    state.docs["users/uid-3"] = {
+      uid: "uid-3",
+      email: "user3@example.com",
+      firstName: "Chris",
+      lastName: "Miles",
+      name: "Chris Miles",
+      wurderId: "chrism",
+      wurderIdLower: "chrism",
+      onboarding: { profileComplete: true },
+      stats: { gamesPlayed: 4 },
+    };
+    state.failGetDocPaths["accounts/uid-3"] = Object.assign(
+      new Error("Missing or insufficient permissions."),
+      { code: "permission-denied" }
+    );
+
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    const profile = await fetchUserProfile("uid-3");
+
+    expect(profile).toMatchObject({
+      uid: "uid-3",
+      firstName: "Chris",
+      lastName: "Miles",
+      wurderId: "chrism",
+    });
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[auth] bootstrap firestore operation failed",
+      expect.objectContaining({
+        op: "getDoc",
+        path: "accounts/uid-3",
+        stage: "loadAccountProfile",
+        uid: "uid-3",
+        optional: true,
+        permissionDenied: true,
+        code: "permission-denied",
+      })
+    );
   });
 });

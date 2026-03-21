@@ -54,6 +54,51 @@ type AppAccountProfileResolution = {
   rawFields: LegacyAccountRawFields;
 };
 
+type FirestoreOp = "getDoc" | "setDoc";
+type BootstrapStage =
+  | "loadAccountProfile"
+  | "ensureUserProfile.create"
+  | "ensureUserProfile.update"
+  | "fetchUserProfile.backfillUsers";
+
+function logBootstrapFirestoreFailure(input: {
+  error: unknown;
+  op: FirestoreOp;
+  path: string;
+  stage: BootstrapStage;
+  uid: string;
+  optional: boolean;
+}): void {
+  const code =
+    typeof input.error === "object" && input.error && "code" in input.error
+      ? String((input.error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    typeof input.error === "object" && input.error && "message" in input.error
+      ? String((input.error as { message?: unknown }).message ?? "")
+      : "";
+  const permissionDenied = code.includes("permission-denied") || message.includes("Missing or insufficient permissions");
+  const summary = {
+    op: input.op,
+    path: input.path,
+    stage: input.stage,
+    uid: input.uid,
+    optional: input.optional,
+    permissionDenied,
+    code: code || undefined,
+  };
+
+  if (process.env.NODE_ENV === "production") {
+    console.error("[auth] bootstrap firestore operation failed", summary);
+    return;
+  }
+
+  console.warn("[auth] bootstrap firestore operation failed", {
+    ...summary,
+    error: input.error,
+  });
+}
+
 function buildResolutionSourcePaths(uid: string, hasAccountResolution: boolean): string[] {
   const paths = [`users/${uid}`];
   if (hasAccountResolution) {
@@ -187,15 +232,21 @@ function normalizeAppAccountProfile(data: DocumentData): AppAccountProfileResolu
 }
 
 async function readAppAccountProfile(uid: string): Promise<AppAccountProfileResolution | null> {
+  const path = `accounts/${uid}`;
   try {
     const accountRef = doc(db, "accounts", uid);
     const snapshot = await getDoc(accountRef);
     if (!snapshot.exists()) return null;
     return normalizeAppAccountProfile(snapshot.data());
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(`[auth] Failed to read fallback account profile for uid ${uid}`, error);
-    }
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path,
+      stage: "loadAccountProfile",
+      uid,
+      optional: true,
+    });
     return null;
   }
 }
@@ -324,7 +375,18 @@ async function backfillUsersFromMergedProfile(
     profileComplete,
   };
 
-  await setDoc(userRef, firestoreUpdates, { merge: true });
+  try {
+    await setDoc(userRef, firestoreUpdates, { merge: true });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `users/${uid}`,
+      stage: "fetchUserProfile.backfillUsers",
+      uid,
+      optional: true,
+    });
+  }
 }
 
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
@@ -470,15 +532,27 @@ export async function ensureUserProfile(
 
     const profileComplete = isProfileComplete(createdProfile);
 
-    await setDoc(userRef, withoutUndefined({
-      ...createdProfile,
-      onboarding: {
-        ...(createdProfile.onboarding ?? {}),
-        profileComplete,
-      },
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }));
+    try {
+      await setDoc(userRef, withoutUndefined({
+        ...createdProfile,
+        onboarding: {
+          ...(createdProfile.onboarding ?? {}),
+          profileComplete,
+        },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }));
+    } catch (error) {
+      logBootstrapFirestoreFailure({
+        error,
+        op: "setDoc",
+        path: `users/${uid}`,
+        stage: "ensureUserProfile.create",
+        uid,
+        optional: false,
+      });
+      throw error;
+    }
 
     return {
       ...createdProfile,
@@ -574,7 +648,18 @@ export async function ensureUserProfile(
     profileComplete,
   };
 
-  await setDoc(userRef, firestoreUpdates, { merge: true });
+  try {
+    await setDoc(userRef, firestoreUpdates, { merge: true });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `users/${uid}`,
+      stage: "ensureUserProfile.update",
+      uid,
+      optional: true,
+    });
+  }
 
   return {
     ...nextProfile,
