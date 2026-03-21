@@ -1,4 +1,5 @@
 const WURDER_ID_REGEX = /^[a-zA-Z0-9_]{3,20}$/;
+const SIMPLE_EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const LOGIN_ERROR_MESSAGES: Record<string, string> = {
   "auth/invalid-email": "Invalid email format.",
@@ -55,6 +56,10 @@ export function normalizeEmail(value: string): string {
 
 export function normalizeWurderId(value: string): string {
   return value.trim().toLowerCase();
+}
+
+export function isValidEmail(value: string): boolean {
+  return SIMPLE_EMAIL_REGEX.test(value.trim());
 }
 
 export function normalizePersonName(value: string): string {
