@@ -13,6 +13,9 @@ const state: {
 function userDocsByField(field: string, value: string): Array<Record<string, unknown>> {
   return Object.values(state.userDocs).filter((entry) => entry[field] === value);
 }
+function accountDocsByField(field: string, value: string): Array<Record<string, unknown>> {
+  return Object.values(state.accountDocs).filter((entry) => entry[field] === value);
+}
 
 vi.mock("@/lib/firebase/admin", () => ({
   adminDb: {
@@ -54,6 +57,15 @@ vi.mock("@/lib/firebase/admin", () => ({
             get: async () => ({
               exists: Boolean(state.accountDocs[id]),
               data: () => state.accountDocs[id] ?? {},
+            }),
+          }),
+          where: (field: string, _operator: string, value: string) => ({
+            limit: () => ({
+              get: async () => ({
+                docs: accountDocsByField(field, value).map((entry) => ({
+                  data: () => entry,
+                })),
+              }),
             }),
           }),
         };

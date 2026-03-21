@@ -16,6 +16,7 @@ import {
   normalizePersonName,
   normalizeWurderId,
 } from "@/lib/auth/auth-helpers";
+import { resolveCanonicalAccountProfile } from "@/lib/auth/canonical-account-resolver";
 import { getProfileCompletionStatus, isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
 
@@ -58,6 +59,9 @@ type FirestoreOp = "getDoc" | "setDoc" | "updateDoc" | "runTransaction";
 type FirestoreRequirement = "required" | "optional";
 type BootstrapStage =
   | "loadAccountProfile"
+  | "ensureAccountDoc.readAccount"
+  | "ensureAccountDoc.createAccount"
+  | "updateAccountSnapshot.writeAccount"
   | "fetchUserProfile.readUser"
   | "ensureUserProfile.readUser"
   | "ensureUserProfile.create"
@@ -215,34 +219,10 @@ function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolea
 
 function normalizeAppAccountProfile(data: DocumentData): AppAccountProfileResolution {
   const source = data as Record<string, unknown>;
-  const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
-  const lastName =
-    cleanName(typeof source.lastName === "string" ? source.lastName : undefined) ??
-    cleanName(typeof source.secondName === "string" ? source.secondName : undefined);
-  const wurderId =
-    cleanText(typeof source.wurderId === "string" ? source.wurderId : undefined) ??
-    cleanText(typeof source.username === "string" ? source.username : undefined);
-  const wurderIdLower =
-    cleanText(typeof source.wurderIdLower === "string" ? source.wurderIdLower : undefined) ??
-    cleanText(typeof source.usernameLower === "string" ? source.usernameLower : undefined);
-  const avatarUrl =
-    cleanText(typeof source.avatarUrl === "string" ? source.avatarUrl : undefined) ??
-    cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined) ??
-    cleanText(typeof source.avatar === "string" ? source.avatar : undefined) ??
-    null;
+  const canonical = resolveCanonicalAccountProfile(source);
 
   return {
-    profile: {
-      firstName,
-      lastName,
-      name:
-        cleanName(typeof source.name === "string" ? source.name : undefined) ??
-        cleanName(buildName(firstName, lastName)),
-      wurderId,
-      wurderIdLower: wurderIdLower ?? (wurderId ? normalizeWurderId(wurderId) : undefined),
-      avatar: avatarUrl,
-      avatarUrl,
-    },
+    profile: canonical,
     rawFields: {
       firstName: cleanText(typeof source.firstName === "string" ? source.firstName : undefined),
       lastName: cleanText(typeof source.lastName === "string" ? source.lastName : undefined),
@@ -257,11 +237,30 @@ function normalizeAppAccountProfile(data: DocumentData): AppAccountProfileResolu
   };
 }
 
-async function readAppAccountProfile(uid: string): Promise<AppAccountProfileResolution | null> {
+async function readAppAccountProfile(
+  uid: string,
+  requirement: FirestoreRequirement = "required"
+): Promise<AppAccountProfileResolution | null> {
   const path = `accounts/${uid}`;
   try {
+    logBootstrapFirestoreOperation({
+      stage: "loadAccountProfile",
+      op: "getDoc",
+      path,
+      uid,
+      requirement,
+      status: "start",
+    });
     const accountRef = doc(db, "accounts", uid);
     const snapshot = await getDoc(accountRef);
+    logBootstrapFirestoreOperation({
+      stage: "loadAccountProfile",
+      op: "getDoc",
+      path,
+      uid,
+      requirement,
+      status: "success",
+    });
     if (!snapshot.exists()) return null;
     return normalizeAppAccountProfile(snapshot.data());
   } catch (error) {
@@ -271,10 +270,117 @@ async function readAppAccountProfile(uid: string): Promise<AppAccountProfileReso
       path,
       stage: "loadAccountProfile",
       uid,
-      requirement: "optional",
+      requirement,
     });
-    return null;
+    if (requirement === "optional") return null;
+    throw error;
   }
+}
+
+async function ensureAccountDoc(
+  user: User,
+  seed: EnsureProfileInput
+): Promise<{ accountProfile: AppAccountProfile | null; rawAccountFields: LegacyAccountRawFields | null }> {
+  const uid = user.uid;
+  const accountRef = doc(db, "accounts", uid);
+  let accountSnapshot;
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.readAccount",
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    accountSnapshot = await getDoc(accountRef);
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.readAccount",
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      stage: "ensureAccountDoc.readAccount",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
+
+  if (accountSnapshot.exists()) {
+    const existing = normalizeAppAccountProfile(accountSnapshot.data());
+    return {
+      accountProfile: existing.profile,
+      rawAccountFields: existing.rawFields,
+    };
+  }
+
+  const firstName = cleanName(seed.firstName);
+  const lastName = cleanName(seed.lastName);
+  const name = cleanName(seed.name) ?? cleanName(user.displayName) ?? cleanName(buildName(firstName, lastName));
+  const avatarUrl = cleanText(seed.avatar ?? undefined) ?? cleanText(user.photoURL ?? undefined) ?? null;
+  const requestedWurderId = cleanText(seed.wurderId);
+  const requestedWurderIdLower = requestedWurderId ? normalizeWurderId(requestedWurderId) : undefined;
+
+  const payload = withoutUndefined({
+    uid,
+    firstName: firstName ?? "",
+    lastName: lastName ?? "",
+    secondName: lastName ?? "",
+    name,
+    username: requestedWurderId,
+    usernameLower: requestedWurderIdLower,
+    wurderId: requestedWurderId,
+    wurderIdLower: requestedWurderIdLower,
+    avatar: avatarUrl,
+    avatarUrl,
+    photoURL: avatarUrl,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.createAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    await setDoc(accountRef, payload, { merge: false });
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.createAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      stage: "ensureAccountDoc.createAccount",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
+
+  const resolution = normalizeAppAccountProfile(payload);
+  return {
+    accountProfile: resolution.profile,
+    rawAccountFields: resolution.rawFields,
+  };
 }
 
 function mergeProfiles(
@@ -285,8 +391,8 @@ function mergeProfiles(
   if (!userProfile && !accountProfile) return null;
 
   const merged = {
-    ...(userProfile ?? {}),
-    ...(accountProfile ?? {}),
+    ...withoutUndefined((userProfile ?? {}) as Record<string, unknown>),
+    ...withoutUndefined((accountProfile ?? {}) as Record<string, unknown>),
     uid,
     email: userProfile?.email ?? null,
     stats: normalizeStats(userProfile?.stats),
@@ -431,16 +537,88 @@ async function backfillUsersFromMergedProfile(
   }
 }
 
+async function updateAccountSnapshot(
+  uid: string,
+  accountProfile: AppAccountProfile | null,
+  resolvedProfile: WurderUserProfile
+): Promise<void> {
+  const accountRef = doc(db, "accounts", uid);
+  const firestoreUpdates: Record<string, unknown> = {
+    uid,
+    updatedAt: serverTimestamp(),
+  };
+
+  if (cleanText(resolvedProfile.firstName) && cleanText(accountProfile?.firstName) !== cleanText(resolvedProfile.firstName)) {
+    firestoreUpdates.firstName = resolvedProfile.firstName;
+  }
+  if (cleanText(resolvedProfile.lastName) && cleanText(accountProfile?.lastName) !== cleanText(resolvedProfile.lastName)) {
+    firestoreUpdates.lastName = resolvedProfile.lastName;
+    firestoreUpdates.secondName = resolvedProfile.lastName;
+  }
+  if (cleanText(resolvedProfile.name) && cleanText(accountProfile?.name) !== cleanText(resolvedProfile.name)) {
+    firestoreUpdates.name = resolvedProfile.name;
+  }
+  if (cleanText(resolvedProfile.wurderId) && cleanText(accountProfile?.wurderId) !== cleanText(resolvedProfile.wurderId)) {
+    const lower =
+      cleanText(resolvedProfile.wurderIdLower) ??
+      (resolvedProfile.wurderId ? normalizeWurderId(resolvedProfile.wurderId) : undefined);
+    firestoreUpdates.wurderId = resolvedProfile.wurderId;
+    firestoreUpdates.wurderIdLower = lower;
+    firestoreUpdates.username = resolvedProfile.wurderId;
+    firestoreUpdates.usernameLower = lower;
+  }
+  if (resolvedProfile.avatarUrl && accountProfile?.avatarUrl !== resolvedProfile.avatarUrl) {
+    firestoreUpdates.avatarUrl = resolvedProfile.avatarUrl;
+    firestoreUpdates.avatar = resolvedProfile.avatarUrl;
+    firestoreUpdates.photoURL = resolvedProfile.avatarUrl;
+  }
+
+  if (Object.keys(firestoreUpdates).length <= 2) return;
+
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "updateAccountSnapshot.writeAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
+    });
+    await setDoc(accountRef, firestoreUpdates, { merge: true });
+    logBootstrapFirestoreOperation({
+      stage: "updateAccountSnapshot.writeAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      stage: "updateAccountSnapshot.writeAccount",
+      uid,
+      requirement: "optional",
+    });
+  }
+}
+
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
+  const accountResolution = await readAppAccountProfile(uid, "required");
+  const accountProfile = accountResolution?.profile ?? null;
+  let usersProfile: WurderUserProfile | null = null;
+  let userSnapshot: Awaited<ReturnType<typeof getDoc>> | undefined;
+
   const userRef = doc(db, "users", uid);
-  let userSnapshot;
   try {
     logBootstrapFirestoreOperation({
       stage: "fetchUserProfile.readUser",
       op: "getDoc",
       path: `users/${uid}`,
       uid,
-      requirement: "required",
+      requirement: "optional",
       status: "start",
     });
     userSnapshot = await getDoc(userRef);
@@ -449,7 +627,7 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
       op: "getDoc",
       path: `users/${uid}`,
       uid,
-      requirement: "required",
+      requirement: "optional",
       status: "success",
     });
   } catch (error) {
@@ -459,13 +637,13 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
       path: `users/${uid}`,
       stage: "fetchUserProfile.readUser",
       uid,
-      requirement: "required",
+      requirement: "optional",
     });
-    throw error;
+    usersProfile = null;
   }
-  const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  const accountResolution = await readAppAccountProfile(uid);
-  const accountProfile = accountResolution?.profile ?? null;
+  if (typeof userSnapshot !== "undefined") {
+    usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
+  }
   const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
   if (!profile) return null;
@@ -483,6 +661,7 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
 
   const profileComplete = isProfileComplete(profile);
 
+  await updateAccountSnapshot(uid, accountProfile, profile);
   await backfillUsersFromMergedProfile(uid, usersProfile, profile, accountProfile);
 
   return {
@@ -579,26 +758,31 @@ export async function ensureUserProfile(
   seed: EnsureProfileInput = {}
 ): Promise<WurderUserProfile> {
   const uid = user.uid;
+  const accountResolution = await ensureAccountDoc(user, seed);
+  const accountProfile = accountResolution.accountProfile;
+
+  const email = user.email ? normalizeEmail(user.email) : null;
+  let usersProfile: WurderUserProfile | null = null;
   const userRef = doc(db, "users", uid);
-  let snapshot;
   try {
     logBootstrapFirestoreOperation({
       stage: "ensureUserProfile.readUser",
       op: "getDoc",
       path: `users/${uid}`,
       uid,
-      requirement: "required",
+      requirement: "optional",
       status: "start",
     });
-    snapshot = await getDoc(userRef);
+    const snapshot = await getDoc(userRef);
     logBootstrapFirestoreOperation({
       stage: "ensureUserProfile.readUser",
       op: "getDoc",
       path: `users/${uid}`,
       uid,
-      requirement: "required",
+      requirement: "optional",
       status: "success",
     });
+    usersProfile = snapshot.exists() ? normalizeProfile(uid, snapshot.data(), email) : null;
   } catch (error) {
     logBootstrapFirestoreFailure({
       error,
@@ -606,127 +790,34 @@ export async function ensureUserProfile(
       path: `users/${uid}`,
       stage: "ensureUserProfile.readUser",
       uid,
-      requirement: "required",
+      requirement: "optional",
     });
-    throw error;
   }
-  const accountResolution = await readAppAccountProfile(uid);
-  const accountProfile = accountResolution?.profile ?? null;
 
-  const firstName = cleanName(seed.firstName);
-  const lastName = cleanName(seed.lastName);
-  const authDisplayName = cleanName(user.displayName);
-  const fallbackName = buildName(firstName, lastName);
-  const name =
-    cleanName(seed.name) ??
-    cleanName(accountProfile?.name) ??
-    authDisplayName ??
-    cleanName(fallbackName) ??
-    cleanName(buildName(accountProfile?.firstName, accountProfile?.lastName));
-  const email = user.email ? normalizeEmail(user.email) : null;
-  const avatar = seed.avatar ?? user.photoURL ?? accountProfile?.avatarUrl ?? null;
+  const resolved = mergeProfiles(uid, usersProfile, accountProfile) ?? {
+    uid,
+    email,
+    stats: { ...DEFAULT_PROFILE_STATS },
+  };
+  const profileComplete = isProfileComplete(resolved);
 
-  const requestedWurderId = cleanText(seed.wurderId);
-  const requestedWurderIdLower = requestedWurderId
-    ? await claimUsernameForUser({
-        uid,
-        email,
-        wurderId: requestedWurderId,
-      })
-    : undefined;
-  const fallbackWurderId = cleanText(accountProfile?.wurderId);
-
-  if (!snapshot.exists()) {
-    const createdProfile = withoutUndefined({
+  const nextProfile: WurderUserProfile = {
+    ...resolved,
+    onboarding: {
+      ...(resolved.onboarding ?? {}),
+      profileComplete,
+    },
+    debugProfileResolution: buildDebugProfileResolution({
       uid,
-      email,
-      firstName: firstName ?? accountProfile?.firstName ?? "",
-      lastName: lastName ?? accountProfile?.lastName ?? "",
-      name,
-      avatar,
-      avatarUrl: avatar,
-      stats: { ...DEFAULT_PROFILE_STATS },
-      activeGame: null,
-      onboarding: { profileComplete: false },
-    }) as WurderUserProfile;
-
-    if (requestedWurderId && requestedWurderIdLower) {
-      createdProfile.wurderId = requestedWurderId;
-      createdProfile.wurderIdLower = requestedWurderIdLower;
-    } else if (fallbackWurderId) {
-      createdProfile.wurderId = fallbackWurderId;
-      createdProfile.wurderIdLower = normalizeWurderId(fallbackWurderId);
-    }
-
-    const profileComplete = isProfileComplete(createdProfile);
-
-    try {
-      logBootstrapFirestoreOperation({
-        stage: "ensureUserProfile.create",
-        op: "setDoc",
-        path: `users/${uid}`,
-        uid,
-        requirement: "required",
-        status: "start",
-      });
-      await setDoc(userRef, withoutUndefined({
-        ...createdProfile,
-        onboarding: {
-          ...(createdProfile.onboarding ?? {}),
-          profileComplete,
-        },
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }));
-      logBootstrapFirestoreOperation({
-        stage: "ensureUserProfile.create",
-        op: "setDoc",
-        path: `users/${uid}`,
-        uid,
-        requirement: "required",
-        status: "success",
-      });
-    } catch (error) {
-      logBootstrapFirestoreFailure({
-        error,
-        op: "setDoc",
-        path: `users/${uid}`,
-        stage: "ensureUserProfile.create",
-        uid,
-        requirement: "required",
-      });
-      throw error;
-    }
-
-    return {
-      ...createdProfile,
-      onboarding: {
-        ...(createdProfile.onboarding ?? {}),
-        profileComplete,
-      },
-      debugProfileResolution: buildDebugProfileResolution({
-        uid,
-        rawAccountFields: accountResolution?.rawFields ?? null,
-      }),
-    };
-  }
-
-  const currentProfile = normalizeProfile(uid, snapshot.data(), email);
-  const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
-
-  if (
-    hasAnyIdentityValue(currentProfile) &&
-    !hasRequiredIdentityFields(currentProfile) &&
-    hasRequiredIdentityFields(mergedCurrentProfile)
-  ) {
-    console.warn(`[auth] profile-bootstrap backfilled missing canonical identity fields for uid ${uid}`);
-  }
+      rawAccountFields: accountResolution.rawAccountFields,
+    }),
+  };
 
   logProfileResolutionDiagnostics({
     uid,
-    usersProfile: currentProfile,
-    rawAccountFields: accountResolution?.rawFields ?? null,
-    resolvedProfile: mergedCurrentProfile,
+    usersProfile,
+    rawAccountFields: accountResolution.rawAccountFields,
+    resolvedProfile: nextProfile,
     authSession: {
       displayName: user.displayName ?? null,
       email: user.email ?? null,
@@ -734,119 +825,27 @@ export async function ensureUserProfile(
     },
   });
 
-  const firestoreUpdates: Record<string, unknown> = {
-    uid,
-    updatedAt: serverTimestamp(),
-  };
-  const memoryUpdates: Partial<WurderUserProfile> = { uid };
+  await updateAccountSnapshot(uid, accountProfile, nextProfile);
+  await backfillUsersFromMergedProfile(uid, usersProfile, nextProfile, accountProfile);
 
-  if (!currentProfile.email && email) {
-    firestoreUpdates.email = email;
-    memoryUpdates.email = email;
-  }
-
-  if (cleanText(mergedCurrentProfile.name) && cleanText(currentProfile.name) !== cleanText(mergedCurrentProfile.name)) {
-    firestoreUpdates.name = mergedCurrentProfile.name;
-    memoryUpdates.name = mergedCurrentProfile.name;
-  }
-
-  if (cleanText(mergedCurrentProfile.firstName) && cleanText(currentProfile.firstName) !== cleanText(mergedCurrentProfile.firstName)) {
-    firestoreUpdates.firstName = mergedCurrentProfile.firstName;
-    memoryUpdates.firstName = mergedCurrentProfile.firstName;
-  }
-
-  if (cleanText(mergedCurrentProfile.lastName) && cleanText(currentProfile.lastName) !== cleanText(mergedCurrentProfile.lastName)) {
-    firestoreUpdates.lastName = mergedCurrentProfile.lastName;
-    memoryUpdates.lastName = mergedCurrentProfile.lastName;
-  }
-
-  if (mergedCurrentProfile.avatar && currentProfile.avatar !== mergedCurrentProfile.avatar) {
-    firestoreUpdates.avatar = mergedCurrentProfile.avatar;
-    memoryUpdates.avatar = mergedCurrentProfile.avatar;
-  }
-
-  if (mergedCurrentProfile.avatarUrl && currentProfile.avatarUrl !== mergedCurrentProfile.avatarUrl) {
-    firestoreUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
-    memoryUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
-  }
-
-  if (cleanText(mergedCurrentProfile.wurderId) && cleanText(currentProfile.wurderId) !== cleanText(mergedCurrentProfile.wurderId)) {
-    firestoreUpdates.wurderId = mergedCurrentProfile.wurderId;
-    firestoreUpdates.wurderIdLower =
-      cleanText(mergedCurrentProfile.wurderIdLower) ??
-      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
-    memoryUpdates.wurderId = mergedCurrentProfile.wurderId;
-    memoryUpdates.wurderIdLower =
-      cleanText(mergedCurrentProfile.wurderIdLower) ??
-      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
-  }
-
-  const nextProfile: WurderUserProfile = {
-    ...currentProfile,
-    ...memoryUpdates,
-  };
-
-  const profileComplete = isProfileComplete(nextProfile);
-  firestoreUpdates.onboarding = {
-    ...(currentProfile.onboarding ?? {}),
-    profileComplete,
-  };
-
-  try {
-    logBootstrapFirestoreOperation({
-      stage: "ensureUserProfile.update",
-      op: "setDoc",
-      path: `users/${uid}`,
-      uid,
-      requirement: "optional",
-      status: "start",
-    });
-    await setDoc(userRef, firestoreUpdates, { merge: true });
-    logBootstrapFirestoreOperation({
-      stage: "ensureUserProfile.update",
-      op: "setDoc",
-      path: `users/${uid}`,
-      uid,
-      requirement: "optional",
-      status: "success",
-    });
-  } catch (error) {
-    logBootstrapFirestoreFailure({
-      error,
-      op: "setDoc",
-      path: `users/${uid}`,
-      stage: "ensureUserProfile.update",
-      uid,
-      requirement: "optional",
-    });
-  }
-
-  return {
-    ...nextProfile,
-    onboarding: {
-      ...(nextProfile.onboarding ?? {}),
-      profileComplete,
-    },
-    debugProfileResolution: buildDebugProfileResolution({
-      uid,
-      rawAccountFields: accountResolution?.rawFields ?? null,
-    }),
-  };
+  return nextProfile;
 }
 
 export async function updateUserProfile(
   uid: string,
   input: UpdateUserProfileInput
 ): Promise<WurderUserProfile> {
-  const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
-
-  if (!snapshot.exists()) {
+  const accountRef = doc(db, "accounts", uid);
+  const accountSnapshot = await getDoc(accountRef);
+  if (!accountSnapshot.exists()) {
     throw new Error("Profile not found.");
   }
 
-  const currentProfile = normalizeProfile(uid, snapshot.data(), null);
-  const firestoreUpdates: Record<string, unknown> = {
+  const accountResolution = normalizeAppAccountProfile(accountSnapshot.data());
+  const currentProfile = mergeProfiles(uid, null, accountResolution.profile) as WurderUserProfile;
+
+  const accountUpdates: Record<string, unknown> = {
+    uid,
     updatedAt: serverTimestamp(),
   };
   const memoryUpdates: Partial<WurderUserProfile> = {};
@@ -854,7 +853,7 @@ export async function updateUserProfile(
   if ("firstName" in input) {
     const firstName = cleanName(input.firstName);
     if (firstName) {
-      firestoreUpdates.firstName = firstName;
+      accountUpdates.firstName = firstName;
       memoryUpdates.firstName = firstName;
     } else if (cleanText(currentProfile.firstName)) {
       console.warn(`[auth] Ignored empty firstName update for uid ${uid} to preserve canonical profile data`);
@@ -864,7 +863,8 @@ export async function updateUserProfile(
   if ("lastName" in input) {
     const lastName = cleanName(input.lastName);
     if (lastName) {
-      firestoreUpdates.lastName = lastName;
+      accountUpdates.lastName = lastName;
+      accountUpdates.secondName = lastName;
       memoryUpdates.lastName = lastName;
     } else if (cleanText(currentProfile.lastName)) {
       console.warn(`[auth] Ignored empty lastName update for uid ${uid} to preserve canonical profile data`);
@@ -874,7 +874,7 @@ export async function updateUserProfile(
   if ("name" in input) {
     const name = cleanName(input.name);
     if (name) {
-      firestoreUpdates.name = name;
+      accountUpdates.name = name;
       memoryUpdates.name = name;
     } else if (cleanText(currentProfile.name)) {
       console.warn(`[auth] Ignored empty name update for uid ${uid} to preserve canonical profile data`);
@@ -884,7 +884,7 @@ export async function updateUserProfile(
   if ("avatar" in input) {
     const avatar = cleanText(input.avatar ?? undefined);
     if (avatar) {
-      firestoreUpdates.avatar = avatar;
+      accountUpdates.avatar = avatar;
       memoryUpdates.avatar = avatar;
     } else if (currentProfile.avatar) {
       console.warn(`[auth] Ignored empty avatar update for uid ${uid} to preserve canonical profile data`);
@@ -894,7 +894,9 @@ export async function updateUserProfile(
   if ("avatarUrl" in input) {
     const avatarUrl = cleanText(input.avatarUrl ?? undefined);
     if (avatarUrl) {
-      firestoreUpdates.avatarUrl = avatarUrl;
+      accountUpdates.avatar = avatarUrl;
+      accountUpdates.avatarUrl = avatarUrl;
+      accountUpdates.photoURL = avatarUrl;
       memoryUpdates.avatarUrl = avatarUrl;
     } else if (currentProfile.avatarUrl) {
       console.warn(`[auth] Ignored empty avatarUrl update for uid ${uid} to preserve canonical profile data`);
@@ -904,7 +906,7 @@ export async function updateUserProfile(
   if ("wurderId" in input && typeof input.wurderId === "string") {
     const candidateWurderId = input.wurderId.trim();
     const candidateLower = normalizeWurderId(candidateWurderId);
-    const currentLower = cleanText(currentProfile.wurderIdLower);
+    const currentLower = cleanText(currentProfile.wurderIdLower) ?? cleanText(accountResolution.profile.wurderIdLower);
 
     if (!candidateWurderId) {
       throw new Error("Wurder ID is required.");
@@ -920,8 +922,10 @@ export async function updateUserProfile(
         email: currentProfile.email,
         wurderId: candidateWurderId,
       });
-      firestoreUpdates.wurderId = candidateWurderId;
-      firestoreUpdates.wurderIdLower = candidateLower;
+      accountUpdates.username = candidateWurderId;
+      accountUpdates.usernameLower = candidateLower;
+      accountUpdates.wurderId = candidateWurderId;
+      accountUpdates.wurderIdLower = candidateLower;
       memoryUpdates.wurderId = candidateWurderId;
       memoryUpdates.wurderIdLower = candidateLower;
     }
@@ -933,12 +937,12 @@ export async function updateUserProfile(
   };
 
   const profileComplete = isProfileComplete(nextProfile);
-  firestoreUpdates.onboarding = {
-    ...(currentProfile.onboarding ?? {}),
-    profileComplete,
-  };
+  await setDoc(accountRef, accountUpdates, { merge: true });
 
-  await setDoc(userRef, firestoreUpdates, { merge: true });
+  await backfillUsersFromMergedProfile(uid, null, {
+    ...nextProfile,
+    onboarding: { ...(nextProfile.onboarding ?? {}), profileComplete },
+  }, accountResolution.profile);
 
   return {
     ...nextProfile,
