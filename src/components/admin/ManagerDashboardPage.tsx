@@ -42,6 +42,15 @@ type AnalyticsAccessState = {
   message: string | null;
 };
 
+function LockedSection({ title, message }: { title: string; message: string }) {
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+      <h2 className="text-lg font-semibold text-amber-900">{title}</h2>
+      <p className="mt-2 text-sm text-amber-900">{message}</p>
+    </section>
+  );
+}
+
 type ReportAction = "csv" | "summary";
 
 type SummaryModalState = {
@@ -385,6 +394,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   }, [gameCode, guard.status, user]);
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
+  const isLiveLimited = analyticsAccess?.visibility === "limited_live";
 
   const parseExportError = (errorPayload: { code?: unknown; message?: unknown }): string => {
     const code = parseString(errorPayload.code);
@@ -509,9 +519,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 </button>
               </>
             ) : (
-              <p className="text-sm text-amber-900">
-                {analyticsAccess?.message ?? "Exports are unavailable for this session right now."}
-              </p>
+              <p className="text-sm text-amber-900">Exports unlock after the live session ends.</p>
             )}
           </div>
           {exportMessage ? <p className="mt-2 text-sm text-red-700">{exportMessage}</p> : null}
@@ -562,26 +570,22 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "allowed" && status === "ready" && analytics ? (
         <div className="grid gap-6">
-          {analyticsAccess?.message ? (
+          {isLiveLimited ? (
             <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-              {analyticsAccess.message}
+              {analyticsAccess?.message ?? "Live session mode is active. Additional analytics unlock after the session ends."}
             </section>
           ) : null}
           {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
           {analyticsAccess?.allowedSections.insights ? (
             <InsightCards insights={analytics.insights} />
           ) : (
-            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-              {analyticsAccess?.message ?? "Insights are unavailable for this session right now."}
-            </section>
+            <LockedSection title="Activity Summary" message="Insights are locked until the session has ended." />
           )}
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
             {analyticsAccess?.allowedSections.playerComparison ? (
               <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
             ) : (
-              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-                {analyticsAccess?.message ?? "Player comparison unlocks after this session ends."}
-              </section>
+              <LockedSection title="Player Performance" message="Player comparison unlocks after the session ends." />
             )}
             {analyticsAccess?.allowedSections.sessionSummary ? (
               <div className="grid gap-4">
@@ -598,12 +602,14 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 />
               </div>
             ) : (
-              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-                {analyticsAccess?.message ?? "Session summaries are unavailable for this session right now."}
-              </section>
+              <LockedSection title="Session Summary" message="Session summary and recommendations unlock after the session ends." />
             )}
           </div>
-          <SessionTimeline gameCode={gameCode} />
+          <SessionTimeline
+            gameCode={gameCode}
+            isLocked={isLiveLimited}
+            lockedMessage="Timeline events become available after the session ends."
+          />
         </div>
       ) : null}
 
