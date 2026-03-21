@@ -54,6 +54,25 @@ type AppAccountProfileResolution = {
   rawFields: LegacyAccountRawFields;
 };
 
+function buildResolutionSourcePaths(uid: string, hasAccountResolution: boolean): string[] {
+  const paths = [`users/${uid}`];
+  if (hasAccountResolution) {
+    paths.push(`accounts/${uid}`);
+  }
+  return paths;
+}
+
+function buildDebugProfileResolution(input: {
+  uid: string;
+  rawAccountFields: LegacyAccountRawFields | null;
+}): NonNullable<WurderUserProfile["debugProfileResolution"]> {
+  return {
+    rawAccountFields: input.rawAccountFields,
+    sourcePaths: buildResolutionSourcePaths(input.uid, Boolean(input.rawAccountFields)),
+    snapshotAt: new Date().toISOString(),
+  };
+}
+
 export type UpdateUserProfileInput = {
   firstName?: string;
   lastName?: string;
@@ -342,6 +361,10 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
           ? profile.onboarding.profileComplete
           : profileComplete,
     },
+    debugProfileResolution: buildDebugProfileResolution({
+      uid,
+      rawAccountFields: accountResolution?.rawFields ?? null,
+    }),
   };
 }
 
@@ -463,6 +486,10 @@ export async function ensureUserProfile(
         ...(createdProfile.onboarding ?? {}),
         profileComplete,
       },
+      debugProfileResolution: buildDebugProfileResolution({
+        uid,
+        rawAccountFields: accountResolution?.rawFields ?? null,
+      }),
     };
   }
 
@@ -555,6 +582,10 @@ export async function ensureUserProfile(
       ...(nextProfile.onboarding ?? {}),
       profileComplete,
     },
+    debugProfileResolution: buildDebugProfileResolution({
+      uid,
+      rawAccountFields: accountResolution?.rawFields ?? null,
+    }),
   };
 }
 
