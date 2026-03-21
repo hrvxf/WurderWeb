@@ -72,7 +72,7 @@ async function resolveByAccountQuery(usernameCandidate: string): Promise<string 
   ];
 
   for (const [field, value] of lookupQueries) {
-    const snapshot = await adminDb.collection("users").where(field, "==", value).limit(1).get();
+    const snapshot = await adminDb.collection("accounts").where(field, "==", value).limit(1).get();
     const match = snapshot.docs[0];
     const data = match?.data();
     if (typeof data?.email === "string" && data.email.trim()) {
