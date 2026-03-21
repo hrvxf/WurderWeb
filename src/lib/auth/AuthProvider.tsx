@@ -37,6 +37,16 @@ async function bootstrapProfile(nextUser: User): Promise<WurderUserProfile> {
   return ensureUserProfile(nextUser);
 }
 
+function logAuthContextProfile(uid: string | null, profile: WurderUserProfile | null, source: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  console.info("MEMBERS_AUTH_CONTEXT_PROFILE", {
+    uid,
+    source,
+    timestamp: new Date().toISOString(),
+    profile,
+  });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<WurderUserProfile | null>(null);
@@ -51,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextProfile = await bootstrapProfile(credential.user);
       setUser(credential.user);
       setProfile(nextProfile);
+      logAuthContextProfile(credential.user.uid, nextProfile, "loginWithEmailOrWurderId");
     } finally {
       setProfileLoading(false);
       setLoading(false);
@@ -82,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(credential.user);
       setProfile(nextProfile);
+      logAuthContextProfile(credential.user.uid, nextProfile, "signup");
     } catch (error) {
       if (error instanceof UsernameTakenError) {
         await deleteUser(credential.user).catch(() => undefined);
@@ -105,6 +117,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       setUser(credential.user);
       setProfile(nextProfile);
+      logAuthContextProfile(credential.user.uid, nextProfile, "loginWithGoogle");
     } finally {
       setProfileLoading(false);
       setLoading(false);
@@ -130,6 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const fetched = await fetchUserProfile(currentUser.uid);
       const nextProfile = fetched ?? (await ensureUserProfile(currentUser));
       setProfile(nextProfile);
+      logAuthContextProfile(currentUser.uid, nextProfile, "refreshProfile");
     } finally {
       setProfileLoading(false);
     }
@@ -155,6 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!nextUser) {
           setProfile(null);
+          logAuthContextProfile(null, null, "onAuthStateChanged:signedOut");
           setProfileLoading(false);
           setLoading(false);
           return;
@@ -165,6 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .then((nextProfile) => {
             if (!isMounted) return;
             setProfile(nextProfile);
+            logAuthContextProfile(nextUser.uid, nextProfile, "onAuthStateChanged:bootstrap");
           })
           .catch((error) => {
             console.error("[auth] Failed to bootstrap profile", error);

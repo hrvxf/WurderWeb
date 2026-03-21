@@ -91,6 +91,7 @@ import {
   fetchUserProfile,
   updateUserProfile,
 } from "@/lib/auth/profile-bootstrap";
+import { resolveMemberRenderState } from "@/lib/auth/member-render-state";
 
 describe("profile bootstrap + persistence", () => {
   beforeEach(() => {
@@ -201,6 +202,8 @@ describe("profile bootstrap + persistence", () => {
       lastName: "James",
       avatarUrl: "https://avatar.test/adam.png",
     });
+    expect(resolveMemberRenderState(profile).complete).toBe(true);
+    expect(resolveMemberRenderState(profile).missingFields).toEqual([]);
 
     expect(statusSpy).toHaveBeenCalledWith(
       "COMPLETION_CHECK",

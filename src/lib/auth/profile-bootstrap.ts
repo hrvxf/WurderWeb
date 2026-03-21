@@ -233,11 +233,19 @@ function logProfileResolutionDiagnostics(input: {
   if (process.env.NODE_ENV === "production") return;
 
   const completion = getProfileCompletionStatus(input.resolvedProfile);
+  const timestamp = new Date().toISOString();
   console.info("PROFILE_HYDRATE_PAYLOAD", {
     uid: input.uid,
+    timestamp,
     usersProfile: input.usersProfile,
     rawAccountFields: input.rawAccountFields,
     ...(input.authSession ? { authSession: input.authSession } : {}),
+  });
+  console.info("MEMBERS_PROFILE_RESOLUTION", {
+    uid: input.uid,
+    timestamp,
+    rawAccountFields: input.rawAccountFields,
+    resolvedProfile: input.resolvedProfile,
   });
   console.info("RESOLVED_PROFILE", { uid: input.uid, resolvedProfile: input.resolvedProfile });
   console.info("COMPLETION_CHECK", {
