@@ -54,12 +54,36 @@ type AppAccountProfileResolution = {
   rawFields: LegacyAccountRawFields;
 };
 
-type FirestoreOp = "getDoc" | "setDoc";
+type FirestoreOp = "getDoc" | "setDoc" | "updateDoc" | "runTransaction";
+type FirestoreRequirement = "required" | "optional";
 type BootstrapStage =
   | "loadAccountProfile"
+  | "fetchUserProfile.readUser"
+  | "ensureUserProfile.readUser"
   | "ensureUserProfile.create"
   | "ensureUserProfile.update"
-  | "fetchUserProfile.backfillUsers";
+  | "fetchUserProfile.backfillUsers"
+  | "claimUsernameForUser.transaction";
+
+function shouldLogBootstrapFirestoreDiagnostics(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.NEXT_PUBLIC_ENABLE_BOOTSTRAP_FIRESTORE_DIAGNOSTICS === "true";
+}
+
+function logBootstrapFirestoreOperation(input: {
+  stage: BootstrapStage;
+  op: FirestoreOp;
+  path: string;
+  uid: string;
+  requirement: FirestoreRequirement;
+  status: "start" | "success";
+}): void {
+  if (!shouldLogBootstrapFirestoreDiagnostics()) return;
+  console.info("[auth] bootstrap firestore operation", {
+    ...input,
+    optional: input.requirement === "optional",
+  });
+}
 
 function logBootstrapFirestoreFailure(input: {
   error: unknown;
@@ -67,7 +91,7 @@ function logBootstrapFirestoreFailure(input: {
   path: string;
   stage: BootstrapStage;
   uid: string;
-  optional: boolean;
+  requirement: FirestoreRequirement;
 }): void {
   const code =
     typeof input.error === "object" && input.error && "code" in input.error
@@ -83,9 +107,11 @@ function logBootstrapFirestoreFailure(input: {
     path: input.path,
     stage: input.stage,
     uid: input.uid,
-    optional: input.optional,
+    requirement: input.requirement,
+    optional: input.requirement === "optional",
     permissionDenied,
     code: code || undefined,
+    message: message || undefined,
   };
 
   if (process.env.NODE_ENV === "production") {
@@ -245,7 +271,7 @@ async function readAppAccountProfile(uid: string): Promise<AppAccountProfileReso
       path,
       stage: "loadAccountProfile",
       uid,
-      optional: true,
+      requirement: "optional",
     });
     return null;
   }
@@ -376,7 +402,23 @@ async function backfillUsersFromMergedProfile(
   };
 
   try {
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.backfillUsers",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
+    });
     await setDoc(userRef, firestoreUpdates, { merge: true });
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.backfillUsers",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
   } catch (error) {
     logBootstrapFirestoreFailure({
       error,
@@ -384,14 +426,43 @@ async function backfillUsersFromMergedProfile(
       path: `users/${uid}`,
       stage: "fetchUserProfile.backfillUsers",
       uid,
-      optional: true,
+      requirement: "optional",
     });
   }
 }
 
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
   const userRef = doc(db, "users", uid);
-  const userSnapshot = await getDoc(userRef);
+  let userSnapshot;
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    userSnapshot = await getDoc(userRef);
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `users/${uid}`,
+      stage: "fetchUserProfile.readUser",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
   const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
   const accountResolution = await readAppAccountProfile(uid);
   const accountProfile = accountResolution?.profile ?? null;
@@ -443,33 +514,61 @@ export async function claimUsernameForUser(input: {
     throw new Error("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
   }
 
-  await runTransaction(db, async (transaction) => {
-    const lookupRef = doc(db, "usernames", normalized);
-    const existing = await transaction.get(lookupRef);
+  logBootstrapFirestoreOperation({
+    stage: "claimUsernameForUser.transaction",
+    op: "runTransaction",
+    path: `usernames/${normalized}`,
+    uid: input.uid,
+    requirement: "required",
+    status: "start",
+  });
+  try {
+    await runTransaction(db, async (transaction) => {
+      const lookupRef = doc(db, "usernames", normalized);
+      const existing = await transaction.get(lookupRef);
 
-    if (existing.exists()) {
-      const existingData = existing.data() as UsernameLookup;
-      const existingUid = typeof existingData.uid === "string" ? existingData.uid : undefined;
-      const existingEmail =
-        typeof existingData.email === "string" ? normalizeEmail(existingData.email) : undefined;
+      if (existing.exists()) {
+        const existingData = existing.data() as UsernameLookup;
+        const existingUid = typeof existingData.uid === "string" ? existingData.uid : undefined;
+        const existingEmail =
+          typeof existingData.email === "string" ? normalizeEmail(existingData.email) : undefined;
 
-      const ownedBySameUser =
-        existingUid === input.uid || (Boolean(normalizedEmail) && existingEmail === normalizedEmail);
+        const ownedBySameUser =
+          existingUid === input.uid || (Boolean(normalizedEmail) && existingEmail === normalizedEmail);
 
-      if (!ownedBySameUser) {
-        throw new UsernameTakenError();
+        if (!ownedBySameUser) {
+          throw new UsernameTakenError();
+        }
+
+        return;
       }
 
-      return;
-    }
-
-    transaction.set(lookupRef, {
-      username: formatted,
-      usernameLower: normalized,
+      transaction.set(lookupRef, {
+        username: formatted,
+        usernameLower: normalized,
+        uid: input.uid,
+        email: normalizedEmail ?? "",
+        createdAt: serverTimestamp(),
+      } satisfies UsernameLookup);
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "runTransaction",
+      path: `usernames/${normalized}`,
+      stage: "claimUsernameForUser.transaction",
       uid: input.uid,
-      email: normalizedEmail ?? "",
-      createdAt: serverTimestamp(),
-    } satisfies UsernameLookup);
+      requirement: "required",
+    });
+    throw error;
+  }
+  logBootstrapFirestoreOperation({
+    stage: "claimUsernameForUser.transaction",
+    op: "runTransaction",
+    path: `usernames/${normalized}`,
+    uid: input.uid,
+    requirement: "required",
+    status: "success",
   });
 
   return normalized;
@@ -481,7 +580,36 @@ export async function ensureUserProfile(
 ): Promise<WurderUserProfile> {
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
+  let snapshot;
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    snapshot = await getDoc(userRef);
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `users/${uid}`,
+      stage: "ensureUserProfile.readUser",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
   const accountResolution = await readAppAccountProfile(uid);
   const accountProfile = accountResolution?.profile ?? null;
 
@@ -533,6 +661,14 @@ export async function ensureUserProfile(
     const profileComplete = isProfileComplete(createdProfile);
 
     try {
+      logBootstrapFirestoreOperation({
+        stage: "ensureUserProfile.create",
+        op: "setDoc",
+        path: `users/${uid}`,
+        uid,
+        requirement: "required",
+        status: "start",
+      });
       await setDoc(userRef, withoutUndefined({
         ...createdProfile,
         onboarding: {
@@ -542,6 +678,14 @@ export async function ensureUserProfile(
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }));
+      logBootstrapFirestoreOperation({
+        stage: "ensureUserProfile.create",
+        op: "setDoc",
+        path: `users/${uid}`,
+        uid,
+        requirement: "required",
+        status: "success",
+      });
     } catch (error) {
       logBootstrapFirestoreFailure({
         error,
@@ -549,7 +693,7 @@ export async function ensureUserProfile(
         path: `users/${uid}`,
         stage: "ensureUserProfile.create",
         uid,
-        optional: false,
+        requirement: "required",
       });
       throw error;
     }
@@ -649,7 +793,23 @@ export async function ensureUserProfile(
   };
 
   try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.update",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
+    });
     await setDoc(userRef, firestoreUpdates, { merge: true });
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.update",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
   } catch (error) {
     logBootstrapFirestoreFailure({
       error,
@@ -657,7 +817,7 @@ export async function ensureUserProfile(
       path: `users/${uid}`,
       stage: "ensureUserProfile.update",
       uid,
-      optional: true,
+      requirement: "optional",
     });
   }
 
