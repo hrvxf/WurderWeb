@@ -37,6 +37,23 @@ type AppAccountProfile = {
   avatarUrl?: string | null;
 };
 
+type LegacyAccountRawFields = {
+  firstName?: string;
+  lastName?: string;
+  secondName?: string;
+  username?: string;
+  usernameLower?: string;
+  photoURL?: string;
+  avatarUrl?: string;
+  avatar?: string;
+  name?: string;
+};
+
+type AppAccountProfileResolution = {
+  profile: AppAccountProfile;
+  rawFields: LegacyAccountRawFields;
+};
+
 export type UpdateUserProfileInput = {
   firstName?: string;
   lastName?: string;
@@ -106,7 +123,7 @@ function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolea
   return Boolean(cleanText(profile.firstName) || cleanText(profile.lastName) || cleanText(profile.wurderId));
 }
 
-function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
+function normalizeAppAccountProfile(data: DocumentData): AppAccountProfileResolution {
   const source = data as Record<string, unknown>;
   const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
   const lastName =
@@ -125,17 +142,32 @@ function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
     null;
 
   return {
-    firstName,
-    lastName,
-    name: cleanName(typeof source.name === "string" ? source.name : undefined) ?? cleanName(buildName(firstName, lastName)),
-    wurderId,
-    wurderIdLower: wurderIdLower ?? (wurderId ? normalizeWurderId(wurderId) : undefined),
-    avatar: avatarUrl,
-    avatarUrl,
+    profile: {
+      firstName,
+      lastName,
+      name:
+        cleanName(typeof source.name === "string" ? source.name : undefined) ??
+        cleanName(buildName(firstName, lastName)),
+      wurderId,
+      wurderIdLower: wurderIdLower ?? (wurderId ? normalizeWurderId(wurderId) : undefined),
+      avatar: avatarUrl,
+      avatarUrl,
+    },
+    rawFields: {
+      firstName: cleanText(typeof source.firstName === "string" ? source.firstName : undefined),
+      lastName: cleanText(typeof source.lastName === "string" ? source.lastName : undefined),
+      secondName: cleanText(typeof source.secondName === "string" ? source.secondName : undefined),
+      username: cleanText(typeof source.username === "string" ? source.username : undefined),
+      usernameLower: cleanText(typeof source.usernameLower === "string" ? source.usernameLower : undefined),
+      photoURL: cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined),
+      avatarUrl: cleanText(typeof source.avatarUrl === "string" ? source.avatarUrl : undefined),
+      avatar: cleanText(typeof source.avatar === "string" ? source.avatar : undefined),
+      name: cleanText(typeof source.name === "string" ? source.name : undefined),
+    },
   };
 }
 
-async function readAppAccountProfile(uid: string): Promise<AppAccountProfile | null> {
+async function readAppAccountProfile(uid: string): Promise<AppAccountProfileResolution | null> {
   try {
     const accountRef = doc(db, "accounts", uid);
     const snapshot = await getDoc(accountRef);
@@ -185,6 +217,34 @@ function mergeProfiles(
   }
 
   return merged;
+}
+
+function logProfileResolutionDiagnostics(input: {
+  uid: string;
+  usersProfile: WurderUserProfile | null;
+  rawAccountFields: LegacyAccountRawFields | null;
+  resolvedProfile: WurderUserProfile;
+  authSession?: {
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
+  };
+}): void {
+  if (process.env.NODE_ENV === "production") return;
+
+  const completion = getProfileCompletionStatus(input.resolvedProfile);
+  console.info("PROFILE_HYDRATE_PAYLOAD", {
+    uid: input.uid,
+    usersProfile: input.usersProfile,
+    rawAccountFields: input.rawAccountFields,
+    ...(input.authSession ? { authSession: input.authSession } : {}),
+  });
+  console.info("RESOLVED_PROFILE", { uid: input.uid, resolvedProfile: input.resolvedProfile });
+  console.info("COMPLETION_CHECK", {
+    uid: input.uid,
+    complete: completion.complete,
+    missingFields: completion.missingFields,
+  });
 }
 
 async function backfillUsersFromMergedProfile(
@@ -244,7 +304,8 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
   const userRef = doc(db, "users", uid);
   const userSnapshot = await getDoc(userRef);
   const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  const accountProfile = await readAppAccountProfile(uid);
+  const accountResolution = await readAppAccountProfile(uid);
+  const accountProfile = accountResolution?.profile ?? null;
   const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
   if (!profile) return null;
@@ -253,14 +314,12 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
     console.warn(`[auth] profile-bootstrap recovered missing canonical identity fields for uid ${uid}`);
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info("PROFILE_HYDRATE_PAYLOAD", { uid, usersProfile, accountProfile });
-    console.info("RESOLVED_PROFILE", { uid, resolvedProfile: profile });
-    console.info("COMPLETION_CHECK", {
-      uid,
-      ...getProfileCompletionStatus(profile),
-    });
-  }
+  logProfileResolutionDiagnostics({
+    uid,
+    usersProfile,
+    rawAccountFields: accountResolution?.rawFields ?? null,
+    resolvedProfile: profile,
+  });
 
   const profileComplete = isProfileComplete(profile);
 
@@ -330,7 +389,8 @@ export async function ensureUserProfile(
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
-  const accountProfile = await readAppAccountProfile(uid);
+  const accountResolution = await readAppAccountProfile(uid);
+  const accountProfile = accountResolution?.profile ?? null;
 
   const firstName = cleanName(seed.firstName);
   const lastName = cleanName(seed.lastName);
@@ -409,23 +469,17 @@ export async function ensureUserProfile(
     console.warn(`[auth] profile-bootstrap backfilled missing canonical identity fields for uid ${uid}`);
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.info("PROFILE_HYDRATE_PAYLOAD", {
-      uid,
-      usersProfile: currentProfile,
-      accountProfile,
-      authSession: {
-        displayName: user.displayName ?? null,
-        email: user.email ?? null,
-        photoURL: user.photoURL ?? null,
-      },
-    });
-    console.info("RESOLVED_PROFILE", { uid, resolvedProfile: mergedCurrentProfile });
-    console.info("COMPLETION_CHECK", {
-      uid,
-      ...getProfileCompletionStatus(mergedCurrentProfile),
-    });
-  }
+  logProfileResolutionDiagnostics({
+    uid,
+    usersProfile: currentProfile,
+    rawAccountFields: accountResolution?.rawFields ?? null,
+    resolvedProfile: mergedCurrentProfile,
+    authSession: {
+      displayName: user.displayName ?? null,
+      email: user.email ?? null,
+      photoURL: user.photoURL ?? null,
+    },
+  });
 
   const firestoreUpdates: Record<string, unknown> = {
     uid,
