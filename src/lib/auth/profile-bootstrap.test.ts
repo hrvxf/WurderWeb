@@ -234,6 +234,20 @@ describe("profile bootstrap + persistence", () => {
     });
   });
   it("partial form save does not clear existing canonical fields", async () => {
+    state.docs["accounts/uid-1"] = {
+      uid: "uid-1",
+      firstName: "Alex",
+      lastName: "Mason",
+      secondName: "Mason",
+      name: "Alex Mason",
+      avatar: "https://avatar.test/original.png",
+      avatarUrl: "https://avatar.test/original.png",
+      photoURL: "https://avatar.test/original.png",
+      username: "Alex_1",
+      usernameLower: "alex_1",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+    };
     state.docs["users/uid-1"] = {
       uid: "uid-1",
       email: "user@example.com",
@@ -264,7 +278,7 @@ describe("profile bootstrap + persistence", () => {
       avatarUrl: "https://avatar.test/original.png",
     });
 
-    const write = state.setCalls.find((call) => pathFor(call.ref) === "users/uid-1");
+    const write = state.setCalls.find((call) => pathFor(call.ref) === "accounts/uid-1");
     expect(write?.options).toEqual({ merge: true });
     expect(write?.payload).not.toHaveProperty("firstName");
     expect(write?.payload).not.toHaveProperty("lastName");
@@ -275,6 +289,17 @@ describe("profile bootstrap + persistence", () => {
   });
 
   it("ensureUserProfile keeps returning stored member profile for existing user", async () => {
+    state.docs["accounts/uid-1"] = {
+      uid: "uid-1",
+      firstName: "Alex",
+      lastName: "Mason",
+      secondName: "Mason",
+      name: "Alex Mason",
+      username: "Alex_1",
+      usernameLower: "alex_1",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+    };
     state.docs["users/uid-1"] = {
       uid: "uid-1",
       email: "user@example.com",
@@ -303,8 +328,7 @@ describe("profile bootstrap + persistence", () => {
     });
 
     const writesToUsers = state.setCalls.filter((call) => pathFor(call.ref) === "users/uid-1");
-    expect(writesToUsers).toHaveLength(1);
-    expect(writesToUsers[0]?.options).toEqual({ merge: true });
+    expect(writesToUsers).toHaveLength(0);
   });
 
   it("canonical accounts profile wins over sparse or stale users/auth payloads on reload/login", async () => {
@@ -458,6 +482,17 @@ describe("profile bootstrap + persistence", () => {
   });
 
   it("ensureUserProfile keeps existing profile when optional merge write is denied", async () => {
+    state.docs["accounts/uid-2"] = {
+      uid: "uid-2",
+      firstName: "",
+      lastName: "",
+      secondName: "",
+      name: "",
+      username: "Alex_1",
+      usernameLower: "alex_1",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+    };
     state.docs["users/uid-2"] = {
       uid: "uid-2",
       email: "user2@example.com",
@@ -469,7 +504,7 @@ describe("profile bootstrap + persistence", () => {
       onboarding: { profileComplete: true },
       stats: { gamesPlayed: 11 },
     };
-    state.failSetDocPaths["users/uid-2"] = Object.assign(
+    state.failSetDocPaths["accounts/uid-2"] = Object.assign(
       new Error("Missing or insufficient permissions."),
       { code: "permission-denied" }
     );
@@ -494,8 +529,8 @@ describe("profile bootstrap + persistence", () => {
       "[auth] bootstrap firestore operation failed",
       expect.objectContaining({
         op: "setDoc",
-        path: "users/uid-2",
-        stage: "ensureUserProfile.update",
+        path: "accounts/uid-2",
+        stage: "updateAccountSnapshot.writeAccount",
         uid: "uid-2",
         optional: true,
         permissionDenied: true,
@@ -504,7 +539,7 @@ describe("profile bootstrap + persistence", () => {
     );
   });
 
-  it("bootstrap tolerates denied accounts read and still returns canonical users profile", async () => {
+  it("bootstrap surfaces denied required accounts read", async () => {
     state.docs["users/uid-3"] = {
       uid: "uid-3",
       email: "user3@example.com",
@@ -523,14 +558,7 @@ describe("profile bootstrap + persistence", () => {
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 
-    const profile = await fetchUserProfile("uid-3");
-
-    expect(profile).toMatchObject({
-      uid: "uid-3",
-      firstName: "Chris",
-      lastName: "Miles",
-      wurderId: "chrism",
-    });
+    await expect(fetchUserProfile("uid-3")).rejects.toThrow("Missing or insufficient permissions.");
     expect(warnSpy).toHaveBeenCalledWith(
       "[auth] bootstrap firestore operation failed",
       expect.objectContaining({
@@ -538,7 +566,7 @@ describe("profile bootstrap + persistence", () => {
         path: "accounts/uid-3",
         stage: "loadAccountProfile",
         uid: "uid-3",
-        optional: true,
+        optional: false,
         permissionDenied: true,
         code: "permission-denied",
       })
