@@ -1,94 +1,62 @@
 import { signInWithEmailAndPassword, type UserCredential } from "firebase/auth";
-import { collection, doc, getDoc, getDocs, limit, query, where } from "firebase/firestore";
 
-import { auth, db } from "@/lib/firebase";
-import { isValidEmail, normalizeEmail, normalizeWurderId } from "@/lib/auth/auth-helpers";
-import type { UsernameLookup } from "@/lib/types/user";
+import { auth } from "@/lib/firebase";
+import { isValidEmail, normalizeEmail } from "@/lib/auth/auth-helpers";
+
+type ResolverSuccessPayload = {
+  mode: "email";
+  email: string;
+};
+
+type ResolverErrorPayload = {
+  code?: string;
+  message?: string;
+};
 
 function normalizeIdentifierInput(identifier: string): {
   raw: string;
-  usernameCandidate: string;
   forceUsernameLookup: boolean;
 } {
   const raw = identifier.trim();
   const forceUsernameLookup = raw.startsWith("@") && !raw.slice(1).includes("@");
-  const usernameCandidate = forceUsernameLookup ? raw.slice(1).trim() : raw;
   return {
     raw,
-    usernameCandidate,
     forceUsernameLookup,
   };
 }
 
-async function resolveEmailFromUid(uid: string): Promise<string | null> {
-  const [usersSnapshot, accountsSnapshot] = await Promise.all([
-    getDoc(doc(db, "users", uid)),
-    getDoc(doc(db, "accounts", uid)),
-  ]);
+async function resolveIdentifierViaApi(identifier: string): Promise<string> {
+  const response = await fetch("/api/auth/resolve-login-identifier", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ identifier }),
+  });
 
-  const userData = usersSnapshot.exists() ? usersSnapshot.data() : null;
-  if (typeof userData?.email === "string" && userData.email.trim()) {
-    return normalizeEmail(userData.email);
-  }
+  const payload = (await response.json().catch(() => ({}))) as ResolverSuccessPayload & ResolverErrorPayload;
 
-  const accountData = accountsSnapshot.exists() ? accountsSnapshot.data() : null;
-  if (typeof accountData?.email === "string" && accountData.email.trim()) {
-    return normalizeEmail(accountData.email);
-  }
-
-  return null;
-}
-
-async function resolveByUsernameCollection(usernameCandidate: string): Promise<string | null> {
-  const usernameLower = normalizeWurderId(usernameCandidate);
-  const usernameSnapshot = await getDoc(doc(db, "usernames", usernameLower));
-
-  if (!usernameSnapshot.exists()) {
-    return null;
-  }
-
-  const lookup = usernameSnapshot.data() as UsernameLookup;
-  if (typeof lookup.email === "string" && lookup.email.trim().length > 0) {
-    return normalizeEmail(lookup.email);
-  }
-
-  if (typeof lookup.uid === "string" && lookup.uid.trim().length > 0) {
-    const uidEmail = await resolveEmailFromUid(lookup.uid);
-    if (uidEmail) return uidEmail;
-    throw new Error("That Wurder ID is missing login metadata. Please sign in with email.");
-  }
-
-  throw new Error("Could not resolve login details for that Wurder ID.");
-}
-
-async function resolveByAccountQuery(usernameCandidate: string): Promise<string | null> {
-  const usernameLower = normalizeWurderId(usernameCandidate);
-  const usersRef = collection(db, "users");
-  const lookupQueries = [
-    query(usersRef, where("usernameLower", "==", usernameLower), limit(1)),
-    query(usersRef, where("wurderIdLower", "==", usernameLower), limit(1)),
-    query(usersRef, where("username", "==", usernameCandidate.trim()), limit(1)),
-    query(usersRef, where("wurderId", "==", usernameCandidate.trim()), limit(1)),
-  ];
-
-  for (const currentQuery of lookupQueries) {
-    const snapshot = await getDocs(currentQuery);
-    const match = snapshot.docs[0];
-    const data = match?.data();
-    if (typeof data?.email === "string" && data.email.trim()) {
-      return normalizeEmail(data.email);
+  if (!response.ok) {
+    if (payload.code === "WURDER_ID_NOT_FOUND") {
+      throw new Error("No account found with that Wurder ID.");
     }
-    if (typeof data?.uid === "string" && data.uid.trim()) {
-      const uidEmail = await resolveEmailFromUid(data.uid);
-      if (uidEmail) return uidEmail;
+
+    if (payload.code === "INVALID_IDENTIFIER") {
+      throw new Error(payload.message || "Email or Wurder ID is required.");
     }
+
+    throw new Error("Unable to resolve that Wurder ID right now. Please sign in with email.");
   }
 
-  return null;
+  if (payload.mode !== "email" || typeof payload.email !== "string" || !payload.email.trim()) {
+    throw new Error("Unable to resolve that Wurder ID right now. Please sign in with email.");
+  }
+
+  return normalizeEmail(payload.email);
 }
 
 export async function resolveLoginIdentifier(identifier: string): Promise<string> {
-  const { raw, usernameCandidate, forceUsernameLookup } = normalizeIdentifierInput(identifier);
+  const { raw, forceUsernameLookup } = normalizeIdentifierInput(identifier);
 
   if (!raw) {
     throw new Error("Email or Wurder ID is required.");
@@ -101,17 +69,7 @@ export async function resolveLoginIdentifier(identifier: string): Promise<string
     return normalizeEmail(raw);
   }
 
-  const usernameEmail = await resolveByUsernameCollection(usernameCandidate);
-  if (usernameEmail) {
-    return usernameEmail;
-  }
-
-  const accountEmail = await resolveByAccountQuery(usernameCandidate);
-  if (accountEmail) {
-    return accountEmail;
-  }
-
-  throw new Error("No account found with that Wurder ID.");
+  return resolveIdentifierViaApi(raw);
 }
 
 export async function loginWithEmailOrWurderId(
