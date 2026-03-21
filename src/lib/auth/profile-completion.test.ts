@@ -1,4 +1,4 @@
-import { isProfileComplete } from "@/lib/auth/profile-completion";
+import { getProfileCompletionStatus, isProfileComplete } from "@/lib/auth/profile-completion";
 
 describe("isProfileComplete", () => {
   it("requires a wurderId", () => {
@@ -57,5 +57,18 @@ describe("isProfileComplete", () => {
       })
     ).toBe(false);
   });
-});
 
+  it("reports precise missing fields from resolved profile", () => {
+    const status = getProfileCompletionStatus({
+      uid: "u1",
+      email: "user@example.com",
+      firstName: "Alex",
+      name: "",
+    });
+
+    expect(status).toEqual({
+      complete: false,
+      missingFields: ["wurderId", "lastName"],
+    });
+  });
+});
