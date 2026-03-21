@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 
 import LogoutButton from "@/components/auth/LogoutButton";
-import { getProfileCompletionStatus } from "@/lib/auth/profile-completion";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { resolveMemberRenderState } from "@/lib/auth/member-render-state";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 
 const memberNav = [
@@ -27,12 +27,31 @@ export default function MemberShell({ children }: { children: ReactNode }) {
   const { profile } = useAuth();
 
   const displayName = getDisplayName(profile?.firstName, profile?.lastName, profile?.name);
-  const completion = getProfileCompletionStatus(profile);
+  const renderState = resolveMemberRenderState(profile);
+  const missingFieldsKey = renderState.missingFields.join("|");
   const displayWurderId = profile?.wurderId?.trim()
     ? `@${profile.wurderId}`
-    : completion.missingFields.length
-      ? `Profile incomplete: missing ${completion.missingFields.join(", ")}`
+    : renderState.missingFields.length
+      ? `Profile incomplete: missing ${renderState.missingFields.join(", ")}`
       : "Wurder ID not set";
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const timestamp = new Date().toISOString();
+    console.info("MEMBERS_RENDER_PROFILE", {
+      uid: profile?.uid ?? null,
+      timestamp,
+      pathname,
+      profile,
+    });
+    console.info("MEMBERS_RENDER_COMPLETION", {
+      uid: profile?.uid ?? null,
+      timestamp,
+      pathname,
+      complete: renderState.complete,
+      missingFields: renderState.missingFields,
+    });
+  }, [missingFieldsKey, pathname, profile, renderState.complete, renderState.missingFields]);
 
   return (
     <section className="space-y-6">
