@@ -170,6 +170,51 @@ describe("profile bootstrap + persistence", () => {
     );
   });
 
+
+  it("maps legacy account fields to canonical completion fields for members area gating", async () => {
+    state.docs["users/uid-legacy"] = {
+      uid: "uid-legacy",
+      email: "legacy@example.com",
+      firstName: "",
+      lastName: "",
+      name: "",
+      wurderId: "",
+      avatarUrl: "",
+      onboarding: { profileComplete: false },
+      stats: { gamesPlayed: 1 },
+    };
+    state.docs["accounts/uid-legacy"] = {
+      username: "hsajame3",
+      firstName: "Adam",
+      secondName: "James",
+      photoURL: "https://avatar.test/adam.png",
+    };
+
+    const statusSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const profile = await fetchUserProfile("uid-legacy");
+
+    expect(profile).toMatchObject({
+      uid: "uid-legacy",
+      wurderId: "hsajame3",
+      firstName: "Adam",
+      lastName: "James",
+      avatarUrl: "https://avatar.test/adam.png",
+    });
+
+    expect(statusSpy).toHaveBeenCalledWith(
+      "COMPLETION_CHECK",
+      expect.objectContaining({ complete: true, missingFields: [] })
+    );
+
+    const write = state.setCalls.find((call) => pathFor(call.ref) === "users/uid-legacy");
+    expect(write?.payload).toMatchObject({
+      firstName: "Adam",
+      lastName: "James",
+      wurderId: "hsajame3",
+      avatarUrl: "https://avatar.test/adam.png",
+    });
+  });
   it("partial form save does not clear existing canonical fields", async () => {
     state.docs["users/uid-1"] = {
       uid: "uid-1",
