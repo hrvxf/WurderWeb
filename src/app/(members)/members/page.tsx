@@ -14,8 +14,7 @@ function readName(firstName?: string, lastName?: string, fallback?: string): str
 }
 
 export default function MembersDashboardPage() {
-  const { profile } = useAuth();
-  const stats = profile?.stats ?? {};
+  const { profile, stats } = useAuth();
 
   return (
     <ProfileCompletionGuard>
