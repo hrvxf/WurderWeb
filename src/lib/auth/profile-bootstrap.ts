@@ -106,6 +106,11 @@ function needsAccountFallback(profile: Partial<WurderUserProfile> | null): boole
   return !hasRequiredIdentityFields(profile);
 }
 
+function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolean {
+  if (!profile) return false;
+  return Boolean(cleanText(profile.firstName) || cleanText(profile.lastName) || cleanText(profile.wurderId));
+}
+
 function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
   const source = data as Record<string, unknown>;
   const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
@@ -233,10 +238,15 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
   const userRef = doc(db, "users", uid);
   const userSnapshot = await getDoc(userRef);
   const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  const accountProfile = needsAccountFallback(usersProfile) ? await readAppAccountProfile(uid) : null;
+  const shouldUseAccountFallback = needsAccountFallback(usersProfile);
+  const accountProfile = shouldUseAccountFallback ? await readAppAccountProfile(uid) : null;
   const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
   if (!profile) return null;
+
+  if (shouldUseAccountFallback && hasAnyIdentityValue(usersProfile) && hasRequiredIdentityFields(profile)) {
+    console.warn(`[auth] profile-bootstrap recovered missing canonical identity fields for uid ${uid}`);
+  }
 
   const profileComplete = isProfileComplete(profile);
 
@@ -306,11 +316,11 @@ export async function ensureUserProfile(
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
-  const accountProfile = needsAccountFallback(
-    snapshot.exists() ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null) : null
-  )
-    ? await readAppAccountProfile(uid)
+  const existingUsersProfile = snapshot.exists()
+    ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null)
     : null;
+  const shouldUseAccountFallback = needsAccountFallback(existingUsersProfile);
+  const accountProfile = shouldUseAccountFallback ? await readAppAccountProfile(uid) : null;
 
   const firstName = cleanName(seed.firstName);
   const lastName = cleanName(seed.lastName);
@@ -380,6 +390,10 @@ export async function ensureUserProfile(
 
   const currentProfile = normalizeProfile(uid, snapshot.data(), email);
   const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
+
+  if (shouldUseAccountFallback && hasAnyIdentityValue(currentProfile) && hasRequiredIdentityFields(mergedCurrentProfile)) {
+    console.warn(`[auth] profile-bootstrap backfilled missing canonical identity fields for uid ${uid}`);
+  }
 
   const firestoreUpdates: Record<string, unknown> = {
     uid,
@@ -468,33 +482,53 @@ export async function updateUserProfile(
   const memoryUpdates: Partial<WurderUserProfile> = {};
 
   if ("firstName" in input) {
-    const firstName = cleanName(input.firstName) ?? "";
-    firestoreUpdates.firstName = firstName;
-    memoryUpdates.firstName = firstName;
+    const firstName = cleanName(input.firstName);
+    if (firstName) {
+      firestoreUpdates.firstName = firstName;
+      memoryUpdates.firstName = firstName;
+    } else if (cleanText(currentProfile.firstName)) {
+      console.warn(`[auth] Ignored empty firstName update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("lastName" in input) {
-    const lastName = cleanName(input.lastName) ?? "";
-    firestoreUpdates.lastName = lastName;
-    memoryUpdates.lastName = lastName;
+    const lastName = cleanName(input.lastName);
+    if (lastName) {
+      firestoreUpdates.lastName = lastName;
+      memoryUpdates.lastName = lastName;
+    } else if (cleanText(currentProfile.lastName)) {
+      console.warn(`[auth] Ignored empty lastName update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("name" in input) {
-    const name = cleanName(input.name) ?? "";
-    firestoreUpdates.name = name;
-    memoryUpdates.name = name;
+    const name = cleanName(input.name);
+    if (name) {
+      firestoreUpdates.name = name;
+      memoryUpdates.name = name;
+    } else if (cleanText(currentProfile.name)) {
+      console.warn(`[auth] Ignored empty name update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("avatar" in input) {
-    const avatar = input.avatar ?? null;
-    firestoreUpdates.avatar = avatar;
-    memoryUpdates.avatar = avatar;
+    const avatar = cleanText(input.avatar ?? undefined);
+    if (avatar) {
+      firestoreUpdates.avatar = avatar;
+      memoryUpdates.avatar = avatar;
+    } else if (currentProfile.avatar) {
+      console.warn(`[auth] Ignored empty avatar update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("avatarUrl" in input) {
-    const avatarUrl = input.avatarUrl ?? null;
-    firestoreUpdates.avatarUrl = avatarUrl;
-    memoryUpdates.avatarUrl = avatarUrl;
+    const avatarUrl = cleanText(input.avatarUrl ?? undefined);
+    if (avatarUrl) {
+      firestoreUpdates.avatarUrl = avatarUrl;
+      memoryUpdates.avatarUrl = avatarUrl;
+    } else if (currentProfile.avatarUrl) {
+      console.warn(`[auth] Ignored empty avatarUrl update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("wurderId" in input && typeof input.wurderId === "string") {
