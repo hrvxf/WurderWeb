@@ -243,4 +243,107 @@ describe("profile bootstrap + persistence", () => {
     expect(writesToUsers).toHaveLength(1);
     expect(writesToUsers[0]?.options).toEqual({ merge: true });
   });
+
+  it("canonical accounts profile wins over sparse or stale users/auth payloads on reload/login", async () => {
+    state.docs["users/uid-1"] = {
+      uid: "uid-1",
+      email: "user@example.com",
+      firstName: "",
+      lastName: "",
+      name: "",
+      wurderId: "",
+      avatarUrl: "",
+      onboarding: { profileComplete: false },
+      stats: { gamesPlayed: 2 },
+    };
+    state.docs["accounts/uid-1"] = {
+      firstName: "Alex",
+      lastName: "Mason",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+      avatarUrl: "https://avatar.test/a.png",
+      name: "Alex Mason",
+    };
+
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
+
+    const result = await ensureUserProfile(
+      {
+        uid: "uid-1",
+        email: "user@example.com",
+        displayName: "",
+        photoURL: null,
+      } as never,
+      {
+        firstName: "",
+        lastName: "",
+        name: "",
+        avatar: null,
+      }
+    );
+
+    expect(result).toMatchObject({
+      firstName: "Alex",
+      lastName: "Mason",
+      wurderId: "Alex_1",
+      avatarUrl: "https://avatar.test/a.png",
+      onboarding: { profileComplete: true },
+    });
+
+    const write = state.setCalls.find((call) => pathFor(call.ref) === "users/uid-1");
+    expect(write?.payload).toMatchObject({
+      firstName: "Alex",
+      lastName: "Mason",
+      wurderId: "Alex_1",
+      avatarUrl: "https://avatar.test/a.png",
+    });
+    expect(infoSpy).toHaveBeenCalledWith(
+      "COMPLETION_CHECK",
+      expect.objectContaining({ complete: true, missingFields: [] })
+    );
+  });
+
+  it("does not downgrade canonical account identity during provider-link style bootstrap", async () => {
+    state.docs["users/uid-2"] = {
+      uid: "uid-2",
+      email: "user2@example.com",
+      firstName: "Alex",
+      lastName: "Mason",
+      name: "Alex Mason",
+      wurderId: "Alex_1",
+      wurderIdLower: "alex_1",
+      avatarUrl: "https://avatar.test/a.png",
+      onboarding: { profileComplete: true },
+      stats: { gamesPlayed: 11 },
+    };
+    state.docs["accounts/uid-2"] = {
+      firstName: "Alex",
+      secondName: "Mason",
+      username: "Alex_1",
+      usernameLower: "alex_1",
+      photoURL: "https://avatar.test/a.png",
+    };
+
+    const result = await ensureUserProfile(
+      {
+        uid: "uid-2",
+        email: "user2@example.com",
+        displayName: "",
+        photoURL: "",
+      } as never,
+      {
+        name: "",
+        avatar: "",
+      }
+    );
+
+    expect(result).toMatchObject({
+      firstName: "Alex",
+      lastName: "Mason",
+      name: "Alex Mason",
+      wurderId: "Alex_1",
+      avatarUrl: "https://avatar.test/a.png",
+      onboarding: { profileComplete: true },
+    });
+  });
 });

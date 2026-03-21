@@ -16,7 +16,7 @@ import {
   normalizePersonName,
   normalizeWurderId,
 } from "@/lib/auth/auth-helpers";
-import { isProfileComplete } from "@/lib/auth/profile-completion";
+import { getProfileCompletionStatus, isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
 
 type EnsureProfileInput = {
@@ -101,11 +101,6 @@ function hasRequiredIdentityFields(profile: Partial<WurderUserProfile> | null): 
   return Boolean(cleanText(profile.firstName) && cleanText(profile.lastName) && cleanText(profile.wurderId));
 }
 
-function needsAccountFallback(profile: Partial<WurderUserProfile> | null): boolean {
-  if (!profile) return true;
-  return !hasRequiredIdentityFields(profile);
-}
-
 function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolean {
   if (!profile) return false;
   return Boolean(cleanText(profile.firstName) || cleanText(profile.lastName) || cleanText(profile.wurderId));
@@ -114,16 +109,27 @@ function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolea
 function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
   const source = data as Record<string, unknown>;
   const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
-  const lastName = cleanName(typeof source.secondName === "string" ? source.secondName : undefined);
-  const wurderId = cleanText(typeof source.username === "string" ? source.username : undefined);
-  const avatarUrl = cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined) ?? null;
+  const lastName =
+    cleanName(typeof source.lastName === "string" ? source.lastName : undefined) ??
+    cleanName(typeof source.secondName === "string" ? source.secondName : undefined);
+  const wurderId =
+    cleanText(typeof source.wurderId === "string" ? source.wurderId : undefined) ??
+    cleanText(typeof source.username === "string" ? source.username : undefined);
+  const wurderIdLower =
+    cleanText(typeof source.wurderIdLower === "string" ? source.wurderIdLower : undefined) ??
+    cleanText(typeof source.usernameLower === "string" ? source.usernameLower : undefined);
+  const avatarUrl =
+    cleanText(typeof source.avatarUrl === "string" ? source.avatarUrl : undefined) ??
+    cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined) ??
+    cleanText(typeof source.avatar === "string" ? source.avatar : undefined) ??
+    null;
 
   return {
     firstName,
     lastName,
     name: cleanName(typeof source.name === "string" ? source.name : undefined) ?? cleanName(buildName(firstName, lastName)),
     wurderId,
-    wurderIdLower: wurderId ? normalizeWurderId(wurderId) : undefined,
+    wurderIdLower: wurderIdLower ?? (wurderId ? normalizeWurderId(wurderId) : undefined),
     avatar: avatarUrl,
     avatarUrl,
   };
@@ -151,8 +157,8 @@ function mergeProfiles(
   if (!userProfile && !accountProfile) return null;
 
   const merged = {
-    ...(accountProfile ?? {}),
     ...(userProfile ?? {}),
+    ...(accountProfile ?? {}),
     uid,
     email: userProfile?.email ?? null,
     stats: normalizeStats(userProfile?.stats),
@@ -201,24 +207,24 @@ async function backfillUsersFromMergedProfile(
     firestoreUpdates.activeGame = mergedProfile.activeGame ?? null;
   }
 
-  if (!cleanText(usersProfile?.firstName) && cleanText(mergedProfile.firstName)) {
+  if (cleanText(mergedProfile.firstName) && cleanText(usersProfile?.firstName) !== cleanText(mergedProfile.firstName)) {
     firestoreUpdates.firstName = mergedProfile.firstName;
   }
-  if (!cleanText(usersProfile?.lastName) && cleanText(mergedProfile.lastName)) {
+  if (cleanText(mergedProfile.lastName) && cleanText(usersProfile?.lastName) !== cleanText(mergedProfile.lastName)) {
     firestoreUpdates.lastName = mergedProfile.lastName;
   }
-  if (!cleanText(usersProfile?.name) && cleanText(mergedProfile.name)) {
+  if (cleanText(mergedProfile.name) && cleanText(usersProfile?.name) !== cleanText(mergedProfile.name)) {
     firestoreUpdates.name = mergedProfile.name;
   }
-  if (!cleanText(usersProfile?.wurderId) && cleanText(mergedProfile.wurderId)) {
+  if (cleanText(mergedProfile.wurderId) && cleanText(usersProfile?.wurderId) !== cleanText(mergedProfile.wurderId)) {
     firestoreUpdates.wurderId = mergedProfile.wurderId;
     firestoreUpdates.wurderIdLower =
       cleanText(mergedProfile.wurderIdLower) ?? normalizeWurderId(mergedProfile.wurderId ?? "");
   }
-  if (!usersProfile?.avatarUrl && mergedProfile.avatarUrl) {
+  if (mergedProfile.avatarUrl && usersProfile?.avatarUrl !== mergedProfile.avatarUrl) {
     firestoreUpdates.avatarUrl = mergedProfile.avatarUrl;
   }
-  if (!usersProfile?.avatar && mergedProfile.avatar) {
+  if (mergedProfile.avatar && usersProfile?.avatar !== mergedProfile.avatar) {
     firestoreUpdates.avatar = mergedProfile.avatar;
   }
 
@@ -238,14 +244,22 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
   const userRef = doc(db, "users", uid);
   const userSnapshot = await getDoc(userRef);
   const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  const shouldUseAccountFallback = needsAccountFallback(usersProfile);
-  const accountProfile = shouldUseAccountFallback ? await readAppAccountProfile(uid) : null;
+  const accountProfile = await readAppAccountProfile(uid);
   const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
   if (!profile) return null;
 
-  if (shouldUseAccountFallback && hasAnyIdentityValue(usersProfile) && hasRequiredIdentityFields(profile)) {
+  if (hasAnyIdentityValue(usersProfile) && !hasRequiredIdentityFields(usersProfile) && hasRequiredIdentityFields(profile)) {
     console.warn(`[auth] profile-bootstrap recovered missing canonical identity fields for uid ${uid}`);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("PROFILE_HYDRATE_PAYLOAD", { uid, usersProfile, accountProfile });
+    console.info("RESOLVED_PROFILE", { uid, resolvedProfile: profile });
+    console.info("COMPLETION_CHECK", {
+      uid,
+      ...getProfileCompletionStatus(profile),
+    });
   }
 
   const profileComplete = isProfileComplete(profile);
@@ -316,11 +330,7 @@ export async function ensureUserProfile(
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
-  const existingUsersProfile = snapshot.exists()
-    ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null)
-    : null;
-  const shouldUseAccountFallback = needsAccountFallback(existingUsersProfile);
-  const accountProfile = shouldUseAccountFallback ? await readAppAccountProfile(uid) : null;
+  const accountProfile = await readAppAccountProfile(uid);
 
   const firstName = cleanName(seed.firstName);
   const lastName = cleanName(seed.lastName);
@@ -391,8 +401,30 @@ export async function ensureUserProfile(
   const currentProfile = normalizeProfile(uid, snapshot.data(), email);
   const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
 
-  if (shouldUseAccountFallback && hasAnyIdentityValue(currentProfile) && hasRequiredIdentityFields(mergedCurrentProfile)) {
+  if (
+    hasAnyIdentityValue(currentProfile) &&
+    !hasRequiredIdentityFields(currentProfile) &&
+    hasRequiredIdentityFields(mergedCurrentProfile)
+  ) {
     console.warn(`[auth] profile-bootstrap backfilled missing canonical identity fields for uid ${uid}`);
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("PROFILE_HYDRATE_PAYLOAD", {
+      uid,
+      usersProfile: currentProfile,
+      accountProfile,
+      authSession: {
+        displayName: user.displayName ?? null,
+        email: user.email ?? null,
+        photoURL: user.photoURL ?? null,
+      },
+    });
+    console.info("RESOLVED_PROFILE", { uid, resolvedProfile: mergedCurrentProfile });
+    console.info("COMPLETION_CHECK", {
+      uid,
+      ...getProfileCompletionStatus(mergedCurrentProfile),
+    });
   }
 
   const firestoreUpdates: Record<string, unknown> = {
@@ -406,32 +438,32 @@ export async function ensureUserProfile(
     memoryUpdates.email = email;
   }
 
-  if (!cleanText(currentProfile.name) && cleanText(mergedCurrentProfile.name)) {
+  if (cleanText(mergedCurrentProfile.name) && cleanText(currentProfile.name) !== cleanText(mergedCurrentProfile.name)) {
     firestoreUpdates.name = mergedCurrentProfile.name;
     memoryUpdates.name = mergedCurrentProfile.name;
   }
 
-  if (!cleanText(currentProfile.firstName) && cleanText(mergedCurrentProfile.firstName)) {
+  if (cleanText(mergedCurrentProfile.firstName) && cleanText(currentProfile.firstName) !== cleanText(mergedCurrentProfile.firstName)) {
     firestoreUpdates.firstName = mergedCurrentProfile.firstName;
     memoryUpdates.firstName = mergedCurrentProfile.firstName;
   }
 
-  if (!cleanText(currentProfile.lastName) && cleanText(mergedCurrentProfile.lastName)) {
+  if (cleanText(mergedCurrentProfile.lastName) && cleanText(currentProfile.lastName) !== cleanText(mergedCurrentProfile.lastName)) {
     firestoreUpdates.lastName = mergedCurrentProfile.lastName;
     memoryUpdates.lastName = mergedCurrentProfile.lastName;
   }
 
-  if (!currentProfile.avatar && mergedCurrentProfile.avatar) {
+  if (mergedCurrentProfile.avatar && currentProfile.avatar !== mergedCurrentProfile.avatar) {
     firestoreUpdates.avatar = mergedCurrentProfile.avatar;
     memoryUpdates.avatar = mergedCurrentProfile.avatar;
   }
 
-  if (!currentProfile.avatarUrl && mergedCurrentProfile.avatarUrl) {
+  if (mergedCurrentProfile.avatarUrl && currentProfile.avatarUrl !== mergedCurrentProfile.avatarUrl) {
     firestoreUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
     memoryUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
   }
 
-  if (!cleanText(currentProfile.wurderId) && cleanText(mergedCurrentProfile.wurderId)) {
+  if (cleanText(mergedCurrentProfile.wurderId) && cleanText(currentProfile.wurderId) !== cleanText(mergedCurrentProfile.wurderId)) {
     firestoreUpdates.wurderId = mergedCurrentProfile.wurderId;
     firestoreUpdates.wurderIdLower =
       cleanText(mergedCurrentProfile.wurderIdLower) ??
