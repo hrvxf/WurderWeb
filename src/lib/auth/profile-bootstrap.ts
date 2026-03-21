@@ -642,7 +642,15 @@ export async function fetchUserProfile(uid: string): Promise<WurderUserProfile |
     usersProfile = null;
   }
   if (typeof userSnapshot !== "undefined") {
-    usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
+    if (userSnapshot.exists()) {
+      const userData = userSnapshot.data();
+      usersProfile =
+        userData && typeof userData === "object"
+          ? normalizeProfile(uid, userData as DocumentData, null)
+          : null;
+    } else {
+      usersProfile = null;
+    }
   }
   const profile = mergeProfiles(uid, usersProfile, accountProfile);
 
