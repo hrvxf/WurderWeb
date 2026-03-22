@@ -34,7 +34,30 @@ import type { WurderUserProfile } from "@/lib/types/user";
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 async function bootstrapProfile(nextUser: User): Promise<WurderUserProfile> {
-  return ensureUserProfile(nextUser);
+  const ensured = await ensureUserProfile(nextUser);
+  const fetched = await fetchUserProfile(nextUser.uid);
+  return fetched ?? ensured;
+}
+
+async function syncServerSessionCookie(nextUser: User | null): Promise<void> {
+  try {
+    if (!nextUser) {
+      await fetch("/api/auth/session", { method: "DELETE" });
+      return;
+    }
+
+    const token = await nextUser.getIdToken();
+    await fetch("/api/auth/session", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+      },
+    });
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[auth] Failed to sync server session cookie", error);
+    }
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -113,6 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     await signOut(auth);
+    await syncServerSessionCookie(null);
     clearMemberCaches();
     setUser(null);
     setProfile(null);
@@ -154,12 +178,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(nextUser);
 
         if (!nextUser) {
+          void syncServerSessionCookie(null);
           setProfile(null);
           setProfileLoading(false);
           setLoading(false);
           return;
         }
 
+        void syncServerSessionCookie(nextUser);
         setProfileLoading(true);
         void bootstrapProfile(nextUser)
           .then((nextProfile) => {

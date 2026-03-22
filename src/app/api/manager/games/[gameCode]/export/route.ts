@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { resolveDefeatsFromAnalyticsRow } from "@/lib/analytics/player-metrics";
 import { adminDb } from "@/lib/firebase/admin";
 import {
   assertManagerAccessForGame,
@@ -113,7 +114,7 @@ function normalizePlayers(value: unknown): ManagerPlayer[] {
       playerId: asString(row.playerId) || `row-${index}`,
       displayName: asString(row.displayName) || "Unknown",
       kills: asNumber(row.kills),
-      deaths: asNumber(row.deaths),
+      deaths: resolveDefeatsFromAnalyticsRow(row),
       kdRatio: asNumber(row.kdRatio),
       accuracyPct: asNumber(row.accuracyPct),
       sessionCount: asNumber(row.sessionCount),
@@ -303,7 +304,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
   <h2>Coaching / Risk Indicator</h2>
   <p>${escapeHtml(
     coachingRisk
-      ? `${coachingRisk.displayName} (${coachingRisk.deaths} deaths, ${coachingRisk.kdRatio.toFixed(2)} K/D)`
+      ? `${coachingRisk.displayName} (${coachingRisk.deaths} deaths/caught, ${coachingRisk.kdRatio.toFixed(2)} K/D)`
       : "No coaching risk indicator available."
   )}</p>
   <h2>Key Insights</h2>
@@ -316,7 +317,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
   )}</p>
   <h2>Player Performance</h2>
   <table>
-    <thead><tr><th>Player</th><th>Kills</th><th>Deaths</th><th>K/D</th><th>Accuracy %</th><th>Sessions</th></tr></thead>
+    <thead><tr><th>Player</th><th>Kills</th><th>Deaths (Caught)</th><th>K/D</th><th>Accuracy %</th><th>Sessions</th></tr></thead>
     <tbody>
       ${players
         .map(
@@ -370,7 +371,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       csvLines.push(csvRow(["Insights", insight.label, insight.value]));
     }
     csvLines.push("");
-    csvLines.push(csvRow(["Player Performance", "Player ID", "Display Name", "Kills", "Deaths", "K/D", "Accuracy %", "Sessions"]));
+    csvLines.push(csvRow(["Player Performance", "Player ID", "Display Name", "Kills", "Deaths (Caught)", "K/D", "Accuracy %", "Sessions"]));
     for (const player of players) {
       csvLines.push(
         csvRow([

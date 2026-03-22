@@ -8,6 +8,8 @@ export const AUTH_ROUTES = {
   members: "/members",
   membersProfile: "/members/profile",
   membersStats: "/members/stats",
+  membersHost: "/members/host",
+  membersSettings: "/members/settings",
 } as const;
 
 export function getPostAuthRoute(profile: WurderUserProfile | null): string {

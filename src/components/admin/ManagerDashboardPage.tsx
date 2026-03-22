@@ -14,6 +14,7 @@ import type {
   ManagerPlayerPerformance,
   ManagerSessionSummary,
 } from "@/components/admin/types";
+import { resolveDefeatsFromAnalyticsRow } from "@/lib/analytics/player-metrics";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
 
@@ -103,7 +104,7 @@ function normalizePlayers(value: unknown): ManagerPlayerPerformance[] {
       playerId: parseString(player.playerId) || `row-${index}`,
       displayName: parseString(player.displayName) || "Unknown",
       kills: parseNumber(player.kills),
-      deaths: parseNumber(player.deaths),
+      deaths: resolveDefeatsFromAnalyticsRow(player),
       kdRatio: parseNumber(player.kdRatio),
       accuracyPct: parseNumber(player.accuracyPct),
       sessionCount: parseNumber(player.sessionCount),
@@ -158,6 +159,11 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   } | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "downloading">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [endGameStatus, setEndGameStatus] = useState<"idle" | "ending" | "done" | "error">("idle");
+  const [endGameMessage, setEndGameMessage] = useState<string | null>(null);
+  const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
+  const [endGameConfirmText, setEndGameConfirmText] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
   const { user } = useAuth();
   const guard = useManagerRouteGuard(gameCode);
@@ -175,6 +181,8 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       setStatusMessage(null);
       setEntitlements(null);
       setExportMessage(null);
+      setEndGameStatus("idle");
+      setEndGameMessage(null);
       setBranding(null);
       setAnalytics(null);
       return;
@@ -282,9 +290,13 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     return () => {
       isCancelled = true;
     };
-  }, [gameCode, guard.status, user]);
+  }, [gameCode, guard.status, refreshKey, user]);
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
+  const knownEnded =
+    Boolean(analytics?.overview.endedAt) ||
+    (analytics?.overview.status ?? "").trim().toLowerCase() === "ended";
+  const canSubmitEndGame = endGameConfirmText.trim().toUpperCase() === "END";
 
   const downloadExport = async (format: "csv" | "pdf") => {
     if (!user) {
@@ -342,6 +354,58 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     }
   };
 
+  const endGameManually = async () => {
+    if (!user) {
+      setEndGameStatus("error");
+      setEndGameMessage("Sign in before ending this game.");
+      return;
+    }
+
+    const normalizedCode = gameCode.trim();
+    if (!normalizedCode) {
+      setEndGameStatus("error");
+      setEndGameMessage("Missing game code.");
+      return;
+    }
+
+    setEndGameStatus("ending");
+    setEndGameMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/manager/games/${encodeURIComponent(normalizedCode)}/end`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        message?: unknown;
+        alreadyEnded?: unknown;
+      };
+
+      if (!response.ok) {
+        setEndGameStatus("error");
+        setEndGameMessage(parseString(payload.message) || "Unable to end this game right now.");
+        return;
+      }
+
+      setEndGameStatus("done");
+      setEndGameMessage(
+        payload.alreadyEnded === true ? "Game was already ended." : "Game ended successfully."
+      );
+      setEndGameConfirmOpen(false);
+      setEndGameConfirmText("");
+      setRefreshKey((prev) => prev + 1);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[manager] End game failed", { gameCode: normalizedCode, error });
+      }
+      setEndGameStatus("error");
+      setEndGameMessage("Unable to end this game right now.");
+    }
+  };
+
   return (
     <div className="space-y-6 p-4 md:p-6">
       <header
@@ -362,9 +426,68 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               <p className="text-sm text-slate-600">Game code: {gameCode || "--"}</p>
             </div>
           </div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Updated: {updatedAtLabel}</p>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Updated: {updatedAtLabel}</p>
+            {guard.status === "allowed" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setEndGameConfirmText("");
+                  setEndGameConfirmOpen(true);
+                }}
+                disabled={endGameStatus === "ending" || knownEnded}
+                className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {knownEnded ? "Game ended" : endGameStatus === "ending" ? "Ending..." : "End game"}
+              </button>
+            ) : null}
+          </div>
         </div>
+        {endGameMessage ? (
+          <p className={`mt-3 text-sm ${endGameStatus === "error" ? "text-red-700" : "text-emerald-700"}`}>
+            {endGameMessage}
+          </p>
+        ) : null}
       </header>
+
+      {endGameConfirmOpen ? (
+        <section className="rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
+          <h2 className="text-sm font-semibold text-red-900">Confirm End Game</h2>
+          <p className="mt-1 text-sm text-red-800">
+            This will end the current game session. Type <strong>END</strong> to confirm.
+          </p>
+          <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-red-900">
+            Confirmation
+            <input
+              value={endGameConfirmText}
+              onChange={(event) => setEndGameConfirmText(event.target.value)}
+              className="mt-1 w-full rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-slate-900"
+              placeholder="Type END"
+              autoCapitalize="none"
+            />
+          </label>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setEndGameConfirmOpen(false);
+                setEndGameConfirmText("");
+              }}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void endGameManually()}
+              disabled={!canSubmitEndGame || endGameStatus === "ending"}
+              className="rounded-md border border-red-300 bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {endGameStatus === "ending" ? "Ending..." : "Confirm end game"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {guard.status === "allowed" && status === "ready" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

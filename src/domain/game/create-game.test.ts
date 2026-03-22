@@ -31,4 +31,19 @@ describe("game create helpers", () => {
     expect(gameDoc.startedBy).toBeNull();
     expect(gameDoc.winnerPlayerId).toBeNull();
   });
+
+  it("supports host-only sessions with no initial host player", () => {
+    const gameDoc = buildInitialGameDoc({
+      gameCode: "ABC123",
+      hostPlayerId: null,
+      createdByAccountId: "uid-1",
+      createdAt: "timestamp" as never,
+      wordGroupId: "classic-default",
+      lastActionAt: 123456789,
+      initialAliveCount: 0,
+    });
+
+    expect(gameDoc.hostPlayerId).toBeNull();
+    expect(gameDoc.aliveCount).toBe(0);
+  });
 });

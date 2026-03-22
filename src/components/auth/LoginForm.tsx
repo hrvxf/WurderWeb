@@ -6,7 +6,7 @@ import { FormEvent, useState } from "react";
 
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { mapGoogleError, mapLoginError } from "@/lib/auth/auth-helpers";
+import { mapGoogleError, mapLoginError, toAuthErrorCode } from "@/lib/auth/auth-helpers";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 
 type LoginFormProps = {
@@ -37,7 +37,10 @@ export default function LoginForm({ nextPath }: LoginFormProps) {
       await loginWithEmailOrWurderId(identifier, password);
       router.replace(nextPath ?? AUTH_ROUTES.members);
     } catch (submitError) {
-      if (submitError instanceof Error && submitError.message.trim()) {
+      const firebaseCode = toAuthErrorCode(submitError);
+      if (firebaseCode) {
+        setError(mapLoginError(submitError));
+      } else if (submitError instanceof Error && submitError.message.trim()) {
         setError(submitError.message);
       } else {
         setError(mapLoginError(submitError));

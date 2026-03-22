@@ -14,13 +14,14 @@ type LoginPageClientProps = {
 export default function LoginPageClient({ nextParam }: LoginPageClientProps) {
   const router = useRouter();
   const { isAuthenticated, loading, profile } = useAuth();
+  const resolvedNextPath = nextParam ? toNextPath(nextParam) : undefined;
 
   useEffect(() => {
     if (loading) return;
     if (isAuthenticated) {
-      router.replace(getPostAuthRoute(profile));
+      router.replace(resolvedNextPath ?? getPostAuthRoute(profile));
     }
-  }, [isAuthenticated, loading, profile, router]);
+  }, [isAuthenticated, loading, profile, resolvedNextPath, router]);
 
   if (loading) {
     return (
@@ -34,7 +35,7 @@ export default function LoginPageClient({ nextParam }: LoginPageClientProps) {
 
   return (
     <section className="py-2">
-      <LoginForm nextPath={nextParam ? toNextPath(nextParam) : undefined} />
+      <LoginForm nextPath={resolvedNextPath} />
     </section>
   );
 }

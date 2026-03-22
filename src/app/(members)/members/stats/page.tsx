@@ -1,15 +1,11 @@
-"use client";
+import MembersStatsClient from "@/components/members/MembersStatsClient";
+import { requireMemberAccess } from "@/lib/auth/member-server-guard";
+import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 
-import ProfileCompletionGuard from "@/components/auth/ProfileCompletionGuard";
-import StatsPanel from "@/components/members/StatsPanel";
-import { useAuth } from "@/lib/auth/AuthProvider";
-
-export default function MembersStatsPage() {
-  const { profile } = useAuth();
-
-  return (
-    <ProfileCompletionGuard>
-      <StatsPanel profile={profile} />
-    </ProfileCompletionGuard>
-  );
+export default async function MembersStatsPage() {
+  await requireMemberAccess({
+    nextPath: AUTH_ROUTES.membersStats,
+    requireCompleteProfile: true,
+  });
+  return <MembersStatsClient />;
 }

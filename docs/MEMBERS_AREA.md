@@ -48,3 +48,11 @@ NEXT_PUBLIC_APP_URL=
 5. Unauthenticated users redirect to `/login`.
 6. Authenticated users with incomplete profile redirect to `/members/profile`.
 7. Logout signs out, clears local member/game cache keys, then redirects to `/login`.
+
+## Data Source Contract (Regression Guardrail)
+
+- Identity/profile fields for Members Area render from `accounts/{uid}`.
+- Gameplay aggregate stats render from `profiles/{uid}`.
+- `users/{uid}` is not the source of truth for gameplay aggregates in Members Area.
+- During bootstrap/backfill, do not copy aggregate stats into `users/{uid}`.
+- CI guardrail: `npm run test:contract` (member data contract tests) must pass before full unit tests.

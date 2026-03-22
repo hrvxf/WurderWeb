@@ -1,12 +1,16 @@
 import type { ReactNode } from "react";
 
-import AuthGate from "@/components/auth/AuthGate";
 import MemberShell from "@/components/members/MemberShell";
+import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
+import { requireMemberAccess } from "@/lib/auth/member-server-guard";
+import { readMemberShellIdentity } from "@/lib/auth/member-server-profile";
 
-export default function MembersLayout({ children }: { children: ReactNode }) {
+export default async function MembersLayout({ children }: { children: ReactNode }) {
+  const { uid } = await requireMemberAccess({ nextPath: AUTH_ROUTES.members });
+  const identity = await readMemberShellIdentity(uid);
   return (
-    <AuthGate>
-      <MemberShell>{children}</MemberShell>
-    </AuthGate>
+    <MemberShell initialDisplayName={identity.displayName} initialWurderId={identity.wurderId}>
+      {children}
+    </MemberShell>
   );
 }

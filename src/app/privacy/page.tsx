@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <article className="glass-surface rounded-3xl px-6 py-8 sm:px-10">
+    <article className="mt-2 border-t border-white/10 pt-7 sm:pt-8">
       <PrivacyContent />
     </article>
   );

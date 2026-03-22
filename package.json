@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
+    "test:contract": "vitest run src/lib/auth/member-data.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {

@@ -43,12 +43,17 @@ export type UsernameLookup = {
 };
 
 export const DEFAULT_PROFILE_STATS: Required<
-  Pick<WurderUserStats, "gamesPlayed" | "kills" | "deaths" | "points" | "streak" | "mvpAwards">
+  Pick<
+    WurderUserStats,
+    "gamesPlayed" | "kills" | "deaths" | "wins" | "streak" | "points" | "pointsLifetime" | "mvpAwards"
+  >
 > = {
   gamesPlayed: 0,
   kills: 0,
   deaths: 0,
+  wins: 0,
   points: 0,
+  pointsLifetime: 0,
   streak: 0,
   mvpAwards: 0,
 };

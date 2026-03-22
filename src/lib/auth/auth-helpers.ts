@@ -53,6 +53,11 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+export function isValidEmail(value: string): boolean {
+  const normalized = normalizeEmail(value);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+}
+
 export function normalizeWurderId(value: string): string {
   return value.trim().toLowerCase();
 }

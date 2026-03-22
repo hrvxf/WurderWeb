@@ -16,8 +16,11 @@ import {
   normalizePersonName,
   normalizeWurderId,
 } from "@/lib/auth/auth-helpers";
+import { resolveLifetimeDefeatsFromProfile } from "@/lib/analytics/player-metrics";
 import { isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
+
+type NormalizedUserStats = typeof DEFAULT_PROFILE_STATS;
 
 type EnsureProfileInput = {
   firstName?: string;
@@ -35,6 +38,30 @@ type AppAccountProfile = {
   wurderIdLower?: string;
   avatar?: string | null;
   avatarUrl?: string | null;
+};
+
+type MemberDataWarningCode =
+  | "accounts-read-failed"
+  | "accounts-missing"
+  | "profiles-read-failed"
+  | "profiles-missing"
+  | "profiles-stats-fallback";
+
+export type MemberDataWarning = {
+  code: MemberDataWarningCode;
+  message: string;
+};
+
+export type MemberDataSources = {
+  profile: "accounts/{uid}" | "users/{uid}-fallback" | "fallback-none";
+  stats: "profiles/{uid}" | "fallback-none";
+};
+
+export type MemberDataSnapshot = {
+  profile: WurderUserProfile | null;
+  stats: NormalizedUserStats;
+  warnings: MemberDataWarning[];
+  sources: MemberDataSources;
 };
 
 export type UpdateUserProfileInput = {
@@ -65,7 +92,7 @@ function cleanName(value?: string | null): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function normalizeStats(stats: unknown): WurderUserProfile["stats"] {
+function normalizeStats(stats: unknown): NormalizedUserStats {
   if (!stats || typeof stats !== "object") {
     return { ...DEFAULT_PROFILE_STATS };
   }
@@ -73,6 +100,33 @@ function normalizeStats(stats: unknown): WurderUserProfile["stats"] {
     ...DEFAULT_PROFILE_STATS,
     ...(stats as Record<string, number>),
   };
+}
+
+function mapProfilesStats(data: DocumentData): NormalizedUserStats {
+  const source = data as Record<string, unknown>;
+  const gamesPlayed = typeof source.gamesPlayed === "number" ? source.gamesPlayed : undefined;
+  const kills = typeof source.lifetimeKills === "number" ? source.lifetimeKills : undefined;
+  const wins = typeof source.lifetimeWins === "number" ? source.lifetimeWins : undefined;
+  const streak = typeof source.bestStreak === "number" ? source.bestStreak : undefined;
+  const lifetimePoints = typeof source.lifetimePoints === "number" ? source.lifetimePoints : undefined;
+  const defeats = resolveLifetimeDefeatsFromProfile(source);
+  const mvpAwards =
+    typeof source.mvpAwards === "number"
+      ? source.mvpAwards
+      : typeof source.lifetimeMvpAwards === "number"
+        ? source.lifetimeMvpAwards
+        : undefined;
+
+  return normalizeStats(withoutUndefined({
+    gamesPlayed,
+    kills,
+    wins,
+    deaths: defeats,
+    streak,
+    points: lifetimePoints,
+    pointsLifetime: lifetimePoints,
+    mvpAwards,
+  }));
 }
 
 function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -125,16 +179,59 @@ function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
 }
 
 async function readAppAccountProfile(uid: string): Promise<AppAccountProfile | null> {
+  const accountSnapshot = await getDoc(doc(db, "accounts", uid));
+  return accountSnapshot.exists() ? normalizeAppAccountProfile(accountSnapshot.data()) : null;
+}
+
+async function readProfileStats(uid: string): Promise<{
+  stats: NormalizedUserStats;
+  source: MemberDataSources["stats"];
+  warnings: MemberDataWarning[];
+}> {
+  // Guardrail: gameplay aggregates are sourced from profiles/{uid} only.
+  // Do not read gameplay stats from accounts/{uid} or write them into users/{uid} here.
   try {
-    const accountRef = doc(db, "accounts", uid);
-    const snapshot = await getDoc(accountRef);
-    if (!snapshot.exists()) return null;
-    return normalizeAppAccountProfile(snapshot.data());
+    const snapshot = await getDoc(doc(db, "profiles", uid));
+    if (!snapshot.exists()) {
+      return {
+        stats: { ...DEFAULT_PROFILE_STATS },
+        source: "fallback-none",
+        warnings: [
+          {
+            code: "profiles-missing",
+            message: `No profiles/${uid} stats document found. Falling back to zero stats.`,
+          },
+          {
+            code: "profiles-stats-fallback",
+            message: "Stats fallback to defaults because profiles/{uid} is missing.",
+          },
+        ],
+      };
+    }
+
+    return {
+      stats: mapProfilesStats(snapshot.data()),
+      source: "profiles/{uid}",
+      warnings: [],
+    };
   } catch (error) {
     if (process.env.NODE_ENV !== "production") {
-      console.warn(`[auth] Failed to read fallback account profile for uid ${uid}`, error);
+      console.warn(`[auth] Failed to read profile stats from profiles/${uid}`, error);
     }
-    return null;
+    return {
+      stats: { ...DEFAULT_PROFILE_STATS },
+      source: "fallback-none",
+      warnings: [
+        {
+          code: "profiles-read-failed",
+          message: `profiles/${uid} could not be read. Falling back to zero stats.`,
+        },
+        {
+          code: "profiles-stats-fallback",
+          message: "Stats fallback to defaults because profiles/{uid} read failed.",
+        },
+      ],
+    };
   }
 }
 
@@ -146,8 +243,8 @@ function mergeProfiles(
   if (!userProfile && !accountProfile) return null;
 
   const merged = {
-    ...(accountProfile ?? {}),
     ...(userProfile ?? {}),
+    ...(accountProfile ?? {}),
     uid,
     email: userProfile?.email ?? null,
     stats: normalizeStats(userProfile?.stats),
@@ -192,7 +289,6 @@ async function backfillUsersFromMergedProfile(
 
   if (!usersProfile) {
     firestoreUpdates.email = mergedProfile.email ?? null;
-    firestoreUpdates.stats = normalizeStats(mergedProfile.stats);
     firestoreUpdates.activeGame = mergedProfile.activeGame ?? null;
   }
 
@@ -229,29 +325,96 @@ async function backfillUsersFromMergedProfile(
   await setDoc(userRef, firestoreUpdates, { merge: true });
 }
 
-export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
-  const userRef = doc(db, "users", uid);
-  const userSnapshot = await getDoc(userRef);
-  const usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  const accountProfile = needsAccountFallback(usersProfile) ? await readAppAccountProfile(uid) : null;
-  const profile = mergeProfiles(uid, usersProfile, accountProfile);
+export async function fetchMemberData(uid: string): Promise<MemberDataSnapshot> {
+  const warnings: MemberDataWarning[] = [];
+  let usersProfile: WurderUserProfile | null = null;
 
-  if (!profile) return null;
+  try {
+    const userSnapshot = await getDoc(doc(db, "users", uid));
+    usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
+  } catch (error) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[auth] Failed to read users/${uid} profile`, error);
+    }
+  }
 
+  const profileStatsResult = await readProfileStats(uid);
+  warnings.push(...profileStatsResult.warnings);
+
+  let accountProfile: AppAccountProfile | null = null;
+  let profileSource: MemberDataSources["profile"] = "fallback-none";
+  try {
+    accountProfile = await readAppAccountProfile(uid);
+    if (accountProfile) {
+      profileSource = "accounts/{uid}";
+    } else if (usersProfile) {
+      profileSource = "users/{uid}-fallback";
+      warnings.push({
+        code: "accounts-missing",
+        message: `No accounts/${uid} identity document found. Falling back to users/${uid}.`,
+      });
+    }
+  } catch (error) {
+    profileSource = usersProfile ? "users/{uid}-fallback" : "fallback-none";
+    warnings.push({
+      code: "accounts-read-failed",
+      message: `accounts/${uid} could not be read. Falling back to users/${uid}.`,
+    });
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(`[auth] Failed to read identity from accounts/${uid}`, error);
+    }
+  }
+
+  const mergedProfile = mergeProfiles(uid, usersProfile, accountProfile);
+  if (!mergedProfile) {
+    return {
+      profile: null,
+      stats: profileStatsResult.stats,
+      warnings,
+      sources: {
+        profile: "fallback-none",
+        stats: profileStatsResult.source,
+      },
+    };
+  }
+
+  const profile: WurderUserProfile = {
+    ...mergedProfile,
+    stats: profileStatsResult.stats,
+  };
   const profileComplete = isProfileComplete(profile);
 
   await backfillUsersFromMergedProfile(uid, usersProfile, profile, accountProfile);
 
   return {
-    ...profile,
-    onboarding: {
-      ...(profile.onboarding ?? {}),
-      profileComplete:
-        typeof profile.onboarding?.profileComplete === "boolean"
-          ? profile.onboarding.profileComplete
-          : profileComplete,
+    profile: {
+      ...profile,
+      onboarding: {
+        ...(profile.onboarding ?? {}),
+        profileComplete:
+          typeof profile.onboarding?.profileComplete === "boolean"
+            ? profile.onboarding.profileComplete
+            : profileComplete,
+      },
+    },
+    stats: profileStatsResult.stats,
+    warnings,
+    sources: {
+      profile: profileSource,
+      stats: profileStatsResult.source,
     },
   };
+}
+
+export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
+  const data = await fetchMemberData(uid);
+  if (process.env.NODE_ENV !== "production" && data.warnings.length > 0) {
+    console.warn(
+      `[auth] Member data warnings for uid ${uid}`,
+      data.warnings.map((warning) => warning.code)
+    );
+  }
+  return data.profile;
 }
 
 export async function claimUsernameForUser(input: {
@@ -284,6 +447,16 @@ export async function claimUsernameForUser(input: {
         throw new UsernameTakenError();
       }
 
+      if (!existingEmail && normalizedEmail) {
+        transaction.set(
+          lookupRef,
+          {
+            email: normalizedEmail,
+          },
+          { merge: true }
+        );
+      }
+
       return;
     }
 
@@ -306,11 +479,23 @@ export async function ensureUserProfile(
   const uid = user.uid;
   const userRef = doc(db, "users", uid);
   const snapshot = await getDoc(userRef);
-  const accountProfile = needsAccountFallback(
-    snapshot.exists() ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null) : null
-  )
-    ? await readAppAccountProfile(uid)
-    : null;
+  let accountProfile: AppAccountProfile | null = null;
+  if (
+    needsAccountFallback(
+      snapshot.exists()
+        ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null)
+        : null
+    )
+  ) {
+    try {
+      accountProfile = await readAppAccountProfile(uid);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[auth] Failed to read fallback account profile for uid ${uid}`, error);
+      }
+      accountProfile = null;
+    }
+  }
 
   const firstName = cleanName(seed.firstName);
   const lastName = cleanName(seed.lastName);
@@ -380,6 +565,21 @@ export async function ensureUserProfile(
 
   const currentProfile = normalizeProfile(uid, snapshot.data(), email);
   const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
+  const existingWurderId = cleanText(currentProfile.wurderId) ?? cleanText(mergedCurrentProfile.wurderId);
+
+  if (existingWurderId && email) {
+    try {
+      await claimUsernameForUser({
+        uid,
+        email,
+        wurderId: existingWurderId,
+      });
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`[auth] Failed to repair username lookup for uid ${uid}`, error);
+      }
+    }
+  }
 
   const firestoreUpdates: Record<string, unknown> = {
     uid,

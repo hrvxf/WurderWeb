@@ -31,7 +31,7 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
-              <th className="px-3 py-2">Deaths</th>
+              <th className="px-3 py-2">Deaths (Caught)</th>
               <th className="px-3 py-2">K/D</th>
               <th className="px-3 py-2">Accuracy</th>
               <th className="px-3 py-2">Sessions</th>

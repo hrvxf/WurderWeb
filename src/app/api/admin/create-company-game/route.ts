@@ -29,6 +29,7 @@ type CreateCompanyGameBody = {
   templateId?: string;
   templateName: string;
   saveTemplate?: boolean;
+  managerParticipation: "host_only" | "host_player";
   mode: string;
   durationMinutes: number;
   wordDifficulty: string;
@@ -62,6 +63,14 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
   const brandAccentColor = typeof body.brandAccentColor === "string" ? body.brandAccentColor.trim() : "";
   const brandThemeLabel = typeof body.brandThemeLabel === "string" ? body.brandThemeLabel.trim() : "";
   const saveTemplate = body.saveTemplate !== false;
+  const managerParticipationRaw =
+    typeof body.managerParticipation === "string" ? body.managerParticipation.trim().toLowerCase() : "";
+  const managerParticipation =
+    managerParticipationRaw === "host_player"
+      ? "host_player"
+      : managerParticipationRaw === "host_only"
+        ? "host_only"
+        : "host_only";
   const mode = typeof body.mode === "string" ? body.mode.trim() : "";
   const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
   const durationMinutes = Number(body.durationMinutes);
@@ -75,7 +84,13 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
 
-  if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+  if (
+    !orgName ||
+    !mode ||
+    !wordDifficulty ||
+    !Number.isFinite(durationMinutes) ||
+    durationMinutes <= 0
+  ) {
     throw new Error("Missing or invalid create-company-game fields.");
   }
 
@@ -107,6 +122,7 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     templateId: templateId || undefined,
     templateName,
     saveTemplate,
+    managerParticipation,
     mode,
     durationMinutes,
     wordDifficulty,
@@ -208,7 +224,9 @@ export async function POST(request: Request) {
       orgId,
       templateId,
       analyticsEnabled: true,
+      managerParticipation: body.managerParticipation,
       managerConfig: {
+        managerParticipation: body.managerParticipation,
         mode: body.mode,
         durationMinutes: body.durationMinutes,
         wordDifficulty: body.wordDifficulty,

@@ -73,4 +73,19 @@ a {
   color: var(--text-muted);
 }
 
+@keyframes subtle-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-subtle-enter {
+  animation: subtle-enter 220ms ease-out both;
+}
+
 

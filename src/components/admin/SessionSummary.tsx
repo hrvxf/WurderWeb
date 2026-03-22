@@ -170,12 +170,12 @@ export default function SessionSummary({ summary, overview, insights, players }:
           label="Risk / Coaching Needed"
           headline={
             coachingRisk
-              ? `${coachingRisk.displayName}: ${coachingRisk.deaths} deaths, ${coachingRisk.kdRatio.toFixed(2)} K/D`
+              ? `${coachingRisk.displayName}: ${coachingRisk.deaths} defeats/caught, ${coachingRisk.kdRatio.toFixed(2)} K/D`
               : "No coaching risk identified"
           }
           interpretation={
             coachingRisk
-              ? "Highest death load in the roster; prioritize positioning and trade-timing coaching."
+              ? "Highest defeated/caught load in the roster; prioritize positioning and trade-timing coaching."
               : "No active-session player data is available for risk scoring."
           }
         />
@@ -183,7 +183,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
         <Finding
           label="Session-Wide Observation"
           headline={`${summary.totalSessions.toLocaleString()} sessions, average ${formatDuration(summary.avgSessionLengthSeconds)}`}
-          interpretation={`Longest session ${formatDuration(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total deaths ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
+          interpretation={`Longest session ${formatDuration(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total defeats/caught ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
         />
 
         {appliesTeamMode ? (

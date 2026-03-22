@@ -20,7 +20,7 @@ let inFlightDefaultClassicWordGroupLookup: Promise<string | null> | null = null;
 
 export type CreateGameDoc = {
   gameCode: string;
-  hostPlayerId: string;
+  hostPlayerId: string | null;
   createdByAccountId: string;
   version: number;
   started: false;
@@ -122,11 +122,12 @@ export async function resolveDefaultClassicWordGroupId(db: Firestore): Promise<s
 
 export function buildInitialGameDoc(input: {
   gameCode: string;
-  hostPlayerId: string;
+  hostPlayerId: string | null;
   createdByAccountId: string;
   createdAt: FirebaseFirestore.FieldValue;
   wordGroupId: string | null;
   lastActionAt: number;
+  initialAliveCount?: number;
   classicMaxHuntersPerVictim?: number;
   classicPointsToWin?: number;
 }): CreateGameDoc {
@@ -142,7 +143,7 @@ export function buildInitialGameDoc(input: {
     endedAt: null,
     createdAt: input.createdAt,
     startedBy: null,
-    aliveCount: 1,
+    aliveCount: input.initialAliveCount ?? 1,
     assignmentsCommitted: false,
     wordGroupId: input.wordGroupId,
     wordStyle: "classic",

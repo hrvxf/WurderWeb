@@ -11,6 +11,7 @@ import {
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
 export type ManagerConfig = {
+  managerParticipation?: "host_only" | "host_player";
   mode: string;
   durationMinutes: number;
   wordDifficulty: string;
@@ -27,6 +28,7 @@ type CreateGameForHostUidInput = {
   orgId?: string;
   templateId?: string;
   analyticsEnabled?: boolean;
+  managerParticipation?: "host_only" | "host_player";
   managerConfig?: ManagerConfig;
 };
 
@@ -102,7 +104,9 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   }
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
-  const hostPlayerId = await resolveCanonicalPlayerId(hostUid);
+  const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
+  const hostPlayerId =
+    managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
 
   for (let attempt = 0; attempt < MAX_GAME_CODE_ATTEMPTS; attempt += 1) {
     const gameCode = generateGameCode();
@@ -122,11 +126,13 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           createdAt: FieldValue.serverTimestamp(),
           wordGroupId,
           lastActionAt: Date.now(),
+          initialAliveCount: managerParticipation === "host_player" ? 1 : 0,
           classicMaxHuntersPerVictim: 3,
           classicPointsToWin: 25,
         });
 
         const companyFields: Record<string, unknown> = {};
+        companyFields.managerParticipation = managerParticipation;
         if (payload.orgId) companyFields.orgId = payload.orgId;
         if (payload.templateId) companyFields.templateId = payload.templateId;
         if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
