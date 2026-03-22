@@ -55,16 +55,11 @@ export function normalizeEmail(value: string): string {
 }
 
 export function isValidEmail(value: string): boolean {
-  const normalized = normalizeEmail(value);
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized);
+  return SIMPLE_EMAIL_REGEX.test(normalizeEmail(value));
 }
 
 export function normalizeWurderId(value: string): string {
   return value.trim().toLowerCase();
-}
-
-export function isValidEmail(value: string): boolean {
-  return SIMPLE_EMAIL_REGEX.test(value.trim());
 }
 
 export function normalizePersonName(value: string): string {
