@@ -13,22 +13,29 @@ export type ManagerGameOverview = {
 export type ManagerInsight = {
   label: string;
   value: number;
+  message?: string | null;
+  triggeredBy?: Array<{
+    metric: string;
+    actual: number;
+    expected: number;
+    comparator: "<" | ">" | "<=" | ">=" | "=";
+  }>;
 };
 
 export type ManagerPlayerPerformance = {
   playerId: string;
   displayName: string;
-  kills: number;
-  deaths: number;
-  kdRatio: number;
-  accuracyPct: number;
-  sessionCount: number;
+  kills: number | null;
+  deaths: number | null;
+  kdRatio: number | null;
+  accuracyPct: number | null;
+  sessionCount: number | null;
 };
 
 export type ManagerSessionSummary = {
   totalSessions: number;
-  avgSessionLengthSeconds: number;
-  longestSessionSeconds: number;
+  avgSessionLengthSeconds: number | null;
+  longestSessionSeconds: number | null;
   lastSessionAt: string | null;
 };
 

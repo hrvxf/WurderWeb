@@ -1,4 +1,5 @@
 import {
+  isValidEmail,
   isValidWurderId,
   normalizeEmail,
   normalizePersonName,
@@ -14,6 +15,13 @@ describe("auth helper normalization", () => {
   it("accepts valid wurder IDs", () => {
     expect(isValidWurderId("abc")).toBe(true);
     expect(isValidWurderId("ABC_123")).toBe(true);
+  });
+
+  it("validates email format", () => {
+    expect(isValidEmail("user@example.com")).toBe(true);
+    expect(isValidEmail(" user@example.com ")).toBe(true);
+    expect(isValidEmail("not-an-email")).toBe(false);
+    expect(isValidEmail("foo@bar")).toBe(false);
   });
 
   it("rejects invalid wurder IDs", () => {

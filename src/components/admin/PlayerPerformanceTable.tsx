@@ -4,34 +4,53 @@ import type { ManagerPlayerPerformance } from "@/components/admin/types";
 
 type PlayerPerformanceTableProps = {
   players: ManagerPlayerPerformance[];
+  mode?: string | null;
 };
 
-function formatPercent(value: number): string {
-  if (!Number.isFinite(value)) return "0.0%";
-  return `${value.toFixed(1)}%`;
+function formatPercent(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return `${(value ?? 0).toFixed(1)}%`;
 }
 
-function formatRatio(value: number): string {
-  if (!Number.isFinite(value)) return "0.00";
-  return value.toFixed(2);
+function formatRatio(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return (value ?? 0).toFixed(2);
 }
 
-export default function PlayerPerformanceTable({ players }: PlayerPerformanceTableProps) {
+function formatCount(value: number | null): string {
+  if (!Number.isFinite(value ?? NaN)) return "--";
+  return (value ?? 0).toLocaleString();
+}
+
+function isClassicMode(mode: string | null | undefined): boolean {
+  return (mode ?? "").trim().toLowerCase() === "classic";
+}
+
+export default function PlayerPerformanceTable({ players, mode }: PlayerPerformanceTableProps) {
+  const hasDeathsData = players.some((player) => player.deaths != null);
   const sortedPlayers = useMemo(
-    () => [...players].sort((a, b) => b.kills - a.kills || b.kdRatio - a.kdRatio),
+    () =>
+      [...players].sort(
+        (a, b) =>
+          (b.kills ?? Number.NEGATIVE_INFINITY) - (a.kills ?? Number.NEGATIVE_INFINITY) ||
+          (b.kdRatio ?? Number.NEGATIVE_INFINITY) - (a.kdRatio ?? Number.NEGATIVE_INFINITY)
+      ),
     [players]
   );
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Player Performance</h2>
+      {isClassicMode(mode) ? (
+        <p className="mt-1 text-xs text-slate-500">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>
+      ) : null}
       <div className="mt-4 overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
-              <th className="px-3 py-2">Deaths (Caught)</th>
+              <th className="px-3 py-2">{hasDeathsData ? "Deaths" : "Deaths (Unavailable)"}</th>
               <th className="px-3 py-2">K/D</th>
               <th className="px-3 py-2">Accuracy</th>
               <th className="px-3 py-2">Sessions</th>
@@ -42,11 +61,11 @@ export default function PlayerPerformanceTable({ players }: PlayerPerformanceTab
               sortedPlayers.map((player) => (
                 <tr key={player.playerId} className="text-slate-700">
                   <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.displayName}</td>
-                  <td className="px-3 py-2">{player.kills.toLocaleString()}</td>
-                  <td className="px-3 py-2">{player.deaths.toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatCount(player.kills)}</td>
+                  <td className="px-3 py-2">{formatCount(player.deaths)}</td>
                   <td className="px-3 py-2">{formatRatio(player.kdRatio)}</td>
                   <td className="px-3 py-2">{formatPercent(player.accuracyPct)}</td>
-                  <td className="px-3 py-2">{player.sessionCount.toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatCount(player.sessionCount)}</td>
                 </tr>
               ))
             ) : (

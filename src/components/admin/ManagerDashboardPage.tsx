@@ -7,6 +7,8 @@ import GameOverviewPanel from "@/components/admin/GameOverviewPanel";
 import InsightCards from "@/components/admin/InsightCards";
 import PlayerPerformanceTable from "@/components/admin/PlayerPerformanceTable";
 import SessionSummary from "@/components/admin/SessionSummary";
+import ManagerRecommendations from "@/components/admin/ManagerRecommendations";
+import SessionTimeline from "@/components/admin/SessionTimeline";
 import type {
   ManagerAnalyticsDocument,
   ManagerGameOverview,
@@ -14,7 +16,6 @@ import type {
   ManagerPlayerPerformance,
   ManagerSessionSummary,
 } from "@/components/admin/types";
-import { resolveDefeatsFromAnalyticsRow } from "@/lib/analytics/player-metrics";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
 
@@ -29,6 +30,35 @@ type ManagerBranding = {
   brandThemeLabel: string | null;
 };
 
+type AnalyticsAccessState = {
+  visibility: "limited_live" | "full_post_session";
+  allowedSections: {
+    overview: boolean;
+    insights: boolean;
+    playerComparison: boolean;
+    sessionSummary: boolean;
+    exports: boolean;
+  };
+  message: string | null;
+};
+
+function LockedSection({ title, message }: { title: string; message: string }) {
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
+      <h2 className="text-lg font-semibold text-amber-900">{title}</h2>
+      <p className="mt-2 text-sm text-amber-900">{message}</p>
+    </section>
+  );
+}
+
+type ReportAction = "csv" | "summary";
+
+type SummaryModalState = {
+  open: boolean;
+  title: string;
+  details: string;
+};
+
 function parseNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -38,12 +68,37 @@ function parseNumber(value: unknown): number {
   return 0;
 }
 
+function parseNullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
 function parseString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
 function parseNullableString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function formatInsightLabel(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  const labelMap: Record<string, string> = {
+    game_started: "Game Started",
+    game_ended: "Game Ended",
+    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
+    admin_deny_kill_claim: "Admin Deny Kill Claim",
+  };
+  if (labelMap[normalized]) return labelMap[normalized];
+  return normalized
+    .split("_")
+    .filter((token) => token.length > 0)
+    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+    .join(" ");
 }
 
 function normalizeOverview(value: unknown, gameCode: string): ManagerGameOverview {
@@ -63,13 +118,54 @@ function normalizeOverview(value: unknown, gameCode: string): ManagerGameOvervie
 }
 
 function normalizeInsights(value: unknown): ManagerInsight[] {
+  const normalizeTriggeredBy = (
+    candidate: unknown
+  ): Array<{ metric: string; actual: number; expected: number; comparator: "<" | ">" | "<=" | ">=" | "=" }> => {
+    if (!Array.isArray(candidate)) return [];
+    return candidate
+      .map((item) => {
+        const trigger = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const metric = parseString(trigger.metric);
+        const actual = parseNullableNumber(trigger.actual);
+        const expected = parseNullableNumber(trigger.expected);
+        const comparator = parseString(trigger.comparator);
+        if (!metric || actual == null || expected == null) return null;
+        if (!["<", ">", "<=", ">=", "="].includes(comparator)) return null;
+        return {
+          metric,
+          actual,
+          expected,
+          comparator: comparator as "<" | ">" | "<=" | ">=" | "=",
+        };
+      })
+      .filter((item): item is { metric: string; actual: number; expected: number; comparator: "<" | ">" | "<=" | ">=" | "=" } => item != null);
+  };
+
   if (Array.isArray(value)) {
     return value
       .map((item) => {
         const insight = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const triggeredBy = Array.isArray(insight.triggeredBy)
+          ? insight.triggeredBy
+              .map((entry) => {
+                const candidate = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
+                if (!candidate) return null;
+                return {
+                  metric: parseString(candidate.metric),
+                  actual: parseNumber(candidate.actual),
+                  expected: parseNumber(candidate.expected),
+                };
+              })
+              .filter(
+                (entry): entry is { metric: string; actual: number; expected: number } =>
+                  entry != null && entry.metric.length > 0
+              )
+          : undefined;
         return {
-          label: parseString(insight.label),
+          label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
+          message: parseNullableString(insight.message),
+          triggeredBy: normalizeTriggeredBy(insight.triggeredBy),
         };
       })
       .filter((item) => item.label.length > 0);
@@ -78,8 +174,9 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
       .map(([label, insightValue]) => ({
-        label: parseString(label),
+        label: formatInsightLabel(parseString(label)),
         value: parseNumber(insightValue),
+        message: null,
       }))
       .filter((item) => item.label.length > 0);
   }
@@ -103,11 +200,11 @@ function normalizePlayers(value: unknown): ManagerPlayerPerformance[] {
     return {
       playerId: parseString(player.playerId) || `row-${index}`,
       displayName: parseString(player.displayName) || "Unknown",
-      kills: parseNumber(player.kills),
-      deaths: resolveDefeatsFromAnalyticsRow(player),
-      kdRatio: parseNumber(player.kdRatio),
-      accuracyPct: parseNumber(player.accuracyPct),
-      sessionCount: parseNumber(player.sessionCount),
+      kills: parseNullableNumber(player.kills),
+      deaths: parseNullableNumber(player.deaths),
+      kdRatio: parseNullableNumber(player.kdRatio),
+      accuracyPct: parseNullableNumber(player.accuracyPct),
+      sessionCount: parseNullableNumber(player.sessionCount),
     };
   });
 }
@@ -117,8 +214,8 @@ function normalizeSessionSummary(value: unknown): ManagerSessionSummary {
 
   return {
     totalSessions: parseNumber(summary.totalSessions),
-    avgSessionLengthSeconds: parseNumber(summary.avgSessionLengthSeconds),
-    longestSessionSeconds: parseNumber(summary.longestSessionSeconds),
+    avgSessionLengthSeconds: parseNullableNumber(summary.avgSessionLengthSeconds),
+    longestSessionSeconds: parseNullableNumber(summary.longestSessionSeconds),
     lastSessionAt: parseNullableString(summary.lastSessionAt),
   };
 }
@@ -152,18 +249,14 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const [analytics, setAnalytics] = useState<ManagerAnalyticsDocument | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "missing" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [entitlements, setEntitlements] = useState<{
-    managerInsights: boolean;
-    managerSummaries: boolean;
-    exports: boolean;
-  } | null>(null);
+  const [analyticsAccess, setAnalyticsAccess] = useState<AnalyticsAccessState | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "downloading">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
-  const [endGameStatus, setEndGameStatus] = useState<"idle" | "ending" | "done" | "error">("idle");
-  const [endGameMessage, setEndGameMessage] = useState<string | null>(null);
-  const [endGameConfirmOpen, setEndGameConfirmOpen] = useState(false);
-  const [endGameConfirmText, setEndGameConfirmText] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [summaryModal, setSummaryModal] = useState<SummaryModalState>({
+    open: false,
+    title: "Summary download",
+    details: "",
+  });
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
   const { user } = useAuth();
   const guard = useManagerRouteGuard(gameCode);
@@ -179,10 +272,8 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     if (guard.status !== "allowed") {
       setStatus("idle");
       setStatusMessage(null);
-      setEntitlements(null);
+      setAnalyticsAccess(null);
       setExportMessage(null);
-      setEndGameStatus("idle");
-      setEndGameMessage(null);
       setBranding(null);
       setAnalytics(null);
       return;
@@ -215,7 +306,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         });
         const payload = (await response.json().catch(() => ({}))) as {
           analytics?: unknown;
-          entitlements?: unknown;
+          analyticsAccess?: unknown;
           branding?: unknown;
           code?: unknown;
           message?: unknown;
@@ -233,14 +324,24 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
             }
           }
           setAnalytics(normalizeAnalytics(payload.analytics, normalizedCode));
-        const normalizedEntitlements =
-            payload.entitlements && typeof payload.entitlements === "object"
-              ? (payload.entitlements as Record<string, unknown>)
+          const normalizedAccess =
+            payload.analyticsAccess && typeof payload.analyticsAccess === "object"
+              ? (payload.analyticsAccess as Record<string, unknown>)
               : {};
-          setEntitlements({
-            managerInsights: Boolean(normalizedEntitlements.managerInsights),
-            managerSummaries: Boolean(normalizedEntitlements.managerSummaries),
-            exports: Boolean(normalizedEntitlements.exports),
+          const normalizedAllowedSections =
+            normalizedAccess.allowedSections && typeof normalizedAccess.allowedSections === "object"
+              ? (normalizedAccess.allowedSections as Record<string, unknown>)
+              : {};
+          setAnalyticsAccess({
+            visibility: parseString(normalizedAccess.visibility) === "full_post_session" ? "full_post_session" : "limited_live",
+            allowedSections: {
+              overview: Boolean(normalizedAllowedSections.overview),
+              insights: Boolean(normalizedAllowedSections.insights),
+              playerComparison: Boolean(normalizedAllowedSections.playerComparison),
+              sessionSummary: Boolean(normalizedAllowedSections.sessionSummary),
+              exports: Boolean(normalizedAllowedSections.exports),
+            },
+            message: parseNullableString(normalizedAccess.message),
           });
           const normalizedBranding =
             payload.branding && typeof payload.branding === "object"
@@ -290,15 +391,23 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     return () => {
       isCancelled = true;
     };
-  }, [gameCode, guard.status, refreshKey, user]);
+  }, [gameCode, guard.status, user]);
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
-  const knownEnded =
-    Boolean(analytics?.overview.endedAt) ||
-    (analytics?.overview.status ?? "").trim().toLowerCase() === "ended";
-  const canSubmitEndGame = endGameConfirmText.trim().toUpperCase() === "END";
+  const isLiveLimited = analyticsAccess?.visibility === "limited_live";
 
-  const downloadExport = async (format: "csv" | "pdf") => {
+  const parseExportError = (errorPayload: { code?: unknown; message?: unknown }): string => {
+    const code = parseString(errorPayload.code);
+    if (code === "FEATURE_LOCKED") {
+      return "Your current plan does not include reporting exports.";
+    }
+    if (code === "FORBIDDEN") {
+      return "Summary downloads are only available after the session has ended.";
+    }
+    return parseString(errorPayload.message) || "Unable to export report.";
+  };
+
+  const callReportingExport = async (action: ReportAction) => {
     if (!user) {
       setExportMessage("Sign in before exporting this report.");
       return;
@@ -315,94 +424,50 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
     try {
       const token = await user.getIdToken();
-      const response = await fetch(
-        `/api/manager/games/${encodeURIComponent(normalizedCode)}/export?format=${encodeURIComponent(format)}`,
-        {
-          headers: {
-            authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const format = action === "csv" ? "csv" : "pdf";
+      const response = await fetch(`/api/manager/games/${encodeURIComponent(normalizedCode)}/export?format=${encodeURIComponent(format)}`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
 
       if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => ({}))) as { message?: unknown };
-        setExportMessage(parseString(errorPayload.message) || "Unable to export report.");
+        const errorPayload = (await response.json().catch(() => ({}))) as { code?: unknown; message?: unknown };
+        setExportMessage(parseExportError(errorPayload));
         return;
       }
 
-      const blob = await response.blob();
+      const content = await response.text();
+      const mimeType = action === "csv" ? "text/csv;charset=utf-8" : "text/html;charset=utf-8";
+      const blob = new Blob([content], { type: mimeType });
       const objectUrl = window.URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      const extension = format === "csv" ? "csv" : "html";
+      const extension = action === "csv" ? "csv" : "html";
       anchor.href = objectUrl;
-      anchor.download = `session-report-${normalizedCode.toUpperCase()}.${extension}`;
+      anchor.download = `session-${action === "csv" ? "report" : "summary"}-${normalizedCode.toUpperCase()}.${extension}`;
       document.body.appendChild(anchor);
       anchor.click();
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(objectUrl);
+
+      if (action === "summary") {
+        setSummaryModal({
+          open: true,
+          title: "Summary downloaded",
+          details: "Downloaded an HTML summary. PDF export can be added later using the same backend action.",
+        });
+      }
     } catch (error) {
       if (process.env.NODE_ENV !== "production") {
         console.warn("[manager] Export failed", {
           gameCode: normalizedCode,
-          format,
+          action,
           error,
         });
       }
       setExportMessage("Unable to export report right now.");
     } finally {
       setExportStatus("idle");
-    }
-  };
-
-  const endGameManually = async () => {
-    if (!user) {
-      setEndGameStatus("error");
-      setEndGameMessage("Sign in before ending this game.");
-      return;
-    }
-
-    const normalizedCode = gameCode.trim();
-    if (!normalizedCode) {
-      setEndGameStatus("error");
-      setEndGameMessage("Missing game code.");
-      return;
-    }
-
-    setEndGameStatus("ending");
-    setEndGameMessage(null);
-    try {
-      const token = await user.getIdToken();
-      const response = await fetch(`/api/manager/games/${encodeURIComponent(normalizedCode)}/end`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-        },
-      });
-
-      const payload = (await response.json().catch(() => ({}))) as {
-        message?: unknown;
-        alreadyEnded?: unknown;
-      };
-
-      if (!response.ok) {
-        setEndGameStatus("error");
-        setEndGameMessage(parseString(payload.message) || "Unable to end this game right now.");
-        return;
-      }
-
-      setEndGameStatus("done");
-      setEndGameMessage(
-        payload.alreadyEnded === true ? "Game was already ended." : "Game ended successfully."
-      );
-      setEndGameConfirmOpen(false);
-      setEndGameConfirmText("");
-      setRefreshKey((prev) => prev + 1);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("[manager] End game failed", { gameCode: normalizedCode, error });
-      }
-      setEndGameStatus("error");
-      setEndGameMessage("Unable to end this game right now.");
     }
   };
 
@@ -426,79 +491,20 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               <p className="text-sm text-slate-600">Game code: {gameCode || "--"}</p>
             </div>
           </div>
-          <div className="flex flex-col items-start gap-2 sm:items-end">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Updated: {updatedAtLabel}</p>
-            {guard.status === "allowed" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setEndGameConfirmText("");
-                  setEndGameConfirmOpen(true);
-                }}
-                disabled={endGameStatus === "ending" || knownEnded}
-                className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {knownEnded ? "Game ended" : endGameStatus === "ending" ? "Ending..." : "End game"}
-              </button>
-            ) : null}
-          </div>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Updated: {updatedAtLabel}</p>
         </div>
-        {endGameMessage ? (
-          <p className={`mt-3 text-sm ${endGameStatus === "error" ? "text-red-700" : "text-emerald-700"}`}>
-            {endGameMessage}
-          </p>
-        ) : null}
       </header>
-
-      {endGameConfirmOpen ? (
-        <section className="rounded-lg border border-red-200 bg-red-50 p-4 shadow-sm">
-          <h2 className="text-sm font-semibold text-red-900">Confirm End Game</h2>
-          <p className="mt-1 text-sm text-red-800">
-            This will end the current game session. Type <strong>END</strong> to confirm.
-          </p>
-          <label className="mt-3 block text-xs font-semibold uppercase tracking-wide text-red-900">
-            Confirmation
-            <input
-              value={endGameConfirmText}
-              onChange={(event) => setEndGameConfirmText(event.target.value)}
-              className="mt-1 w-full rounded-md border border-red-200 bg-white px-3 py-2 text-sm text-slate-900"
-              placeholder="Type END"
-              autoCapitalize="none"
-            />
-          </label>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                setEndGameConfirmOpen(false);
-                setEndGameConfirmText("");
-              }}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void endGameManually()}
-              disabled={!canSubmitEndGame || endGameStatus === "ending"}
-              className="rounded-md border border-red-300 bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {endGameStatus === "ending" ? "Ending..." : "Confirm end game"}
-            </button>
-          </div>
-        </section>
-      ) : null}
 
       {guard.status === "allowed" && status === "ready" ? (
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-sm font-semibold text-slate-900">Reporting Exports</h2>
-            {entitlements?.exports ? (
+            {analyticsAccess?.allowedSections.exports ? (
               <>
                 <button
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={exportStatus === "downloading"}
-                  onClick={() => void downloadExport("csv")}
+                  onClick={() => void callReportingExport("csv")}
                   type="button"
                 >
                   {exportStatus === "downloading" ? "Exporting..." : "Export CSV"}
@@ -506,14 +512,14 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 <button
                   className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={exportStatus === "downloading"}
-                  onClick={() => void downloadExport("pdf")}
+                  onClick={() => void callReportingExport("summary")}
                   type="button"
                 >
-                  {exportStatus === "downloading" ? "Exporting..." : "Export PDF-ready"}
+                  {exportStatus === "downloading" ? "Exporting..." : "Download Summary"}
                 </button>
               </>
             ) : (
-              <p className="text-sm text-amber-900">Exports are available on Enterprise tier.</p>
+              <p className="text-sm text-amber-900">Exports unlock after the live session ends.</p>
             )}
           </div>
           {exportMessage ? <p className="mt-2 text-sm text-red-700">{exportMessage}</p> : null}
@@ -546,7 +552,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "allowed" && status === "loading" && (
         <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-          Loading aggregated analytics...
+          Loading analytics...
         </section>
       )}
 
@@ -564,28 +570,63 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "allowed" && status === "ready" && analytics ? (
         <div className="grid gap-6">
-          <GameOverviewPanel overview={analytics.overview} />
-          {entitlements?.managerInsights ? (
+          {isLiveLimited ? (
+            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+              {analyticsAccess?.message ?? "Live session mode is active. Additional analytics unlock after the session ends."}
+            </section>
+          ) : null}
+          {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
+          {analyticsAccess?.allowedSections.insights ? (
             <InsightCards insights={analytics.insights} />
           ) : (
-            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-              Insights are available on Pro and Enterprise tiers.
-            </section>
+            <LockedSection title="Activity Summary" message="Insights are locked until the session has ended." />
           )}
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-            <PlayerPerformanceTable players={analytics.playerPerformance} />
-            {entitlements?.managerSummaries ? (
-              <SessionSummary
-                summary={analytics.sessionSummary}
-                overview={analytics.overview}
-                insights={analytics.insights}
-                players={analytics.playerPerformance}
-              />
+            {analyticsAccess?.allowedSections.playerComparison ? (
+              <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
             ) : (
-              <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-                Session summaries are available on Pro and Enterprise tiers.
-              </section>
+              <LockedSection title="Player Performance" message="Player comparison unlocks after the session ends." />
             )}
+            {analyticsAccess?.allowedSections.sessionSummary ? (
+              <div className="grid gap-4">
+                <SessionSummary
+                  summary={analytics.sessionSummary}
+                  overview={analytics.overview}
+                  insights={analytics.insights}
+                  players={analytics.playerPerformance}
+                />
+                <ManagerRecommendations
+                  summary={analytics.sessionSummary}
+                  insights={analytics.insights}
+                  players={analytics.playerPerformance}
+                />
+              </div>
+            ) : (
+              <LockedSection title="Session Summary" message="Session summary and recommendations unlock after the session ends." />
+            )}
+          </div>
+          <SessionTimeline
+            gameCode={gameCode}
+            isLocked={isLiveLimited}
+            lockedMessage="Timeline events become available after the session ends."
+          />
+        </div>
+      ) : null}
+
+      {summaryModal.open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+            <h3 className="text-base font-semibold text-slate-900">{summaryModal.title}</h3>
+            <p className="mt-2 text-sm text-slate-600">{summaryModal.details}</p>
+            <div className="mt-4 flex justify-end">
+              <button
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                onClick={() => setSummaryModal((current) => ({ ...current, open: false }))}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

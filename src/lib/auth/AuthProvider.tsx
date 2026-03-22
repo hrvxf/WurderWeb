@@ -21,6 +21,12 @@ import {
 import { auth, googleProvider } from "@/lib/firebase";
 import { buildName, normalizeEmail } from "@/lib/auth/auth-helpers";
 import {
+  DEFAULT_MEMBER_STATS,
+  composeMemberData,
+  type MemberDataSources,
+  type MemberDataWarning,
+} from "@/lib/auth/member-stats";
+import {
   ensureUserProfile,
   fetchUserProfile,
   updateUserProfile,
@@ -60,9 +66,25 @@ async function syncServerSessionCookie(nextUser: User | null): Promise<void> {
   }
 }
 
+function logAuthContextProfile(uid: string | null, profile: WurderUserProfile | null, source: string): void {
+  if (process.env.NODE_ENV === "production") return;
+  console.info("MEMBERS_AUTH_CONTEXT_PROFILE", {
+    uid,
+    source,
+    timestamp: new Date().toISOString(),
+    profile,
+  });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<WurderUserProfile | null>(null);
+  const [stats, setStats] = useState(DEFAULT_MEMBER_STATS);
+  const [sources, setSources] = useState<MemberDataSources>({
+    profile: "accounts/{uid}",
+    stats: "fallback-none",
+  });
+  const [warnings, setWarnings] = useState<MemberDataWarning[]>([]);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
 
@@ -72,8 +94,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const credential = await loginWithIdentifier(identifier, password);
       const nextProfile = await bootstrapProfile(credential.user);
+      const memberData = await composeMemberData({
+        uid: credential.user.uid,
+        profile: nextProfile,
+      });
       setUser(credential.user);
-      setProfile(nextProfile);
+      setProfile(memberData.profile);
+      setStats(memberData.stats);
+      setSources(memberData.sources);
+      setWarnings(memberData.warnings);
+      logAuthContextProfile(credential.user.uid, nextProfile, "loginWithEmailOrWurderId");
     } finally {
       setProfileLoading(false);
       setLoading(false);
@@ -102,9 +132,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           wurderId: candidateWurderId,
         });
       }
+      const memberData = await composeMemberData({
+        uid: credential.user.uid,
+        profile: nextProfile,
+      });
 
       setUser(credential.user);
-      setProfile(nextProfile);
+      setProfile(memberData.profile);
+      setStats(memberData.stats);
+      setSources(memberData.sources);
+      setWarnings(memberData.warnings);
+      logAuthContextProfile(credential.user.uid, nextProfile, "signup");
     } catch (error) {
       if (error instanceof UsernameTakenError) {
         await deleteUser(credential.user).catch(() => undefined);
@@ -126,8 +164,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: credential.user.displayName ?? undefined,
         avatar: credential.user.photoURL ?? null,
       });
+      const memberData = await composeMemberData({
+        uid: credential.user.uid,
+        profile: nextProfile,
+      });
       setUser(credential.user);
-      setProfile(nextProfile);
+      setProfile(memberData.profile);
+      setStats(memberData.stats);
+      setSources(memberData.sources);
+      setWarnings(memberData.warnings);
+      logAuthContextProfile(credential.user.uid, nextProfile, "loginWithGoogle");
     } finally {
       setProfileLoading(false);
       setLoading(false);
@@ -140,6 +186,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearMemberCaches();
     setUser(null);
     setProfile(null);
+    setStats(DEFAULT_MEMBER_STATS);
+    setSources({
+      profile: "accounts/{uid}",
+      stats: "fallback-none",
+    });
+    setWarnings([]);
   }, []);
 
   const refreshProfile = useCallback(async () => {
@@ -153,7 +205,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const fetched = await fetchUserProfile(currentUser.uid);
       const nextProfile = fetched ?? (await ensureUserProfile(currentUser));
-      setProfile(nextProfile);
+      const memberData = await composeMemberData({
+        uid: currentUser.uid,
+        profile: nextProfile,
+      });
+      setProfile(memberData.profile);
+      setStats(memberData.stats);
+      setSources(memberData.sources);
+      setWarnings(memberData.warnings);
+      logAuthContextProfile(currentUser.uid, nextProfile, "refreshProfile");
     } finally {
       setProfileLoading(false);
     }
@@ -180,6 +240,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!nextUser) {
           void syncServerSessionCookie(null);
           setProfile(null);
+          setStats(DEFAULT_MEMBER_STATS);
+          setSources({
+            profile: "accounts/{uid}",
+            stats: "fallback-none",
+          });
+          setWarnings([]);
+          logAuthContextProfile(null, null, "onAuthStateChanged:signedOut");
           setProfileLoading(false);
           setLoading(false);
           return;
@@ -188,14 +255,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         void syncServerSessionCookie(nextUser);
         setProfileLoading(true);
         void bootstrapProfile(nextUser)
-          .then((nextProfile) => {
+          .then(async (nextProfile) => {
             if (!isMounted) return;
-            setProfile(nextProfile);
+            const memberData = await composeMemberData({
+              uid: nextUser.uid,
+              profile: nextProfile,
+            });
+            setProfile(memberData.profile);
+            setStats(memberData.stats);
+            setSources(memberData.sources);
+            setWarnings(memberData.warnings);
+            logAuthContextProfile(nextUser.uid, nextProfile, "onAuthStateChanged:bootstrap");
           })
           .catch((error) => {
             console.error("[auth] Failed to bootstrap profile", error);
             if (!isMounted) return;
             setProfile(null);
+            setStats(DEFAULT_MEMBER_STATS);
+            setSources({
+              profile: "accounts/{uid}",
+              stats: "fallback-none",
+            });
+            setWarnings([]);
           })
           .finally(() => {
             if (!isMounted) return;
@@ -218,6 +299,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       profileLoading,
       isAuthenticated: Boolean(user),
+      stats,
+      sources,
+      warnings,
       loginWithEmailOrWurderId,
       signup,
       loginWithGoogle,
@@ -227,6 +311,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [
       user,
       profile,
+      stats,
+      sources,
+      warnings,
       loading,
       profileLoading,
       loginWithEmailOrWurderId,

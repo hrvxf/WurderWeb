@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { isProfileComplete } from "@/lib/auth/profile-completion";
+import { resolveMemberRenderState } from "@/lib/auth/member-render-state";
 import { AUTH_ROUTES, toNextPath } from "@/lib/auth/route-helpers";
 
 type AuthGateProps = {
@@ -16,7 +16,7 @@ export default function AuthGate({ children, requireCompleteProfile = false }: A
   const router = useRouter();
   const pathname = usePathname();
   const { isAuthenticated, profile, loading, profileLoading } = useAuth();
-  const profileComplete = isProfileComplete(profile);
+  const renderState = resolveMemberRenderState(profile);
 
   useEffect(() => {
     if (loading || profileLoading) return;
@@ -27,10 +27,10 @@ export default function AuthGate({ children, requireCompleteProfile = false }: A
       return;
     }
 
-    if (requireCompleteProfile && !profileComplete) {
+    if (requireCompleteProfile && !renderState.complete) {
       router.replace(AUTH_ROUTES.membersProfile);
     }
-  }, [isAuthenticated, loading, pathname, profileComplete, profileLoading, requireCompleteProfile, router]);
+  }, [isAuthenticated, loading, pathname, renderState.complete, profileLoading, requireCompleteProfile, router]);
 
   if (loading || profileLoading) {
     return (
@@ -41,7 +41,7 @@ export default function AuthGate({ children, requireCompleteProfile = false }: A
   }
 
   if (!isAuthenticated) return null;
-  if (requireCompleteProfile && !profileComplete) return null;
+  if (requireCompleteProfile && !renderState.complete) return null;
 
   return <>{children}</>;
 }

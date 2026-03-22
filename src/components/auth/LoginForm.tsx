@@ -83,7 +83,7 @@ export default function LoginForm({ nextPath }: LoginFormProps) {
             className="input-dark mt-2"
             autoComplete="username"
             autoCapitalize="none"
-            placeholder="name@example.com or your_wurder_id"
+            placeholder="name@example.com or james23"
           />
         </label>
 

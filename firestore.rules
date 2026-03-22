@@ -9,6 +9,25 @@ service cloud.firestore {
       return signedIn() && request.auth.uid == uid;
     }
 
+    function accountAllowedKeys() {
+      return [
+        "uid",
+        "firstName",
+        "lastName",
+        "secondName",
+        "name",
+        "username",
+        "usernameLower",
+        "wurderId",
+        "wurderIdLower",
+        "avatar",
+        "avatarUrl",
+        "photoURL",
+        "createdAt",
+        "updatedAt"
+      ];
+    }
+
     match /users/{uid} {
       allow read: if isOwner(uid);
       allow create: if isOwner(uid) && request.resource.data.uid == request.auth.uid;
@@ -23,7 +42,15 @@ service cloud.firestore {
 
     match /accounts/{uid} {
       allow read: if isOwner(uid);
-      allow create, update, delete: if false;
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(accountAllowedKeys());
+      allow update: if isOwner(uid)
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(accountAllowedKeys())
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(accountAllowedKeys())
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if false;
     }
 
     match /profiles/{uid} {

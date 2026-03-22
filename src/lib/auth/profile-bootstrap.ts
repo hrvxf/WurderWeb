@@ -16,11 +16,9 @@ import {
   normalizePersonName,
   normalizeWurderId,
 } from "@/lib/auth/auth-helpers";
-import { resolveLifetimeDefeatsFromProfile } from "@/lib/analytics/player-metrics";
-import { isProfileComplete } from "@/lib/auth/profile-completion";
+import { resolveCanonicalAccountProfile } from "@/lib/auth/canonical-account-resolver";
+import { getProfileCompletionStatus, isProfileComplete } from "@/lib/auth/profile-completion";
 import { DEFAULT_PROFILE_STATS, type UsernameLookup, type WurderUserProfile } from "@/lib/types/user";
-
-type NormalizedUserStats = typeof DEFAULT_PROFILE_STATS;
 
 type EnsureProfileInput = {
   firstName?: string;
@@ -40,29 +38,115 @@ type AppAccountProfile = {
   avatarUrl?: string | null;
 };
 
-type MemberDataWarningCode =
-  | "accounts-read-failed"
-  | "accounts-missing"
-  | "profiles-read-failed"
-  | "profiles-missing"
-  | "profiles-stats-fallback";
-
-export type MemberDataWarning = {
-  code: MemberDataWarningCode;
-  message: string;
+type LegacyAccountRawFields = {
+  firstName?: string;
+  lastName?: string;
+  secondName?: string;
+  username?: string;
+  usernameLower?: string;
+  photoURL?: string;
+  avatarUrl?: string;
+  avatar?: string;
+  name?: string;
 };
 
-export type MemberDataSources = {
-  profile: "accounts/{uid}" | "users/{uid}-fallback" | "fallback-none";
-  stats: "profiles/{uid}" | "fallback-none";
+type AppAccountProfileResolution = {
+  profile: AppAccountProfile;
+  rawFields: LegacyAccountRawFields;
 };
 
-export type MemberDataSnapshot = {
-  profile: WurderUserProfile | null;
-  stats: NormalizedUserStats;
-  warnings: MemberDataWarning[];
-  sources: MemberDataSources;
-};
+type FirestoreOp = "getDoc" | "setDoc" | "updateDoc" | "runTransaction";
+type FirestoreRequirement = "required" | "optional";
+type BootstrapStage =
+  | "loadAccountProfile"
+  | "ensureAccountDoc.readAccount"
+  | "ensureAccountDoc.createAccount"
+  | "updateAccountSnapshot.writeAccount"
+  | "fetchUserProfile.readUser"
+  | "ensureUserProfile.readUser"
+  | "ensureUserProfile.create"
+  | "ensureUserProfile.update"
+  | "fetchUserProfile.backfillUsers"
+  | "claimUsernameForUser.transaction";
+
+function shouldLogBootstrapFirestoreDiagnostics(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.NEXT_PUBLIC_ENABLE_BOOTSTRAP_FIRESTORE_DIAGNOSTICS === "true";
+}
+
+function logBootstrapFirestoreOperation(input: {
+  stage: BootstrapStage;
+  op: FirestoreOp;
+  path: string;
+  uid: string;
+  requirement: FirestoreRequirement;
+  status: "start" | "success";
+}): void {
+  if (!shouldLogBootstrapFirestoreDiagnostics()) return;
+  console.info("[auth] bootstrap firestore operation", {
+    ...input,
+    optional: input.requirement === "optional",
+  });
+}
+
+function logBootstrapFirestoreFailure(input: {
+  error: unknown;
+  op: FirestoreOp;
+  path: string;
+  stage: BootstrapStage;
+  uid: string;
+  requirement: FirestoreRequirement;
+}): void {
+  const code =
+    typeof input.error === "object" && input.error && "code" in input.error
+      ? String((input.error as { code?: unknown }).code ?? "")
+      : "";
+  const message =
+    typeof input.error === "object" && input.error && "message" in input.error
+      ? String((input.error as { message?: unknown }).message ?? "")
+      : "";
+  const permissionDenied = code.includes("permission-denied") || message.includes("Missing or insufficient permissions");
+  const summary = {
+    op: input.op,
+    path: input.path,
+    stage: input.stage,
+    uid: input.uid,
+    requirement: input.requirement,
+    optional: input.requirement === "optional",
+    permissionDenied,
+    code: code || undefined,
+    message: message || undefined,
+  };
+
+  if (process.env.NODE_ENV === "production") {
+    console.error("[auth] bootstrap firestore operation failed", summary);
+    return;
+  }
+
+  console.warn("[auth] bootstrap firestore operation failed", {
+    ...summary,
+    error: input.error,
+  });
+}
+
+function buildResolutionSourcePaths(uid: string, hasAccountResolution: boolean): string[] {
+  const paths = [`users/${uid}`];
+  if (hasAccountResolution) {
+    paths.push(`accounts/${uid}`);
+  }
+  return paths;
+}
+
+function buildDebugProfileResolution(input: {
+  uid: string;
+  rawAccountFields: LegacyAccountRawFields | null;
+}): NonNullable<WurderUserProfile["debugProfileResolution"]> {
+  return {
+    rawAccountFields: input.rawAccountFields,
+    sourcePaths: buildResolutionSourcePaths(input.uid, Boolean(input.rawAccountFields)),
+    snapshotAt: new Date().toISOString(),
+  };
+}
 
 export type UpdateUserProfileInput = {
   firstName?: string;
@@ -92,7 +176,7 @@ function cleanName(value?: string | null): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function normalizeStats(stats: unknown): NormalizedUserStats {
+function normalizeStats(stats: unknown): WurderUserProfile["stats"] {
   if (!stats || typeof stats !== "object") {
     return { ...DEFAULT_PROFILE_STATS };
   }
@@ -100,33 +184,6 @@ function normalizeStats(stats: unknown): NormalizedUserStats {
     ...DEFAULT_PROFILE_STATS,
     ...(stats as Record<string, number>),
   };
-}
-
-function mapProfilesStats(data: DocumentData): NormalizedUserStats {
-  const source = data as Record<string, unknown>;
-  const gamesPlayed = typeof source.gamesPlayed === "number" ? source.gamesPlayed : undefined;
-  const kills = typeof source.lifetimeKills === "number" ? source.lifetimeKills : undefined;
-  const wins = typeof source.lifetimeWins === "number" ? source.lifetimeWins : undefined;
-  const streak = typeof source.bestStreak === "number" ? source.bestStreak : undefined;
-  const lifetimePoints = typeof source.lifetimePoints === "number" ? source.lifetimePoints : undefined;
-  const defeats = resolveLifetimeDefeatsFromProfile(source);
-  const mvpAwards =
-    typeof source.mvpAwards === "number"
-      ? source.mvpAwards
-      : typeof source.lifetimeMvpAwards === "number"
-        ? source.lifetimeMvpAwards
-        : undefined;
-
-  return normalizeStats(withoutUndefined({
-    gamesPlayed,
-    kills,
-    wins,
-    deaths: defeats,
-    streak,
-    points: lifetimePoints,
-    pointsLifetime: lifetimePoints,
-    mvpAwards,
-  }));
 }
 
 function withoutUndefined<T extends Record<string, unknown>>(value: T): T {
@@ -155,84 +212,175 @@ function hasRequiredIdentityFields(profile: Partial<WurderUserProfile> | null): 
   return Boolean(cleanText(profile.firstName) && cleanText(profile.lastName) && cleanText(profile.wurderId));
 }
 
-function needsAccountFallback(profile: Partial<WurderUserProfile> | null): boolean {
-  if (!profile) return true;
-  return !hasRequiredIdentityFields(profile);
+function hasAnyIdentityValue(profile: Partial<WurderUserProfile> | null): boolean {
+  if (!profile) return false;
+  return Boolean(cleanText(profile.firstName) || cleanText(profile.lastName) || cleanText(profile.wurderId));
 }
 
-function normalizeAppAccountProfile(data: DocumentData): AppAccountProfile {
+function normalizeAppAccountProfile(data: DocumentData): AppAccountProfileResolution {
   const source = data as Record<string, unknown>;
-  const firstName = cleanName(typeof source.firstName === "string" ? source.firstName : undefined);
-  const lastName = cleanName(typeof source.secondName === "string" ? source.secondName : undefined);
-  const wurderId = cleanText(typeof source.username === "string" ? source.username : undefined);
-  const avatarUrl = cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined) ?? null;
+  const canonical = resolveCanonicalAccountProfile(source);
 
   return {
-    firstName,
-    lastName,
-    name: cleanName(typeof source.name === "string" ? source.name : undefined) ?? cleanName(buildName(firstName, lastName)),
-    wurderId,
-    wurderIdLower: wurderId ? normalizeWurderId(wurderId) : undefined,
-    avatar: avatarUrl,
-    avatarUrl,
+    profile: canonical,
+    rawFields: {
+      firstName: cleanText(typeof source.firstName === "string" ? source.firstName : undefined),
+      lastName: cleanText(typeof source.lastName === "string" ? source.lastName : undefined),
+      secondName: cleanText(typeof source.secondName === "string" ? source.secondName : undefined),
+      username: cleanText(typeof source.username === "string" ? source.username : undefined),
+      usernameLower: cleanText(typeof source.usernameLower === "string" ? source.usernameLower : undefined),
+      photoURL: cleanText(typeof source.photoURL === "string" ? source.photoURL : undefined),
+      avatarUrl: cleanText(typeof source.avatarUrl === "string" ? source.avatarUrl : undefined),
+      avatar: cleanText(typeof source.avatar === "string" ? source.avatar : undefined),
+      name: cleanText(typeof source.name === "string" ? source.name : undefined),
+    },
   };
 }
 
-async function readAppAccountProfile(uid: string): Promise<AppAccountProfile | null> {
-  const accountSnapshot = await getDoc(doc(db, "accounts", uid));
-  return accountSnapshot.exists() ? normalizeAppAccountProfile(accountSnapshot.data()) : null;
+async function readAppAccountProfile(
+  uid: string,
+  requirement: FirestoreRequirement = "required"
+): Promise<AppAccountProfileResolution | null> {
+  const path = `accounts/${uid}`;
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "loadAccountProfile",
+      op: "getDoc",
+      path,
+      uid,
+      requirement,
+      status: "start",
+    });
+    const accountRef = doc(db, "accounts", uid);
+    const snapshot = await getDoc(accountRef);
+    logBootstrapFirestoreOperation({
+      stage: "loadAccountProfile",
+      op: "getDoc",
+      path,
+      uid,
+      requirement,
+      status: "success",
+    });
+    if (!snapshot.exists()) return null;
+    return normalizeAppAccountProfile(snapshot.data());
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path,
+      stage: "loadAccountProfile",
+      uid,
+      requirement,
+    });
+    if (requirement === "optional") return null;
+    throw error;
+  }
 }
 
-async function readProfileStats(uid: string): Promise<{
-  stats: NormalizedUserStats;
-  source: MemberDataSources["stats"];
-  warnings: MemberDataWarning[];
-}> {
-  // Guardrail: gameplay aggregates are sourced from profiles/{uid} only.
-  // Do not read gameplay stats from accounts/{uid} or write them into users/{uid} here.
+async function ensureAccountDoc(
+  user: User,
+  seed: EnsureProfileInput
+): Promise<{ accountProfile: AppAccountProfile | null; rawAccountFields: LegacyAccountRawFields | null }> {
+  const uid = user.uid;
+  const accountRef = doc(db, "accounts", uid);
+  let accountSnapshot;
   try {
-    const snapshot = await getDoc(doc(db, "profiles", uid));
-    if (!snapshot.exists()) {
-      return {
-        stats: { ...DEFAULT_PROFILE_STATS },
-        source: "fallback-none",
-        warnings: [
-          {
-            code: "profiles-missing",
-            message: `No profiles/${uid} stats document found. Falling back to zero stats.`,
-          },
-          {
-            code: "profiles-stats-fallback",
-            message: "Stats fallback to defaults because profiles/{uid} is missing.",
-          },
-        ],
-      };
-    }
-
-    return {
-      stats: mapProfilesStats(snapshot.data()),
-      source: "profiles/{uid}",
-      warnings: [],
-    };
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.readAccount",
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    accountSnapshot = await getDoc(accountRef);
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.readAccount",
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
   } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(`[auth] Failed to read profile stats from profiles/${uid}`, error);
-    }
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `accounts/${uid}`,
+      stage: "ensureAccountDoc.readAccount",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
+
+  if (accountSnapshot.exists()) {
+    const existing = normalizeAppAccountProfile(accountSnapshot.data());
     return {
-      stats: { ...DEFAULT_PROFILE_STATS },
-      source: "fallback-none",
-      warnings: [
-        {
-          code: "profiles-read-failed",
-          message: `profiles/${uid} could not be read. Falling back to zero stats.`,
-        },
-        {
-          code: "profiles-stats-fallback",
-          message: "Stats fallback to defaults because profiles/{uid} read failed.",
-        },
-      ],
+      accountProfile: existing.profile,
+      rawAccountFields: existing.rawFields,
     };
   }
+
+  const firstName = cleanName(seed.firstName);
+  const lastName = cleanName(seed.lastName);
+  const name = cleanName(seed.name) ?? cleanName(user.displayName) ?? cleanName(buildName(firstName, lastName));
+  const avatarUrl = cleanText(seed.avatar ?? undefined) ?? cleanText(user.photoURL ?? undefined) ?? null;
+  const requestedWurderId = cleanText(seed.wurderId);
+  const requestedWurderIdLower = requestedWurderId ? normalizeWurderId(requestedWurderId) : undefined;
+
+  const payload = withoutUndefined({
+    uid,
+    firstName: firstName ?? "",
+    lastName: lastName ?? "",
+    secondName: lastName ?? "",
+    name,
+    username: requestedWurderId,
+    usernameLower: requestedWurderIdLower,
+    wurderId: requestedWurderId,
+    wurderIdLower: requestedWurderIdLower,
+    avatar: avatarUrl,
+    avatarUrl,
+    photoURL: avatarUrl,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.createAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "start",
+    });
+    await setDoc(accountRef, payload, { merge: false });
+    logBootstrapFirestoreOperation({
+      stage: "ensureAccountDoc.createAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "required",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      stage: "ensureAccountDoc.createAccount",
+      uid,
+      requirement: "required",
+    });
+    throw error;
+  }
+
+  const resolution = normalizeAppAccountProfile(payload);
+  return {
+    accountProfile: resolution.profile,
+    rawAccountFields: resolution.rawFields,
+  };
 }
 
 function mergeProfiles(
@@ -243,8 +391,8 @@ function mergeProfiles(
   if (!userProfile && !accountProfile) return null;
 
   const merged = {
-    ...(userProfile ?? {}),
-    ...(accountProfile ?? {}),
+    ...withoutUndefined((userProfile ?? {}) as Record<string, unknown>),
+    ...withoutUndefined((accountProfile ?? {}) as Record<string, unknown>),
     uid,
     email: userProfile?.email ?? null,
     stats: normalizeStats(userProfile?.stats),
@@ -273,6 +421,42 @@ function mergeProfiles(
   return merged;
 }
 
+function logProfileResolutionDiagnostics(input: {
+  uid: string;
+  usersProfile: WurderUserProfile | null;
+  rawAccountFields: LegacyAccountRawFields | null;
+  resolvedProfile: WurderUserProfile;
+  authSession?: {
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
+  };
+}): void {
+  if (process.env.NODE_ENV === "production") return;
+
+  const completion = getProfileCompletionStatus(input.resolvedProfile);
+  const timestamp = new Date().toISOString();
+  console.info("PROFILE_HYDRATE_PAYLOAD", {
+    uid: input.uid,
+    timestamp,
+    usersProfile: input.usersProfile,
+    rawAccountFields: input.rawAccountFields,
+    ...(input.authSession ? { authSession: input.authSession } : {}),
+  });
+  console.info("MEMBERS_PROFILE_RESOLUTION", {
+    uid: input.uid,
+    timestamp,
+    rawAccountFields: input.rawAccountFields,
+    resolvedProfile: input.resolvedProfile,
+  });
+  console.info("RESOLVED_PROFILE", { uid: input.uid, resolvedProfile: input.resolvedProfile });
+  console.info("COMPLETION_CHECK", {
+    uid: input.uid,
+    complete: completion.complete,
+    missingFields: completion.missingFields,
+  });
+}
+
 async function backfillUsersFromMergedProfile(
   uid: string,
   usersProfile: WurderUserProfile | null,
@@ -289,27 +473,28 @@ async function backfillUsersFromMergedProfile(
 
   if (!usersProfile) {
     firestoreUpdates.email = mergedProfile.email ?? null;
+    firestoreUpdates.stats = normalizeStats(mergedProfile.stats);
     firestoreUpdates.activeGame = mergedProfile.activeGame ?? null;
   }
 
-  if (!cleanText(usersProfile?.firstName) && cleanText(mergedProfile.firstName)) {
+  if (cleanText(mergedProfile.firstName) && cleanText(usersProfile?.firstName) !== cleanText(mergedProfile.firstName)) {
     firestoreUpdates.firstName = mergedProfile.firstName;
   }
-  if (!cleanText(usersProfile?.lastName) && cleanText(mergedProfile.lastName)) {
+  if (cleanText(mergedProfile.lastName) && cleanText(usersProfile?.lastName) !== cleanText(mergedProfile.lastName)) {
     firestoreUpdates.lastName = mergedProfile.lastName;
   }
-  if (!cleanText(usersProfile?.name) && cleanText(mergedProfile.name)) {
+  if (cleanText(mergedProfile.name) && cleanText(usersProfile?.name) !== cleanText(mergedProfile.name)) {
     firestoreUpdates.name = mergedProfile.name;
   }
-  if (!cleanText(usersProfile?.wurderId) && cleanText(mergedProfile.wurderId)) {
+  if (cleanText(mergedProfile.wurderId) && cleanText(usersProfile?.wurderId) !== cleanText(mergedProfile.wurderId)) {
     firestoreUpdates.wurderId = mergedProfile.wurderId;
     firestoreUpdates.wurderIdLower =
       cleanText(mergedProfile.wurderIdLower) ?? normalizeWurderId(mergedProfile.wurderId ?? "");
   }
-  if (!usersProfile?.avatarUrl && mergedProfile.avatarUrl) {
+  if (mergedProfile.avatarUrl && usersProfile?.avatarUrl !== mergedProfile.avatarUrl) {
     firestoreUpdates.avatarUrl = mergedProfile.avatarUrl;
   }
-  if (!usersProfile?.avatar && mergedProfile.avatar) {
+  if (mergedProfile.avatar && usersProfile?.avatar !== mergedProfile.avatar) {
     firestoreUpdates.avatar = mergedProfile.avatar;
   }
 
@@ -322,99 +507,185 @@ async function backfillUsersFromMergedProfile(
     profileComplete,
   };
 
-  await setDoc(userRef, firestoreUpdates, { merge: true });
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.backfillUsers",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
+    });
+    await setDoc(userRef, firestoreUpdates, { merge: true });
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.backfillUsers",
+      op: "setDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `users/${uid}`,
+      stage: "fetchUserProfile.backfillUsers",
+      uid,
+      requirement: "optional",
+    });
+  }
 }
 
-export async function fetchMemberData(uid: string): Promise<MemberDataSnapshot> {
-  const warnings: MemberDataWarning[] = [];
-  let usersProfile: WurderUserProfile | null = null;
+async function updateAccountSnapshot(
+  uid: string,
+  accountProfile: AppAccountProfile | null,
+  resolvedProfile: WurderUserProfile
+): Promise<void> {
+  const accountRef = doc(db, "accounts", uid);
+  const firestoreUpdates: Record<string, unknown> = {
+    uid,
+    updatedAt: serverTimestamp(),
+  };
 
-  try {
-    const userSnapshot = await getDoc(doc(db, "users", uid));
-    usersProfile = userSnapshot.exists() ? normalizeProfile(uid, userSnapshot.data(), null) : null;
-  } catch (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(`[auth] Failed to read users/${uid} profile`, error);
-    }
+  if (cleanText(resolvedProfile.firstName) && cleanText(accountProfile?.firstName) !== cleanText(resolvedProfile.firstName)) {
+    firestoreUpdates.firstName = resolvedProfile.firstName;
+  }
+  if (cleanText(resolvedProfile.lastName) && cleanText(accountProfile?.lastName) !== cleanText(resolvedProfile.lastName)) {
+    firestoreUpdates.lastName = resolvedProfile.lastName;
+    firestoreUpdates.secondName = resolvedProfile.lastName;
+  }
+  if (cleanText(resolvedProfile.name) && cleanText(accountProfile?.name) !== cleanText(resolvedProfile.name)) {
+    firestoreUpdates.name = resolvedProfile.name;
+  }
+  if (cleanText(resolvedProfile.wurderId) && cleanText(accountProfile?.wurderId) !== cleanText(resolvedProfile.wurderId)) {
+    const lower =
+      cleanText(resolvedProfile.wurderIdLower) ??
+      (resolvedProfile.wurderId ? normalizeWurderId(resolvedProfile.wurderId) : undefined);
+    firestoreUpdates.wurderId = resolvedProfile.wurderId;
+    firestoreUpdates.wurderIdLower = lower;
+    firestoreUpdates.username = resolvedProfile.wurderId;
+    firestoreUpdates.usernameLower = lower;
+  }
+  if (resolvedProfile.avatarUrl && accountProfile?.avatarUrl !== resolvedProfile.avatarUrl) {
+    firestoreUpdates.avatarUrl = resolvedProfile.avatarUrl;
+    firestoreUpdates.avatar = resolvedProfile.avatarUrl;
+    firestoreUpdates.photoURL = resolvedProfile.avatarUrl;
   }
 
-  const profileStatsResult = await readProfileStats(uid);
-  warnings.push(...profileStatsResult.warnings);
+  if (Object.keys(firestoreUpdates).length <= 2) return;
 
-  let accountProfile: AppAccountProfile | null = null;
-  let profileSource: MemberDataSources["profile"] = "fallback-none";
   try {
-    accountProfile = await readAppAccountProfile(uid);
-    if (accountProfile) {
-      profileSource = "accounts/{uid}";
-    } else if (usersProfile) {
-      profileSource = "users/{uid}-fallback";
-      warnings.push({
-        code: "accounts-missing",
-        message: `No accounts/${uid} identity document found. Falling back to users/${uid}.`,
-      });
-    }
-  } catch (error) {
-    profileSource = usersProfile ? "users/{uid}-fallback" : "fallback-none";
-    warnings.push({
-      code: "accounts-read-failed",
-      message: `accounts/${uid} could not be read. Falling back to users/${uid}.`,
+    logBootstrapFirestoreOperation({
+      stage: "updateAccountSnapshot.writeAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
     });
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(`[auth] Failed to read identity from accounts/${uid}`, error);
-    }
+    await setDoc(accountRef, firestoreUpdates, { merge: true });
+    logBootstrapFirestoreOperation({
+      stage: "updateAccountSnapshot.writeAccount",
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "setDoc",
+      path: `accounts/${uid}`,
+      stage: "updateAccountSnapshot.writeAccount",
+      uid,
+      requirement: "optional",
+    });
   }
-
-  const mergedProfile = mergeProfiles(uid, usersProfile, accountProfile);
-  if (!mergedProfile) {
-    return {
-      profile: null,
-      stats: profileStatsResult.stats,
-      warnings,
-      sources: {
-        profile: "fallback-none",
-        stats: profileStatsResult.source,
-      },
-    };
-  }
-
-  const profile: WurderUserProfile = {
-    ...mergedProfile,
-    stats: profileStatsResult.stats,
-  };
-  const profileComplete = isProfileComplete(profile);
-
-  await backfillUsersFromMergedProfile(uid, usersProfile, profile, accountProfile);
-
-  return {
-    profile: {
-      ...profile,
-      onboarding: {
-        ...(profile.onboarding ?? {}),
-        profileComplete:
-          typeof profile.onboarding?.profileComplete === "boolean"
-            ? profile.onboarding.profileComplete
-            : profileComplete,
-      },
-    },
-    stats: profileStatsResult.stats,
-    warnings,
-    sources: {
-      profile: profileSource,
-      stats: profileStatsResult.source,
-    },
-  };
 }
 
 export async function fetchUserProfile(uid: string): Promise<WurderUserProfile | null> {
-  const data = await fetchMemberData(uid);
-  if (process.env.NODE_ENV !== "production" && data.warnings.length > 0) {
-    console.warn(
-      `[auth] Member data warnings for uid ${uid}`,
-      data.warnings.map((warning) => warning.code)
-    );
+  const accountResolution = await readAppAccountProfile(uid, "required");
+  const accountProfile = accountResolution?.profile ?? null;
+  let usersProfile: WurderUserProfile | null = null;
+  let userSnapshot: Awaited<ReturnType<typeof getDoc>> | undefined;
+
+  const userRef = doc(db, "users", uid);
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "start",
+    });
+    userSnapshot = await getDoc(userRef);
+    logBootstrapFirestoreOperation({
+      stage: "fetchUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `users/${uid}`,
+      stage: "fetchUserProfile.readUser",
+      uid,
+      requirement: "optional",
+    });
+    usersProfile = null;
   }
-  return data.profile;
+  if (typeof userSnapshot !== "undefined") {
+    if (userSnapshot.exists()) {
+      const userData = userSnapshot.data();
+      usersProfile =
+        userData && typeof userData === "object"
+          ? normalizeProfile(uid, userData as DocumentData, null)
+          : null;
+    } else {
+      usersProfile = null;
+    }
+  }
+  const profile = mergeProfiles(uid, usersProfile, accountProfile);
+
+  if (!profile) return null;
+
+  if (hasAnyIdentityValue(usersProfile) && !hasRequiredIdentityFields(usersProfile) && hasRequiredIdentityFields(profile)) {
+    console.warn(`[auth] profile-bootstrap recovered missing canonical identity fields for uid ${uid}`);
+  }
+
+  logProfileResolutionDiagnostics({
+    uid,
+    usersProfile,
+    rawAccountFields: accountResolution?.rawFields ?? null,
+    resolvedProfile: profile,
+  });
+
+  const profileComplete = isProfileComplete(profile);
+
+  await updateAccountSnapshot(uid, accountProfile, profile);
+  await backfillUsersFromMergedProfile(uid, usersProfile, profile, accountProfile);
+
+  return {
+    ...profile,
+    onboarding: {
+      ...(profile.onboarding ?? {}),
+      profileComplete:
+        typeof profile.onboarding?.profileComplete === "boolean"
+          ? profile.onboarding.profileComplete
+          : profileComplete,
+    },
+    debugProfileResolution: buildDebugProfileResolution({
+      uid,
+      rawAccountFields: accountResolution?.rawFields ?? null,
+    }),
+  };
 }
 
 export async function claimUsernameForUser(input: {
@@ -430,43 +701,61 @@ export async function claimUsernameForUser(input: {
     throw new Error("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
   }
 
-  await runTransaction(db, async (transaction) => {
-    const lookupRef = doc(db, "usernames", normalized);
-    const existing = await transaction.get(lookupRef);
+  logBootstrapFirestoreOperation({
+    stage: "claimUsernameForUser.transaction",
+    op: "runTransaction",
+    path: `usernames/${normalized}`,
+    uid: input.uid,
+    requirement: "required",
+    status: "start",
+  });
+  try {
+    await runTransaction(db, async (transaction) => {
+      const lookupRef = doc(db, "usernames", normalized);
+      const existing = await transaction.get(lookupRef);
 
-    if (existing.exists()) {
-      const existingData = existing.data() as UsernameLookup;
-      const existingUid = typeof existingData.uid === "string" ? existingData.uid : undefined;
-      const existingEmail =
-        typeof existingData.email === "string" ? normalizeEmail(existingData.email) : undefined;
+      if (existing.exists()) {
+        const existingData = existing.data() as UsernameLookup;
+        const existingUid = typeof existingData.uid === "string" ? existingData.uid : undefined;
+        const existingEmail =
+          typeof existingData.email === "string" ? normalizeEmail(existingData.email) : undefined;
 
-      const ownedBySameUser =
-        existingUid === input.uid || (Boolean(normalizedEmail) && existingEmail === normalizedEmail);
+        const ownedBySameUser =
+          existingUid === input.uid || (Boolean(normalizedEmail) && existingEmail === normalizedEmail);
 
-      if (!ownedBySameUser) {
-        throw new UsernameTakenError();
+        if (!ownedBySameUser) {
+          throw new UsernameTakenError();
+        }
+
+        return;
       }
 
-      if (!existingEmail && normalizedEmail) {
-        transaction.set(
-          lookupRef,
-          {
-            email: normalizedEmail,
-          },
-          { merge: true }
-        );
-      }
-
-      return;
-    }
-
-    transaction.set(lookupRef, {
-      username: formatted,
-      usernameLower: normalized,
+      transaction.set(lookupRef, {
+        username: formatted,
+        usernameLower: normalized,
+        uid: input.uid,
+        email: normalizedEmail ?? "",
+        createdAt: serverTimestamp(),
+      } satisfies UsernameLookup);
+    });
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "runTransaction",
+      path: `usernames/${normalized}`,
+      stage: "claimUsernameForUser.transaction",
       uid: input.uid,
-      email: normalizedEmail ?? "",
-      createdAt: serverTimestamp(),
-    } satisfies UsernameLookup);
+      requirement: "required",
+    });
+    throw error;
+  }
+  logBootstrapFirestoreOperation({
+    stage: "claimUsernameForUser.transaction",
+    op: "runTransaction",
+    path: `usernames/${normalized}`,
+    uid: input.uid,
+    requirement: "required",
+    status: "success",
   });
 
   return normalized;
@@ -477,230 +766,155 @@ export async function ensureUserProfile(
   seed: EnsureProfileInput = {}
 ): Promise<WurderUserProfile> {
   const uid = user.uid;
-  const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
-  let accountProfile: AppAccountProfile | null = null;
-  if (
-    needsAccountFallback(
-      snapshot.exists()
-        ? normalizeProfile(uid, snapshot.data(), user.email ? normalizeEmail(user.email) : null)
-        : null
-    )
-  ) {
-    try {
-      accountProfile = await readAppAccountProfile(uid);
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(`[auth] Failed to read fallback account profile for uid ${uid}`, error);
-      }
-      accountProfile = null;
-    }
-  }
+  const accountResolution = await ensureAccountDoc(user, seed);
+  const accountProfile = accountResolution.accountProfile;
 
-  const firstName = cleanName(seed.firstName);
-  const lastName = cleanName(seed.lastName);
-  const authDisplayName = cleanName(user.displayName);
-  const fallbackName = buildName(firstName, lastName);
-  const name =
-    cleanName(seed.name) ??
-    cleanName(accountProfile?.name) ??
-    authDisplayName ??
-    cleanName(fallbackName) ??
-    cleanName(buildName(accountProfile?.firstName, accountProfile?.lastName));
   const email = user.email ? normalizeEmail(user.email) : null;
-  const avatar = seed.avatar ?? user.photoURL ?? accountProfile?.avatarUrl ?? null;
-
-  const requestedWurderId = cleanText(seed.wurderId);
-  const requestedWurderIdLower = requestedWurderId
-    ? await claimUsernameForUser({
-        uid,
-        email,
-        wurderId: requestedWurderId,
-      })
-    : undefined;
-  const fallbackWurderId = cleanText(accountProfile?.wurderId);
-
-  if (!snapshot.exists()) {
-    const createdProfile = withoutUndefined({
+  let usersProfile: WurderUserProfile | null = null;
+  const userRef = doc(db, "users", uid);
+  try {
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
       uid,
-      email,
-      firstName: firstName ?? accountProfile?.firstName ?? "",
-      lastName: lastName ?? accountProfile?.lastName ?? "",
-      name,
-      avatar,
-      avatarUrl: avatar,
-      stats: { ...DEFAULT_PROFILE_STATS },
-      activeGame: null,
-      onboarding: { profileComplete: false },
-    }) as WurderUserProfile;
-
-    if (requestedWurderId && requestedWurderIdLower) {
-      createdProfile.wurderId = requestedWurderId;
-      createdProfile.wurderIdLower = requestedWurderIdLower;
-    } else if (fallbackWurderId) {
-      createdProfile.wurderId = fallbackWurderId;
-      createdProfile.wurderIdLower = normalizeWurderId(fallbackWurderId);
-    }
-
-    const profileComplete = isProfileComplete(createdProfile);
-
-    await setDoc(userRef, withoutUndefined({
-      ...createdProfile,
-      onboarding: {
-        ...(createdProfile.onboarding ?? {}),
-        profileComplete,
-      },
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }));
-
-    return {
-      ...createdProfile,
-      onboarding: {
-        ...(createdProfile.onboarding ?? {}),
-        profileComplete,
-      },
-    };
+      requirement: "optional",
+      status: "start",
+    });
+    const snapshot = await getDoc(userRef);
+    logBootstrapFirestoreOperation({
+      stage: "ensureUserProfile.readUser",
+      op: "getDoc",
+      path: `users/${uid}`,
+      uid,
+      requirement: "optional",
+      status: "success",
+    });
+    usersProfile = snapshot.exists() ? normalizeProfile(uid, snapshot.data(), email) : null;
+  } catch (error) {
+    logBootstrapFirestoreFailure({
+      error,
+      op: "getDoc",
+      path: `users/${uid}`,
+      stage: "ensureUserProfile.readUser",
+      uid,
+      requirement: "optional",
+    });
   }
 
-  const currentProfile = normalizeProfile(uid, snapshot.data(), email);
-  const mergedCurrentProfile = mergeProfiles(uid, currentProfile, accountProfile) ?? currentProfile;
-  const existingWurderId = cleanText(currentProfile.wurderId) ?? cleanText(mergedCurrentProfile.wurderId);
-
-  if (existingWurderId && email) {
-    try {
-      await claimUsernameForUser({
-        uid,
-        email,
-        wurderId: existingWurderId,
-      });
-    } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(`[auth] Failed to repair username lookup for uid ${uid}`, error);
-      }
-    }
-  }
-
-  const firestoreUpdates: Record<string, unknown> = {
+  const resolved = mergeProfiles(uid, usersProfile, accountProfile) ?? {
     uid,
-    updatedAt: serverTimestamp(),
+    email,
+    stats: { ...DEFAULT_PROFILE_STATS },
   };
-  const memoryUpdates: Partial<WurderUserProfile> = { uid };
-
-  if (!currentProfile.email && email) {
-    firestoreUpdates.email = email;
-    memoryUpdates.email = email;
-  }
-
-  if (!cleanText(currentProfile.name) && cleanText(mergedCurrentProfile.name)) {
-    firestoreUpdates.name = mergedCurrentProfile.name;
-    memoryUpdates.name = mergedCurrentProfile.name;
-  }
-
-  if (!cleanText(currentProfile.firstName) && cleanText(mergedCurrentProfile.firstName)) {
-    firestoreUpdates.firstName = mergedCurrentProfile.firstName;
-    memoryUpdates.firstName = mergedCurrentProfile.firstName;
-  }
-
-  if (!cleanText(currentProfile.lastName) && cleanText(mergedCurrentProfile.lastName)) {
-    firestoreUpdates.lastName = mergedCurrentProfile.lastName;
-    memoryUpdates.lastName = mergedCurrentProfile.lastName;
-  }
-
-  if (!currentProfile.avatar && mergedCurrentProfile.avatar) {
-    firestoreUpdates.avatar = mergedCurrentProfile.avatar;
-    memoryUpdates.avatar = mergedCurrentProfile.avatar;
-  }
-
-  if (!currentProfile.avatarUrl && mergedCurrentProfile.avatarUrl) {
-    firestoreUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
-    memoryUpdates.avatarUrl = mergedCurrentProfile.avatarUrl;
-  }
-
-  if (!cleanText(currentProfile.wurderId) && cleanText(mergedCurrentProfile.wurderId)) {
-    firestoreUpdates.wurderId = mergedCurrentProfile.wurderId;
-    firestoreUpdates.wurderIdLower =
-      cleanText(mergedCurrentProfile.wurderIdLower) ??
-      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
-    memoryUpdates.wurderId = mergedCurrentProfile.wurderId;
-    memoryUpdates.wurderIdLower =
-      cleanText(mergedCurrentProfile.wurderIdLower) ??
-      (mergedCurrentProfile.wurderId ? normalizeWurderId(mergedCurrentProfile.wurderId) : undefined);
-  }
+  const profileComplete = isProfileComplete(resolved);
 
   const nextProfile: WurderUserProfile = {
-    ...currentProfile,
-    ...memoryUpdates,
-  };
-
-  const profileComplete = isProfileComplete(nextProfile);
-  firestoreUpdates.onboarding = {
-    ...(currentProfile.onboarding ?? {}),
-    profileComplete,
-  };
-
-  await setDoc(userRef, firestoreUpdates, { merge: true });
-
-  return {
-    ...nextProfile,
+    ...resolved,
     onboarding: {
-      ...(nextProfile.onboarding ?? {}),
+      ...(resolved.onboarding ?? {}),
       profileComplete,
     },
+    debugProfileResolution: buildDebugProfileResolution({
+      uid,
+      rawAccountFields: accountResolution.rawAccountFields,
+    }),
   };
+
+  logProfileResolutionDiagnostics({
+    uid,
+    usersProfile,
+    rawAccountFields: accountResolution.rawAccountFields,
+    resolvedProfile: nextProfile,
+    authSession: {
+      displayName: user.displayName ?? null,
+      email: user.email ?? null,
+      photoURL: user.photoURL ?? null,
+    },
+  });
+
+  await updateAccountSnapshot(uid, accountProfile, nextProfile);
+  await backfillUsersFromMergedProfile(uid, usersProfile, nextProfile, accountProfile);
+
+  return nextProfile;
 }
 
 export async function updateUserProfile(
   uid: string,
   input: UpdateUserProfileInput
 ): Promise<WurderUserProfile> {
-  const userRef = doc(db, "users", uid);
-  const snapshot = await getDoc(userRef);
-
-  if (!snapshot.exists()) {
+  const accountRef = doc(db, "accounts", uid);
+  const accountSnapshot = await getDoc(accountRef);
+  if (!accountSnapshot.exists()) {
     throw new Error("Profile not found.");
   }
 
-  const currentProfile = normalizeProfile(uid, snapshot.data(), null);
-  const firestoreUpdates: Record<string, unknown> = {
+  const accountResolution = normalizeAppAccountProfile(accountSnapshot.data());
+  const currentProfile = mergeProfiles(uid, null, accountResolution.profile) as WurderUserProfile;
+
+  const accountUpdates: Record<string, unknown> = {
+    uid,
     updatedAt: serverTimestamp(),
   };
   const memoryUpdates: Partial<WurderUserProfile> = {};
 
   if ("firstName" in input) {
-    const firstName = cleanName(input.firstName) ?? "";
-    firestoreUpdates.firstName = firstName;
-    memoryUpdates.firstName = firstName;
+    const firstName = cleanName(input.firstName);
+    if (firstName) {
+      accountUpdates.firstName = firstName;
+      memoryUpdates.firstName = firstName;
+    } else if (cleanText(currentProfile.firstName)) {
+      console.warn(`[auth] Ignored empty firstName update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("lastName" in input) {
-    const lastName = cleanName(input.lastName) ?? "";
-    firestoreUpdates.lastName = lastName;
-    memoryUpdates.lastName = lastName;
+    const lastName = cleanName(input.lastName);
+    if (lastName) {
+      accountUpdates.lastName = lastName;
+      accountUpdates.secondName = lastName;
+      memoryUpdates.lastName = lastName;
+    } else if (cleanText(currentProfile.lastName)) {
+      console.warn(`[auth] Ignored empty lastName update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("name" in input) {
-    const name = cleanName(input.name) ?? "";
-    firestoreUpdates.name = name;
-    memoryUpdates.name = name;
+    const name = cleanName(input.name);
+    if (name) {
+      accountUpdates.name = name;
+      memoryUpdates.name = name;
+    } else if (cleanText(currentProfile.name)) {
+      console.warn(`[auth] Ignored empty name update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("avatar" in input) {
-    const avatar = input.avatar ?? null;
-    firestoreUpdates.avatar = avatar;
-    memoryUpdates.avatar = avatar;
+    const avatar = cleanText(input.avatar ?? undefined);
+    if (avatar) {
+      accountUpdates.avatar = avatar;
+      memoryUpdates.avatar = avatar;
+    } else if (currentProfile.avatar) {
+      console.warn(`[auth] Ignored empty avatar update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("avatarUrl" in input) {
-    const avatarUrl = input.avatarUrl ?? null;
-    firestoreUpdates.avatarUrl = avatarUrl;
-    memoryUpdates.avatarUrl = avatarUrl;
+    const avatarUrl = cleanText(input.avatarUrl ?? undefined);
+    if (avatarUrl) {
+      accountUpdates.avatar = avatarUrl;
+      accountUpdates.avatarUrl = avatarUrl;
+      accountUpdates.photoURL = avatarUrl;
+      memoryUpdates.avatarUrl = avatarUrl;
+    } else if (currentProfile.avatarUrl) {
+      console.warn(`[auth] Ignored empty avatarUrl update for uid ${uid} to preserve canonical profile data`);
+    }
   }
 
   if ("wurderId" in input && typeof input.wurderId === "string") {
     const candidateWurderId = input.wurderId.trim();
     const candidateLower = normalizeWurderId(candidateWurderId);
-    const currentLower = cleanText(currentProfile.wurderIdLower);
+    const currentLower = cleanText(currentProfile.wurderIdLower) ?? cleanText(accountResolution.profile.wurderIdLower);
 
     if (!candidateWurderId) {
       throw new Error("Wurder ID is required.");
@@ -716,8 +930,10 @@ export async function updateUserProfile(
         email: currentProfile.email,
         wurderId: candidateWurderId,
       });
-      firestoreUpdates.wurderId = candidateWurderId;
-      firestoreUpdates.wurderIdLower = candidateLower;
+      accountUpdates.username = candidateWurderId;
+      accountUpdates.usernameLower = candidateLower;
+      accountUpdates.wurderId = candidateWurderId;
+      accountUpdates.wurderIdLower = candidateLower;
       memoryUpdates.wurderId = candidateWurderId;
       memoryUpdates.wurderIdLower = candidateLower;
     }
@@ -729,12 +945,12 @@ export async function updateUserProfile(
   };
 
   const profileComplete = isProfileComplete(nextProfile);
-  firestoreUpdates.onboarding = {
-    ...(currentProfile.onboarding ?? {}),
-    profileComplete,
-  };
+  await setDoc(accountRef, accountUpdates, { merge: true });
 
-  await setDoc(userRef, firestoreUpdates, { merge: true });
+  await backfillUsersFromMergedProfile(uid, null, {
+    ...nextProfile,
+    onboarding: { ...(nextProfile.onboarding ?? {}), profileComplete },
+  }, accountResolution.profile);
 
   return {
     ...nextProfile,
