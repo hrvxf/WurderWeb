@@ -1,26 +1,16 @@
 import { useMemo } from "react";
 
-import type { ManagerPlayerPerformance } from "@/components/admin/types";
+import {
+  displaySafeCount,
+  displaySafePercent,
+  displaySafeRatio,
+  type PlayerPerformance,
+} from "@wurder/shared-analytics";
 
 type PlayerPerformanceTableProps = {
-  players: ManagerPlayerPerformance[];
+  players: PlayerPerformance[];
   mode?: string | null;
 };
-
-function formatPercent(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return `${(value ?? 0).toFixed(1)}%`;
-}
-
-function formatRatio(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return (value ?? 0).toFixed(2);
-}
-
-function formatCount(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return (value ?? 0).toLocaleString();
-}
 
 function isClassicMode(mode: string | null | undefined): boolean {
   return (mode ?? "").trim().toLowerCase() === "classic";
@@ -61,11 +51,11 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
               sortedPlayers.map((player) => (
                 <tr key={player.playerId} className="text-slate-700">
                   <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.displayName}</td>
-                  <td className="px-3 py-2">{formatCount(player.kills)}</td>
-                  <td className="px-3 py-2">{formatCount(player.deaths)}</td>
-                  <td className="px-3 py-2">{formatRatio(player.kdRatio)}</td>
-                  <td className="px-3 py-2">{formatPercent(player.accuracyPct)}</td>
-                  <td className="px-3 py-2">{formatCount(player.sessionCount)}</td>
+                  <td className="px-3 py-2">{displaySafeCount(player.kills)}</td>
+                  <td className="px-3 py-2">{displaySafeCount(player.deaths)}</td>
+                  <td className="px-3 py-2">{displaySafeRatio(player.kdRatio)}</td>
+                  <td className="px-3 py-2">{displaySafePercent(player.accuracyPct)}</td>
+                  <td className="px-3 py-2">{displaySafeCount(player.sessionCount)}</td>
                 </tr>
               ))
             ) : (

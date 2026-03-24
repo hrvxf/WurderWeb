@@ -1,3 +1,5 @@
+import { displaySafeDurationSeconds, displaySafePercent } from "@wurder/shared-analytics";
+
 import type {
   ManagerGameOverview,
   ManagerInsight,
@@ -12,17 +14,6 @@ type SessionSummaryProps = {
   players: ManagerPlayerPerformance[];
 };
 
-function formatDuration(seconds: number | null): string {
-  if (!Number.isFinite(seconds ?? NaN) || (seconds ?? 0) <= 0) return "--";
-  const durationSeconds = seconds ?? 0;
-
-  const hours = Math.floor(durationSeconds / 3600);
-  const minutes = Math.floor((durationSeconds % 3600) / 60);
-
-  if (hours <= 0) return `${minutes}m`;
-  return `${hours}h ${minutes}m`;
-}
-
 function formatDate(value: string | null): string {
   if (!value) return "--";
 
@@ -33,11 +24,6 @@ function formatDate(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(asDate);
-}
-
-function formatPercent(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN) || (value ?? 0) <= 0) return "--";
-  return `${Math.round(value ?? 0)}%`;
 }
 
 function findTopPerformer(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
@@ -154,7 +140,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
             {communicator ? (
             <Finding
               label="Most Effective Communicator"
-              headline={`${communicator.displayName}: ${formatPercent(communicator.accuracyPct)} accuracy`}
+              headline={`${communicator.displayName}: ${displaySafePercent(communicator.accuracyPct, "--", 0)} accuracy`}
               interpretation={`Best precision signal across ${communicator.sessionCount} sessions, supporting reliable callout execution.`}
             />
             ) : null}
@@ -175,8 +161,8 @@ export default function SessionSummary({ summary, overview, insights, players }:
 
         <Finding
           label="Session-Wide Observation"
-          headline={`${summary.totalSessions.toLocaleString()} sessions, average ${formatDuration(summary.avgSessionLengthSeconds)}`}
-          interpretation={`Longest session ${formatDuration(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total deaths ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
+          headline={`${summary.totalSessions.toLocaleString()} sessions, average ${displaySafeDurationSeconds(summary.avgSessionLengthSeconds)}`}
+          interpretation={`Longest session ${displaySafeDurationSeconds(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total deaths ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
         />
 
         {appliesTeamMode ? (

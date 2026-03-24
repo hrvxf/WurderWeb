@@ -16,6 +16,7 @@ import type {
   ManagerPlayerPerformance,
   ManagerSessionSummary,
 } from "@/components/admin/types";
+import { deriveSessionStatus } from "@wurder/shared-analytics";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
 
@@ -107,7 +108,11 @@ function normalizeOverview(value: unknown, gameCode: string): ManagerGameOvervie
   return {
     gameCode,
     gameName: parseString(overview.gameName),
-    status: parseString(overview.status) || "unknown",
+    status: deriveSessionStatus({
+      status: overview.status,
+      startedAt: overview.startedAt,
+      endedAt: overview.endedAt,
+    }),
     mode: parseNullableString(overview.mode),
     startedAt: parseNullableString(overview.startedAt),
     endedAt: parseNullableString(overview.endedAt),

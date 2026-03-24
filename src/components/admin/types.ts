@@ -1,48 +1,17 @@
-export type ManagerGameOverview = {
-  gameCode: string;
-  gameName: string;
-  status: string;
-  mode?: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-  totalPlayers: number;
-  activePlayers: number;
-  totalSessions: number;
-};
+import type {
+  DashboardResponse,
+  DashboardInsight,
+  DashboardOverview,
+  DashboardSessionSummary,
+  PlayerPerformance,
+} from "@wurder/shared-analytics";
 
-export type ManagerInsight = {
-  label: string;
-  value: number;
-  message?: string | null;
-  triggeredBy?: Array<{
-    metric: string;
-    actual: number;
-    expected: number;
-    comparator: "<" | ">" | "<=" | ">=" | "=";
-  }>;
-};
+export type ManagerGameOverview = DashboardOverview;
 
-export type ManagerPlayerPerformance = {
-  playerId: string;
-  displayName: string;
-  kills: number | null;
-  deaths: number | null;
-  kdRatio: number | null;
-  accuracyPct: number | null;
-  sessionCount: number | null;
-};
+export type ManagerInsight = DashboardInsight;
 
-export type ManagerSessionSummary = {
-  totalSessions: number;
-  avgSessionLengthSeconds: number | null;
-  longestSessionSeconds: number | null;
-  lastSessionAt: string | null;
-};
+export type ManagerPlayerPerformance = PlayerPerformance;
 
-export type ManagerAnalyticsDocument = {
-  overview: ManagerGameOverview;
-  insights: ManagerInsight[];
-  playerPerformance: ManagerPlayerPerformance[];
-  sessionSummary: ManagerSessionSummary;
-  updatedAt: string | null;
-};
+export type ManagerSessionSummary = DashboardSessionSummary;
+
+export type ManagerAnalyticsDocument = DashboardResponse;

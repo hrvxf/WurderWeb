@@ -23,7 +23,8 @@
     "qrcode.react": "^4.2.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "react-easy-crop": "^5.5.0"
+    "react-easy-crop": "^5.5.0",
+    "@wurder/shared-analytics": "file:app/backend/packages/shared-analytics"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
