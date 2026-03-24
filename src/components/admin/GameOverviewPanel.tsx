@@ -1,4 +1,16 @@
-import type { ManagerGameOverview } from "@/components/admin/types";
+import { deriveSessionStatus } from "@wurder/shared-analytics";
+
+type ManagerGameOverview = {
+  gameCode: string;
+  gameName?: string;
+  status?: string;
+  mode?: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  totalPlayers: number;
+  activePlayers: number;
+  totalSessions: number;
+};
 
 type GameOverviewPanelProps = {
   overview: ManagerGameOverview;
@@ -17,12 +29,11 @@ function formatDate(value: string | null): string {
 }
 
 export default function GameOverviewPanel({ overview }: GameOverviewPanelProps) {
-  const normalizedStatus = overview.status.trim().toLowerCase();
-  const sessionState = overview.endedAt
-    ? "Ended session"
-    : overview.startedAt || normalizedStatus === "active" || normalizedStatus === "in_progress"
-      ? "Active session"
-      : "Session not started";
+  const sessionStatus = deriveSessionStatus({
+    startedAtMs: overview.startedAt ? new Date(overview.startedAt).getTime() : null,
+    endedAtMs: overview.endedAt ? new Date(overview.endedAt).getTime() : null,
+  });
+  const sessionState = sessionStatus === "ended" ? "Ended session" : sessionStatus === "live" ? "Active session" : "Session not started";
 
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -34,7 +45,7 @@ export default function GameOverviewPanel({ overview }: GameOverviewPanelProps) 
         </div>
         <div className="rounded-md bg-slate-50 p-3">
           <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
-          <p className="mt-1 text-sm font-medium capitalize text-slate-900">{overview.status}</p>
+          <p className="mt-1 text-sm font-medium capitalize text-slate-900">{overview.status ?? sessionStatus}</p>
           <p className="mt-1 text-xs text-slate-600">{sessionState}</p>
         </div>
         <div className="rounded-md bg-slate-50 p-3">

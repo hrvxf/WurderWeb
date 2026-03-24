@@ -1,25 +1,29 @@
 import { useMemo } from "react";
 
-import type { ManagerPlayerPerformance } from "@/components/admin/types";
+import { normalizeRatioMetric, toNullableNumber } from "@wurder/shared-analytics";
+import type { PlayerPerformance } from "@wurder/shared-analytics";
 
 type PlayerPerformanceTableProps = {
-  players: ManagerPlayerPerformance[];
+  players: PlayerPerformance[];
   mode?: string | null;
 };
 
-function formatPercent(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return `${(value ?? 0).toFixed(1)}%`;
+function formatPercent(value: number | null | undefined): string {
+  const normalizedRatio = normalizeRatioMetric(value ?? null);
+  if (!Number.isFinite(normalizedRatio ?? Number.NaN)) return "--";
+  return `${((normalizedRatio ?? 0) * 100).toFixed(1)}%`;
 }
 
-function formatRatio(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return (value ?? 0).toFixed(2);
+function formatRatio(value: number | null | undefined): string {
+  const normalized = toNullableNumber(value ?? null);
+  if (!Number.isFinite(normalized ?? Number.NaN)) return "--";
+  return (normalized ?? 0).toFixed(2);
 }
 
-function formatCount(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN)) return "--";
-  return (value ?? 0).toLocaleString();
+function formatCount(value: number | null | undefined): string {
+  const normalized = toNullableNumber(value ?? null);
+  if (!Number.isFinite(normalized ?? Number.NaN)) return "--";
+  return (normalized ?? 0).toLocaleString();
 }
 
 function isClassicMode(mode: string | null | undefined): boolean {
@@ -32,8 +36,9 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
     () =>
       [...players].sort(
         (a, b) =>
-          (b.kills ?? Number.NEGATIVE_INFINITY) - (a.kills ?? Number.NEGATIVE_INFINITY) ||
-          (b.kdRatio ?? Number.NEGATIVE_INFINITY) - (a.kdRatio ?? Number.NEGATIVE_INFINITY)
+          (toNullableNumber(b.kills ?? b.confirmedKills) ?? Number.NEGATIVE_INFINITY) -
+            (toNullableNumber(a.kills ?? a.confirmedKills) ?? Number.NEGATIVE_INFINITY) ||
+          (toNullableNumber(b.kd) ?? Number.NEGATIVE_INFINITY) - (toNullableNumber(a.kd) ?? Number.NEGATIVE_INFINITY)
       ),
     [players]
   );
@@ -53,19 +58,19 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
               <th className="px-3 py-2">{hasDeathsData ? "Deaths" : "Deaths (Unavailable)"}</th>
               <th className="px-3 py-2">K/D</th>
               <th className="px-3 py-2">Accuracy</th>
-              <th className="px-3 py-2">Sessions</th>
+              <th className="px-3 py-2">Dispute Rate</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {sortedPlayers.length > 0 ? (
-              sortedPlayers.map((player) => (
-                <tr key={player.playerId} className="text-slate-700">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.displayName}</td>
-                  <td className="px-3 py-2">{formatCount(player.kills)}</td>
+              sortedPlayers.map((player, index) => (
+                <tr key={player.playerId ?? player.userId ?? `player-row-${index}`} className="text-slate-700">
+                  <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.playerName}</td>
+                  <td className="px-3 py-2">{formatCount(player.kills ?? player.confirmedKills)}</td>
                   <td className="px-3 py-2">{formatCount(player.deaths)}</td>
-                  <td className="px-3 py-2">{formatRatio(player.kdRatio)}</td>
-                  <td className="px-3 py-2">{formatPercent(player.accuracyPct)}</td>
-                  <td className="px-3 py-2">{formatCount(player.sessionCount)}</td>
+                  <td className="px-3 py-2">{formatRatio(player.kd)}</td>
+                  <td className="px-3 py-2">{formatPercent(player.accuracy ?? player.successRate)}</td>
+                  <td className="px-3 py-2">{formatPercent(player.disputeRate)}</td>
                 </tr>
               ))
             ) : (

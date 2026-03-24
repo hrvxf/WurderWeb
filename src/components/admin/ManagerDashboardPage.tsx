@@ -9,13 +9,9 @@ import PlayerPerformanceTable from "@/components/admin/PlayerPerformanceTable";
 import SessionSummary from "@/components/admin/SessionSummary";
 import ManagerRecommendations from "@/components/admin/ManagerRecommendations";
 import SessionTimeline from "@/components/admin/SessionTimeline";
-import type {
-  ManagerAnalyticsDocument,
-  ManagerGameOverview,
-  ManagerInsight,
-  ManagerPlayerPerformance,
-  ManagerSessionSummary,
-} from "@/components/admin/types";
+import { computeAccuracy, computeDisputeRate, computeDurationMs, computeKd, toNullableNumber } from "@wurder/shared-analytics";
+import type { DashboardResponse, PlayerPerformance } from "@wurder/shared-analytics";
+import type { ManagerInsight } from "@/components/admin/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
 
@@ -101,7 +97,37 @@ function formatInsightLabel(value: string): string {
     .join(" ");
 }
 
-function normalizeOverview(value: unknown, gameCode: string): ManagerGameOverview {
+type ManagerOverview = {
+  gameCode: string;
+  gameName: string;
+  status: string;
+  mode: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  totalPlayers: number;
+  activePlayers: number;
+  totalSessions: number;
+};
+
+type ManagerSessionSummary = {
+  totalSessions: number;
+  avgSessionLengthSeconds: number | null;
+  longestSessionSeconds: number | null;
+  lastSessionAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
+type ManagerAnalyticsDocument = {
+  dashboard: DashboardResponse;
+  overview: ManagerOverview;
+  insights: ManagerInsight[];
+  playerPerformance: PlayerPerformance[];
+  sessionSummary: ManagerSessionSummary;
+  updatedAt: string | null;
+};
+
+function normalizeOverview(value: unknown, gameCode: string): ManagerOverview {
   const overview = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
   return {
@@ -145,22 +171,6 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
     return value
       .map((item) => {
         const insight = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
-        const triggeredBy = Array.isArray(insight.triggeredBy)
-          ? insight.triggeredBy
-              .map((entry) => {
-                const candidate = entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
-                if (!candidate) return null;
-                return {
-                  metric: parseString(candidate.metric),
-                  actual: parseNumber(candidate.actual),
-                  expected: parseNumber(candidate.expected),
-                };
-              })
-              .filter(
-                (entry): entry is { metric: string; actual: number; expected: number } =>
-                  entry != null && entry.metric.length > 0
-              )
-          : undefined;
         return {
           label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
@@ -184,7 +194,7 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
   return [];
 }
 
-function normalizePlayers(value: unknown): ManagerPlayerPerformance[] {
+function normalizePlayers(value: unknown): PlayerPerformance[] {
   const rows: unknown[] = Array.isArray(value)
     ? value
     : value && typeof value === "object"
@@ -197,14 +207,29 @@ function normalizePlayers(value: unknown): ManagerPlayerPerformance[] {
 
   return rows.map((item, index) => {
     const player = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+    const kills = toNullableNumber(player.kills ?? player.confirmedKills);
+    const deaths = toNullableNumber(player.deaths);
+    const claims = toNullableNumber(player.claims);
+    const disputes = toNullableNumber(player.disputes);
+    const confirmedKills = toNullableNumber(player.confirmedKills) ?? kills;
     return {
       playerId: parseString(player.playerId) || `row-${index}`,
-      displayName: parseString(player.displayName) || "Unknown",
-      kills: parseNullableNumber(player.kills),
-      deaths: parseNullableNumber(player.deaths),
-      kdRatio: parseNullableNumber(player.kdRatio),
-      accuracyPct: parseNullableNumber(player.accuracyPct),
-      sessionCount: parseNullableNumber(player.sessionCount),
+      playerName: parseString(player.playerName) || parseString(player.displayName) || "Unknown",
+      userId: parseNullableString(player.userId),
+      kills: kills ?? undefined,
+      confirmedKills: confirmedKills ?? undefined,
+      deaths: deaths ?? 0,
+      kd: parseNullableNumber(player.kd) ?? (kills != null && deaths != null ? computeKd(kills, deaths) : null),
+      accuracy:
+        parseNullableNumber(player.accuracy) ??
+        parseNullableNumber(player.successRate) ??
+        (confirmedKills != null && claims != null ? computeAccuracy(confirmedKills, claims) : null),
+      successRate: parseNullableNumber(player.successRate) ?? parseNullableNumber(player.accuracy),
+      claims: claims ?? undefined,
+      disputes: disputes ?? undefined,
+      disputeRate:
+        parseNullableNumber(player.disputeRate) ??
+        (disputes != null && claims != null ? computeDisputeRate(disputes, claims) : null),
     };
   });
 }
@@ -217,17 +242,55 @@ function normalizeSessionSummary(value: unknown): ManagerSessionSummary {
     avgSessionLengthSeconds: parseNullableNumber(summary.avgSessionLengthSeconds),
     longestSessionSeconds: parseNullableNumber(summary.longestSessionSeconds),
     lastSessionAt: parseNullableString(summary.lastSessionAt),
+    startedAt: parseNullableString(summary.startedAt),
+    endedAt: parseNullableString(summary.endedAt),
   };
 }
 
 function normalizeAnalytics(value: unknown, gameCode: string): ManagerAnalyticsDocument {
   const analytics = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+  const normalizedOverview = normalizeOverview(analytics.overview, gameCode);
+  const normalizedPlayers = normalizePlayers(analytics.playerPerformance ?? analytics.playerBreakdown);
+  const normalizedInsights = normalizeInsights(analytics.insights);
+  const normalizedSummary = normalizeSessionSummary(analytics.sessionSummary ?? analytics.session);
+  const dashboard = {
+    gameCode,
+    orgId: parseString(analytics.orgId),
+    session: {
+      startedAt: normalizedOverview.startedAt,
+      endedAt: normalizedOverview.endedAt,
+      durationMs: computeDurationMs({
+        startedAtMs: normalizedOverview.startedAt ? new Date(normalizedOverview.startedAt).getTime() : null,
+        endedAtMs: normalizedOverview.endedAt ? new Date(normalizedOverview.endedAt).getTime() : null,
+      }),
+      status: undefined,
+      sessionName: normalizedOverview.gameName,
+    },
+    overview: {
+      totalPlayers: normalizedOverview.totalPlayers,
+      totalClaims: normalizedInsights.find((insight) => insight.label.toLowerCase() === "claims")?.value ?? 0,
+      totalDisputes: normalizedInsights.find((insight) => insight.label.toLowerCase() === "disputes")?.value ?? 0,
+      avgResolutionTime: null,
+    },
+    topPerformers: {
+      bestSuccessRate: null,
+      mostKills: null,
+      lowestDisputeRate: null,
+    },
+    playerBreakdown: normalizedPlayers,
+    insights: Array.isArray(analytics.insights) ? analytics.insights : [],
+  } satisfies DashboardResponse;
 
   return {
-    overview: normalizeOverview(analytics.overview, gameCode),
-    insights: normalizeInsights(analytics.insights),
-    playerPerformance: normalizePlayers(analytics.playerPerformance),
-    sessionSummary: normalizeSessionSummary(analytics.sessionSummary),
+    dashboard,
+    overview: normalizedOverview,
+    insights: normalizedInsights,
+    playerPerformance: normalizedPlayers,
+    sessionSummary: {
+      ...normalizedSummary,
+      startedAt: normalizedOverview.startedAt,
+      endedAt: normalizedOverview.endedAt,
+    },
     updatedAt: parseNullableString(analytics.updatedAt),
   };
 }
