@@ -1,4 +1,11 @@
-import type { ManagerInsight, ManagerPlayerPerformance, ManagerSessionSummary } from "@/components/admin/types";
+import { normalizeRatioMetric, toNullableNumber } from "@wurder/shared-analytics";
+import type { PlayerPerformance } from "@wurder/shared-analytics";
+
+import type { ManagerInsight } from "@/components/admin/types";
+
+type ManagerSessionSummary = {
+  totalSessions: number;
+};
 
 type ManagerRecommendation = {
   id: string;
@@ -10,20 +17,14 @@ type ManagerRecommendation = {
 type ManagerRecommendationsProps = {
   summary: ManagerSessionSummary;
   insights: ManagerInsight[];
-  players: ManagerPlayerPerformance[];
+  players: PlayerPerformance[];
 };
 
 function findInsight(insights: ManagerInsight[], token: string): ManagerInsight | null {
-  return (
-    insights.find((insight) => insight.label.toLowerCase().includes(token.toLowerCase())) ?? null
-  );
+  return insights.find((insight) => insight.label.toLowerCase().includes(token.toLowerCase())) ?? null;
 }
 
-function getManagerRecommendations({
-  summary,
-  insights,
-  players,
-}: ManagerRecommendationsProps): ManagerRecommendation[] {
+function getManagerRecommendations({ summary, insights, players }: ManagerRecommendationsProps): ManagerRecommendation[] {
   const recommendations: ManagerRecommendation[] = [];
 
   if ((summary.totalSessions ?? 0) <= 0) {
@@ -37,14 +38,14 @@ function getManagerRecommendations({
   }
 
   const topDeathPlayer = [...players]
-    .filter((player) => (player.sessionCount ?? 0) > 0 && player.deaths != null)
-    .sort((a, b) => (b.deaths ?? 0) - (a.deaths ?? 0))[0];
+    .filter((player) => toNullableNumber(player.deaths) != null)
+    .sort((a, b) => (toNullableNumber(b.deaths) ?? 0) - (toNullableNumber(a.deaths) ?? 0))[0];
 
-  if (topDeathPlayer && (topDeathPlayer.deaths ?? 0) >= 10) {
+  if (topDeathPlayer && (toNullableNumber(topDeathPlayer.deaths) ?? 0) >= 10) {
     recommendations.push({
       id: "deaths-focus",
-      title: `Stabilize ${topDeathPlayer.displayName}'s survival patterns`,
-      reason: `${topDeathPlayer.displayName} is carrying the highest death load (${topDeathPlayer.deaths}).`,
+      title: `Stabilize ${topDeathPlayer.playerName}'s survival patterns`,
+      reason: `${topDeathPlayer.playerName} is carrying the highest death load (${topDeathPlayer.deaths}).`,
       action: "Set a short coaching block on positioning, trade timing, and disengage calls for next session.",
     });
   }
@@ -59,9 +60,11 @@ function getManagerRecommendations({
     });
   }
 
-  const lowAccuracyPlayers = players.filter(
-    (player) => (player.sessionCount ?? 0) > 0 && (player.accuracyPct ?? 0) > 0 && (player.accuracyPct ?? 0) < 40
-  );
+  const lowAccuracyPlayers = players.filter((player) => {
+    const accuracy = normalizeRatioMetric(player.accuracy ?? player.successRate ?? null);
+    return (accuracy ?? 0) > 0 && (accuracy ?? 0) < 0.4;
+  });
+
   if (lowAccuracyPlayers.length > 0) {
     recommendations.push({
       id: "accuracy-drill",

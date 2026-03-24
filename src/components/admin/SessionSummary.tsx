@@ -1,21 +1,36 @@
-import type {
-  ManagerGameOverview,
-  ManagerInsight,
-  ManagerPlayerPerformance,
-  ManagerSessionSummary,
-} from "@/components/admin/types";
+import {
+  computeDisputeRate,
+  deriveSessionStatus,
+  normalizeRatioMetric,
+  toNullableNumber,
+} from "@wurder/shared-analytics";
+import type { PlayerPerformance } from "@wurder/shared-analytics";
+
+import type { ManagerInsight } from "@/components/admin/types";
+
+type ManagerOverview = {
+  mode?: string | null;
+};
+
+type ManagerSessionSummary = {
+  totalSessions: number;
+  avgSessionLengthSeconds: number | null;
+  longestSessionSeconds: number | null;
+  lastSessionAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+};
 
 type SessionSummaryProps = {
   summary: ManagerSessionSummary;
-  overview: ManagerGameOverview;
+  overview: ManagerOverview;
   insights: ManagerInsight[];
-  players: ManagerPlayerPerformance[];
+  players: PlayerPerformance[];
 };
 
 function formatDuration(seconds: number | null): string {
   if (!Number.isFinite(seconds ?? NaN) || (seconds ?? 0) <= 0) return "--";
   const durationSeconds = seconds ?? 0;
-
   const hours = Math.floor(durationSeconds / 3600);
   const minutes = Math.floor((durationSeconds % 3600) / 60);
 
@@ -35,47 +50,52 @@ function formatDate(value: string | null): string {
   }).format(asDate);
 }
 
-function formatPercent(value: number | null): string {
-  if (!Number.isFinite(value ?? NaN) || (value ?? 0) <= 0) return "--";
-  return `${Math.round(value ?? 0)}%`;
+function formatPercent(value: number | null | undefined): string {
+  const normalizedRatio = normalizeRatioMetric(value ?? null);
+  if (!Number.isFinite(normalizedRatio ?? NaN) || (normalizedRatio ?? 0) <= 0) return "--";
+  return `${Math.round((normalizedRatio ?? 0) * 100)}%`;
 }
 
-function findTopPerformer(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const eligible = players.filter((player) => player.kills != null && player.sessionCount != null);
-  if (eligible.length === 0) return null;
-  return [...eligible].sort((a, b) => {
-    if ((b.kills ?? 0) !== (a.kills ?? 0)) return (b.kills ?? 0) - (a.kills ?? 0);
-    if ((b.accuracyPct ?? 0) !== (a.accuracyPct ?? 0)) return (b.accuracyPct ?? 0) - (a.accuracyPct ?? 0);
-    if ((b.kdRatio ?? 0) !== (a.kdRatio ?? 0)) return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
-    return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
+function findTopPerformer(players: PlayerPerformance[]): PlayerPerformance | null {
+  if (players.length === 0) return null;
+  return [...players].sort((a, b) => {
+    if ((toNullableNumber(b.kills ?? b.confirmedKills) ?? 0) !== (toNullableNumber(a.kills ?? a.confirmedKills) ?? 0)) {
+      return (toNullableNumber(b.kills ?? b.confirmedKills) ?? 0) - (toNullableNumber(a.kills ?? a.confirmedKills) ?? 0);
+    }
+    if ((normalizeRatioMetric(b.accuracy ?? b.successRate ?? null) ?? 0) !== (normalizeRatioMetric(a.accuracy ?? a.successRate ?? null) ?? 0)) {
+      return (normalizeRatioMetric(b.accuracy ?? b.successRate ?? null) ?? 0) - (normalizeRatioMetric(a.accuracy ?? a.successRate ?? null) ?? 0);
+    }
+    return (toNullableNumber(b.kd) ?? 0) - (toNullableNumber(a.kd) ?? 0);
   })[0] ?? null;
 }
 
-function findCommunicator(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const active = players.filter((player) => (player.sessionCount ?? 0) > 0 && player.accuracyPct != null);
+function findCommunicator(players: PlayerPerformance[]): PlayerPerformance | null {
+  const active = players.filter((player) => normalizeRatioMetric(player.accuracy ?? player.successRate ?? null) != null);
   if (active.length === 0) return null;
 
   return [...active].sort((a, b) => {
-    if ((b.accuracyPct ?? 0) !== (a.accuracyPct ?? 0)) return (b.accuracyPct ?? 0) - (a.accuracyPct ?? 0);
-    if ((b.sessionCount ?? 0) !== (a.sessionCount ?? 0)) return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
-    if ((b.kills ?? 0) !== (a.kills ?? 0)) return (b.kills ?? 0) - (a.kills ?? 0);
-    return (b.kdRatio ?? 0) - (a.kdRatio ?? 0);
+    if ((normalizeRatioMetric(b.accuracy ?? b.successRate ?? null) ?? 0) !== (normalizeRatioMetric(a.accuracy ?? a.successRate ?? null) ?? 0)) {
+      return (normalizeRatioMetric(b.accuracy ?? b.successRate ?? null) ?? 0) - (normalizeRatioMetric(a.accuracy ?? a.successRate ?? null) ?? 0);
+    }
+    if ((toNullableNumber(b.kills ?? b.confirmedKills) ?? 0) !== (toNullableNumber(a.kills ?? a.confirmedKills) ?? 0)) {
+      return (toNullableNumber(b.kills ?? b.confirmedKills) ?? 0) - (toNullableNumber(a.kills ?? a.confirmedKills) ?? 0);
+    }
+    return (toNullableNumber(b.kd) ?? 0) - (toNullableNumber(a.kd) ?? 0);
   })[0] ?? null;
 }
 
-function findCoachingRisk(players: ManagerPlayerPerformance[]): ManagerPlayerPerformance | null {
-  const active = players.filter((player) => (player.sessionCount ?? 0) > 0 && player.deaths != null && player.kdRatio != null);
+function findCoachingRisk(players: PlayerPerformance[]): PlayerPerformance | null {
+  const active = players.filter((player) => toNullableNumber(player.deaths) != null && toNullableNumber(player.kd) != null);
   if (active.length === 0) return null;
 
   return [...active].sort((a, b) => {
-    if ((b.deaths ?? 0) !== (a.deaths ?? 0)) return (b.deaths ?? 0) - (a.deaths ?? 0);
-    if ((a.kdRatio ?? 0) !== (b.kdRatio ?? 0)) return (a.kdRatio ?? 0) - (b.kdRatio ?? 0);
-    if ((a.accuracyPct ?? 0) !== (b.accuracyPct ?? 0)) return (a.accuracyPct ?? 0) - (b.accuracyPct ?? 0);
-    return (b.sessionCount ?? 0) - (a.sessionCount ?? 0);
+    if ((toNullableNumber(b.deaths) ?? 0) !== (toNullableNumber(a.deaths) ?? 0)) return (toNullableNumber(b.deaths) ?? 0) - (toNullableNumber(a.deaths) ?? 0);
+    if ((toNullableNumber(a.kd) ?? 0) !== (toNullableNumber(b.kd) ?? 0)) return (toNullableNumber(a.kd) ?? 0) - (toNullableNumber(b.kd) ?? 0);
+    return (normalizeRatioMetric(a.accuracy ?? a.successRate ?? null) ?? 0) - (normalizeRatioMetric(b.accuracy ?? b.successRate ?? null) ?? 0);
   })[0] ?? null;
 }
 
-function isTeamMode(overview: ManagerGameOverview, insights: ManagerInsight[]): boolean {
+function isTeamMode(overview: ManagerOverview, insights: ManagerInsight[]): boolean {
   const mode = (overview.mode ?? "").toLowerCase();
   if (mode.includes("guild") || mode.includes("team")) return true;
 
@@ -97,15 +117,7 @@ function findMetric(insights: ManagerInsight[], token: string): number | null {
   return match ? match.value : null;
 }
 
-function Finding({
-  label,
-  headline,
-  interpretation,
-}: {
-  label: string;
-  headline: string;
-  interpretation: string;
-}) {
+function Finding({ label, headline, interpretation }: { label: string; headline: string; interpretation: string }) {
   return (
     <article className="rounded-md border border-slate-200 bg-slate-50 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
@@ -123,16 +135,21 @@ export default function SessionSummary({ summary, overview, insights, players }:
   const appliesTeamMode = isTeamMode(overview, insights);
   const teamMetrics = teamInsights(insights).slice(0, 2);
 
-  const totalKills = players.reduce((acc, player) => acc + (player.kills ?? 0), 0);
-  const totalDeaths = players.reduce((acc, player) => acc + (player.deaths ?? 0), 0);
+  const totalKills = players.reduce((acc, player) => acc + (toNullableNumber(player.kills ?? player.confirmedKills) ?? 0), 0);
+  const totalDeaths = players.reduce((acc, player) => acc + (toNullableNumber(player.deaths) ?? 0), 0);
   const disputes = findMetric(insights, "dispute");
   const claims = findMetric(insights, "claim");
-  const singlePlayer = players.length === 1;
+  const insightDisputeRate = claims != null ? computeDisputeRate(disputes ?? 0, claims) : null;
+  const sessionStatus = deriveSessionStatus({
+    startedAtMs: summary.startedAt ? new Date(summary.startedAt).getTime() : null,
+    endedAtMs: summary.endedAt ? new Date(summary.endedAt).getTime() : null,
+  });
 
   const observationExtras = [
     disputes === 0 ? "0 disputes recorded." : null,
     claims === 0 ? "0 claims recorded." : null,
-    singlePlayer ? "Single-player session; peer comparison is limited." : null,
+    insightDisputeRate != null ? `Dispute rate ${Math.round(insightDisputeRate * 100)}%.` : null,
+    players.length === 1 ? "Single-player session; peer comparison is limited." : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -144,39 +161,37 @@ export default function SessionSummary({ summary, overview, insights, players }:
         {availableFindings > 0 ? (
           <>
             {topPerformer ? (
-            <Finding
-              label="Top Performer"
-              headline={`${topPerformer.displayName}: ${topPerformer.kills} eliminations${topPerformer.kdRatio != null ? `, ${topPerformer.kdRatio.toFixed(2)} K/D` : ""}`}
-              interpretation={`Highest output in the current roster across ${topPerformer.sessionCount} sessions.`}
-            />
+              <Finding
+                label="Top Performer"
+                headline={`${topPerformer.playerName}: ${toNullableNumber(topPerformer.kills ?? topPerformer.confirmedKills) ?? 0} eliminations${topPerformer.kd != null ? `, ${toNullableNumber(topPerformer.kd)?.toFixed(2)} K/D` : ""}`}
+                interpretation="Highest output in the current roster."
+              />
             ) : null}
 
             {communicator ? (
-            <Finding
-              label="Most Effective Communicator"
-              headline={`${communicator.displayName}: ${formatPercent(communicator.accuracyPct)} accuracy`}
-              interpretation={`Best precision signal across ${communicator.sessionCount} sessions, supporting reliable callout execution.`}
-            />
+              <Finding
+                label="Most Effective Communicator"
+                headline={`${communicator.playerName}: ${formatPercent(communicator.accuracy ?? communicator.successRate)} accuracy`}
+                interpretation="Best precision signal in this roster snapshot."
+              />
             ) : null}
 
             {coachingRisk ? (
-            <Finding
-              label="Risk / Coaching Needed"
-              headline={`${coachingRisk.displayName}: ${coachingRisk.deaths} deaths, ${coachingRisk.kdRatio?.toFixed(2)} K/D`}
-              interpretation="Highest death load in the roster; prioritize positioning and trade-timing coaching."
-            />
+              <Finding
+                label="Risk / Coaching Needed"
+                headline={`${coachingRisk.playerName}: ${coachingRisk.deaths} deaths, ${toNullableNumber(coachingRisk.kd)?.toFixed(2)} K/D`}
+                interpretation="Highest death load in the roster; prioritize positioning and trade-timing coaching."
+              />
             ) : null}
           </>
         ) : (
-          <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">
-            Not enough completed session data yet.
-          </p>
+          <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">Not enough completed session data yet.</p>
         )}
 
         <Finding
           label="Session-Wide Observation"
           headline={`${summary.totalSessions.toLocaleString()} sessions, average ${formatDuration(summary.avgSessionLengthSeconds)}`}
-          interpretation={`Longest session ${formatDuration(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total deaths ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
+          interpretation={`Status ${sessionStatus}. Longest session ${formatDuration(summary.longestSessionSeconds)}. Last session ${formatDate(summary.lastSessionAt)}. Total eliminations ${totalKills}, total deaths ${totalDeaths}.${observationExtras ? ` ${observationExtras}` : ""}`}
         />
 
         {appliesTeamMode ? (

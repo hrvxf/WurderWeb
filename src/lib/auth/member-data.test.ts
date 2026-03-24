@@ -44,7 +44,8 @@ vi.mock("firebase/firestore", () => ({
 }));
 
 import { DEFAULT_PROFILE_STATS } from "@/lib/types/user";
-import { fetchMemberData, fetchUserProfile } from "@/lib/auth/profile-bootstrap";
+import { fetchUserProfile } from "@/lib/auth/profile-bootstrap";
+import { fetchMemberData } from "@/lib/auth/member-data";
 
 function setDoc(path: string, value: DocValue): void {
   mockState.docs.set(path, value);
