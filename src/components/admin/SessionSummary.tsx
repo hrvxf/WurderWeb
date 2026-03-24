@@ -6,20 +6,7 @@ import {
 } from "@wurder/shared-analytics";
 import type { PlayerPerformance } from "@wurder/shared-analytics";
 
-import type { ManagerInsight } from "@/components/admin/types";
-
-type ManagerOverview = {
-  mode?: string | null;
-};
-
-type ManagerSessionSummary = {
-  totalSessions: number;
-  avgSessionLengthSeconds: number | null;
-  longestSessionSeconds: number | null;
-  lastSessionAt: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-};
+import type { ManagerInsight, ManagerOverview, ManagerSessionSummary } from "@/components/admin/types";
 
 type SessionSummaryProps = {
   summary: ManagerSessionSummary;

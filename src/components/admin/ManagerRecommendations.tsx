@@ -1,11 +1,7 @@
 import { normalizeRatioMetric, toNullableNumber } from "@wurder/shared-analytics";
 import type { PlayerPerformance } from "@wurder/shared-analytics";
 
-import type { ManagerInsight } from "@/components/admin/types";
-
-type ManagerSessionSummary = {
-  totalSessions: number;
-};
+import type { ManagerInsight, ManagerSessionSummary } from "@/components/admin/types";
 
 type ManagerRecommendation = {
   id: string;
