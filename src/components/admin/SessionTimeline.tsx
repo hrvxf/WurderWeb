@@ -8,8 +8,6 @@ import { useAuth } from "@/lib/auth/AuthProvider";
 
 type SessionTimelineProps = {
   gameCode: string;
-  isLocked?: boolean;
-  lockedMessage?: string;
 };
 
 type TimelineEvent = {
@@ -88,23 +86,13 @@ function formatTime(value: string | null): string {
   }).format(asDate);
 }
 
-export default function SessionTimeline({
-  gameCode,
-  isLocked = false,
-  lockedMessage = "Timeline is locked until the live session has ended.",
-}: SessionTimelineProps) {
+export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
   const { user } = useAuth();
   const [events, setEvents] = useState<TimelineEvent[]>([]);
-  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "locked" | "error">("idle");
+  const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
 
   useEffect(() => {
     const normalizedCode = gameCode.trim();
-    if (isLocked) {
-      setEvents([]);
-      setStatus("locked");
-      return;
-    }
-
     if (!user || !normalizedCode) {
       setEvents([]);
       setStatus("idle");
@@ -144,7 +132,7 @@ export default function SessionTimeline({
     return () => {
       cancelled = true;
     };
-  }, [gameCode, isLocked, user]);
+  }, [gameCode, user]);
 
   const hasEvents = useMemo(() => events.length > 0, [events]);
 
@@ -153,7 +141,6 @@ export default function SessionTimeline({
       <h2 className="text-lg font-semibold text-slate-900">Session Timeline</h2>
 
       {status === "loading" ? <p className="mt-3 text-sm text-slate-600">Loading timeline...</p> : null}
-      {status === "locked" ? <p className="mt-3 text-sm text-amber-900">{lockedMessage}</p> : null}
       {status === "error" ? <p className="mt-3 text-sm text-red-700">Unable to load timeline right now.</p> : null}
       {status === "ready" && !hasEvents ? <p className="mt-3 text-sm text-slate-600">No timeline events yet.</p> : null}
 

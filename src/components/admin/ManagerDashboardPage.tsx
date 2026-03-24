@@ -35,6 +35,20 @@ function LockedSection({ title, message }: { title: string; message: string }) {
   );
 }
 
+function hasLiveInsights(insights: ManagerInsight[]): boolean {
+  return insights.some((insight) => insight.value > 0 || Boolean(insight.message?.trim()));
+}
+
+function hasPlayerPerformance(players: PlayerPerformance[]): boolean {
+  return players.some((player) => {
+    const kills = toNullableNumber(player.kills ?? player.confirmedKills);
+    const deaths = toNullableNumber(player.deaths);
+    const claims = toNullableNumber(player.claims);
+    const disputes = toNullableNumber(player.disputes);
+    return [kills, deaths, claims, disputes].some((value) => value != null && value > 0);
+  });
+}
+
 type ReportAction = "csv" | "summary";
 
 type SummaryModalState = {
@@ -416,6 +430,19 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
   const isLiveLimited = analyticsAccess?.visibility === "limited_live";
+  const canShowInsights = useMemo(() => (analytics ? analyticsAccess?.allowedSections.insights || hasLiveInsights(analytics.insights) : false), [analytics, analyticsAccess]);
+  const canShowPlayerPerformance = useMemo(
+    () => (analytics ? analyticsAccess?.allowedSections.playerComparison || hasPlayerPerformance(analytics.playerPerformance) : false),
+    [analytics, analyticsAccess]
+  );
+  const canShowSessionSummary = useMemo(
+    () => (analytics ? analyticsAccess?.allowedSections.sessionSummary || analytics.overview.startedAt != null : false),
+    [analytics, analyticsAccess]
+  );
+  const canShowFinalRecommendations = useMemo(
+    () => (analytics ? analyticsAccess?.allowedSections.sessionSummary && analytics.overview.endedAt != null : false),
+    [analytics, analyticsAccess]
+  );
 
   const parseExportError = (errorPayload: { code?: unknown; message?: unknown }): string => {
     const code = parseString(errorPayload.code);
@@ -593,22 +620,22 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         <div className="grid gap-6">
           {isLiveLimited ? (
             <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
-              {analyticsAccess?.message ?? "Live session mode is active. Additional analytics unlock after the session ends."}
+              {analyticsAccess?.message ?? "Live analytics are enabled. Exports and final recommendations unlock after the session ends."}
             </section>
           ) : null}
           {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
-          {analyticsAccess?.allowedSections.insights ? (
+          {canShowInsights ? (
             <InsightCards insights={analytics.insights} />
           ) : (
-            <LockedSection title="Activity Summary" message="Insights are locked until the session has ended." />
+            <LockedSection title="Activity Summary" message="Live analytics will populate as gameplay events occur." />
           )}
           <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-            {analyticsAccess?.allowedSections.playerComparison ? (
+            {canShowPlayerPerformance ? (
               <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
             ) : (
-              <LockedSection title="Player Performance" message="Player comparison unlocks after the session ends." />
+              <LockedSection title="Player Performance" message="No activity yet." />
             )}
-            {analyticsAccess?.allowedSections.sessionSummary ? (
+            {canShowSessionSummary ? (
               <div className="grid gap-4">
                 <SessionSummary
                   summary={analytics.sessionSummary}
@@ -616,21 +643,21 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                   insights={analytics.insights}
                   players={analytics.playerPerformance}
                 />
-                <ManagerRecommendations
-                  summary={analytics.sessionSummary}
-                  insights={analytics.insights}
-                  players={analytics.playerPerformance}
-                />
+                {canShowFinalRecommendations ? (
+                  <ManagerRecommendations
+                    summary={analytics.sessionSummary}
+                    insights={analytics.insights}
+                    players={analytics.playerPerformance}
+                  />
+                ) : (
+                  <LockedSection title="Final Recommendations" message="Final recommendations unlock after the live session ends." />
+                )}
               </div>
             ) : (
-              <LockedSection title="Session Summary" message="Session summary and recommendations unlock after the session ends." />
+              <LockedSection title="Session Summary" message="Live analytics will populate as gameplay events occur." />
             )}
           </div>
-          <SessionTimeline
-            gameCode={gameCode}
-            isLocked={isLiveLimited}
-            lockedMessage="Timeline events become available after the session ends."
-          />
+          <SessionTimeline gameCode={gameCode} />
         </div>
       ) : null}
 
