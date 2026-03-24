@@ -72,6 +72,25 @@ type AnalyticsEventDoc = {
   type?: unknown;
 };
 
+type GamePlayerDoc = {
+  name?: unknown;
+  displayName?: unknown;
+  alive?: unknown;
+  removedAt?: unknown;
+  deathCount?: unknown;
+  deaths?: unknown;
+  killCount?: unknown;
+  kills?: unknown;
+};
+
+type GameClaimDoc = {
+  killer?: unknown;
+  killerId?: unknown;
+  victim?: unknown;
+  victimId?: unknown;
+  status?: unknown;
+};
+
 type OrgBranding = {
   companyName?: unknown;
   companyLogoUrl?: unknown;
@@ -212,6 +231,109 @@ function normalizeAllowedSections(value: unknown): AnalyticsAccess["allowedSecti
   };
 }
 
+function isClaimConfirmed(status: string | null): boolean {
+  if (!status) return false;
+  const normalized = status.trim().toLowerCase();
+  return ["resolved", "confirmed", "approved", "accepted"].includes(normalized);
+}
+
+function isClaimDenied(status: string | null): boolean {
+  if (!status) return false;
+  const normalized = status.trim().toLowerCase();
+  return ["rejected", "denied", "disputed", "cancelled", "expired"].includes(normalized);
+}
+
+function buildLiveAnalyticsFromCanonical(input: {
+  playersSnap: FirebaseFirestore.QuerySnapshot;
+  claimsSnap: FirebaseFirestore.QuerySnapshot;
+  gameEventsSnap: FirebaseFirestore.QuerySnapshot;
+  normalizedMode: string;
+}) {
+  const perEventTotals = new Map<string, number>();
+  const claimsByKiller = new Map<string, number>();
+  const confirmedByKiller = new Map<string, number>();
+  const confirmedAgainstPlayer = new Map<string, number>();
+  const playersById = new Map<string, { playerId: string; displayName: string; alive: boolean | null; deathsFromDoc: number | null; killsFromDoc: number | null }>();
+  const playersByName = new Map<string, string>();
+
+  for (const playerDoc of input.playersSnap.docs) {
+    const data = (playerDoc.data() ?? {}) as GamePlayerDoc;
+    const playerId = playerDoc.id;
+    const displayName = asString(data.displayName) ?? asString(data.name) ?? playerId;
+    const alive = asBoolean(data.alive);
+    const deathsFromDoc = pickFirstNumber(data.deaths, data.deathCount);
+    const killsFromDoc = pickFirstNumber(data.kills, data.killCount);
+    playersById.set(playerId, { playerId, displayName, alive, deathsFromDoc, killsFromDoc });
+    playersByName.set(playerId.trim().toLowerCase(), playerId);
+    playersByName.set(displayName.trim().toLowerCase(), playerId);
+  }
+
+  for (const claimDoc of input.claimsSnap.docs) {
+    const data = (claimDoc.data() ?? {}) as GameClaimDoc;
+    const status = asString(data.status);
+    const killerRaw = asString(data.killerId) ?? asString(data.killer);
+    const victimRaw = asString(data.victimId) ?? asString(data.victim);
+    const killerKey = killerRaw?.trim().toLowerCase() ?? null;
+    const victimKey = victimRaw?.trim().toLowerCase() ?? null;
+    const killerId = killerKey ? (playersByName.get(killerKey) ?? killerRaw ?? null) : null;
+    const victimId = victimKey ? (playersByName.get(victimKey) ?? victimRaw ?? null) : null;
+
+    perEventTotals.set("kill_claim", (perEventTotals.get("kill_claim") ?? 0) + 1);
+
+    if (killerId) {
+      claimsByKiller.set(killerId, (claimsByKiller.get(killerId) ?? 0) + 1);
+    }
+
+    if (isClaimConfirmed(status)) {
+      perEventTotals.set("admin_confirm_kill_claim", (perEventTotals.get("admin_confirm_kill_claim") ?? 0) + 1);
+      if (killerId) {
+        confirmedByKiller.set(killerId, (confirmedByKiller.get(killerId) ?? 0) + 1);
+      }
+      if (victimId) {
+        confirmedAgainstPlayer.set(victimId, (confirmedAgainstPlayer.get(victimId) ?? 0) + 1);
+      }
+    } else if (isClaimDenied(status)) {
+      perEventTotals.set("admin_deny_kill_claim", (perEventTotals.get("admin_deny_kill_claim") ?? 0) + 1);
+    }
+  }
+
+  for (const eventDoc of input.gameEventsSnap.docs) {
+    const data = (eventDoc.data() ?? {}) as AnalyticsEventDoc;
+    const eventType = asString(data.eventType) ?? asString(data.type);
+    if (!eventType) continue;
+    perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + 1);
+  }
+
+  const playerPerformance = [...playersById.values()].map((player) => {
+    const claimCount = claimsByKiller.get(player.playerId) ?? 0;
+    const killsFromClaims = confirmedByKiller.get(player.playerId) ?? 0;
+    const kills = player.killsFromDoc ?? (killsFromClaims > 0 ? killsFromClaims : null);
+    const deathsFromClaims = confirmedAgainstPlayer.get(player.playerId) ?? 0;
+    const deathsByMode =
+      input.normalizedMode === "classic"
+        ? deathsFromClaims
+        : pickFirstNumber(player.deathsFromDoc, deathsFromClaims, player.alive === false ? 1 : 0) ?? 0;
+    const accuracyPct = claimCount > 0 ? Number(((killsFromClaims / claimCount) * 100).toFixed(1)) : null;
+
+    return {
+      playerId: player.playerId,
+      displayName: player.displayName,
+      kills,
+      deaths: deathsByMode,
+      kdRatio: kills != null ? Number((kills / Math.max(deathsByMode, 1)).toFixed(2)) : null,
+      accuracyPct,
+      sessionCount: 1,
+    };
+  });
+
+  return {
+    perEventTotals,
+    playerPerformance,
+    totalPlayers: playersById.size,
+    totalSessions: playersById.size > 0 ? 1 : 0,
+  };
+}
+
 async function queryPlayerAnalyticsByCode(normalizedCode: string) {
   const snapshots = await Promise.all([
     adminDb.collection("playerAnalytics").where("gameCode", "==", normalizedCode).get(),
@@ -241,25 +363,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const tier: ProductTier = orgId ? await resolveOrganizationTier(orgId) : "basic";
     const branding = orgId ? await resolveOrgBranding(orgId) : null;
 
-    const [playerAnalyticsDocs, analyticsEventsSnap] = await Promise.all([
-      queryPlayerAnalyticsByCode(normalizedCode),
-      adminDb.collection("analyticsEvents").where("gameCode", "==", normalizedCode).limit(500).get(),
-    ]);
-    const hasPlayerAnalytics = playerAnalyticsDocs.length > 0;
-    const hasAnalyticsEvents = !analyticsEventsSnap.empty;
-    if (!hasPlayerAnalytics && !hasAnalyticsEvents) {
-      return NextResponse.json(
-        {
-          code: "ANALYTICS_NOT_FOUND",
-          message: "Game exists, but aggregated analytics are not generated yet.",
-        },
-        { status: 404 }
-      );
-    }
-
     const game = (gameSnapshot.data() ?? {}) as GameDoc;
     const mode = asString(game.mode);
     const normalizedMode = normalizeMode(mode);
+    const gameRef = adminDb.collection("games").doc(normalizedCode);
+
+    const [playerAnalyticsDocs, analyticsEventsSnap, playersSnap, claimsSnap, gameEventsSnap] = await Promise.all([
+      queryPlayerAnalyticsByCode(normalizedCode),
+      adminDb.collection("analyticsEvents").where("gameCode", "==", normalizedCode).limit(500).get(),
+      gameRef.collection("players").get(),
+      gameRef.collection("claims").get(),
+      adminDb.collection("gameEvents").doc(normalizedCode).collection("events").orderBy("createdAt", "desc").limit(500).get(),
+    ]);
+    const hasPlayerAnalytics = playerAnalyticsDocs.length > 0;
     const perEventTotals = new Map<string, number>();
     const playerPerformance = playerAnalyticsDocs.map((doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
@@ -312,12 +428,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       }
     }
 
+    const liveAnalytics = buildLiveAnalyticsFromCanonical({
+      playersSnap,
+      claimsSnap,
+      gameEventsSnap,
+      normalizedMode,
+    });
+
     const totalEventsFromPlayers = playerAnalyticsDocs.reduce((sum, doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
       return sum + (asNumber(data.eventsTotal) ?? 0);
     }, 0);
     const totalEventsFromCounts = [...perEventTotals.values()].reduce((sum, value) => sum + value, 0);
-    const totalEvents = totalEventsFromPlayers > 0 ? totalEventsFromPlayers : totalEventsFromCounts;
+    const liveTotalEventsFromCounts = [...liveAnalytics.perEventTotals.values()].reduce((sum, value) => sum + value, 0);
     const startedAt = toIso(game.startedAt) ?? toIso(game.started);
     const endedAt = toIso(game.endedAt) ?? toIso(game.ended);
     const started = asBoolean(game.started) ?? startedAt != null;
@@ -365,11 +488,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
         .find((value) => value != null) ?? null
     );
-    const insights: DashboardInsight[] = [...perEventTotals.entries()]
+    const aggregatedUpdatedAtMs = updatedAt ? new Date(updatedAt).getTime() : null;
+    const aggregatesStale =
+      lifecycleStatus === "in_progress" &&
+      (aggregatedUpdatedAtMs == null || Date.now() - aggregatedUpdatedAtMs > 2 * 60 * 1000);
+    const useLiveFallback = !hasPlayerAnalytics || aggregatesStale;
+    const mergedEventTotals = useLiveFallback
+      ? new Map<string, number>([...perEventTotals.entries(), ...liveAnalytics.perEventTotals.entries()])
+      : perEventTotals;
+    const effectivePlayerPerformance = useLiveFallback && liveAnalytics.playerPerformance.length > 0 ? liveAnalytics.playerPerformance : playerPerformance;
+    const totalEvents =
+      totalEventsFromPlayers > 0 && !useLiveFallback
+        ? totalEventsFromPlayers
+        : Math.max(totalEventsFromCounts, liveTotalEventsFromCounts, totalEventsFromPlayers);
+    const effectiveTotalPlayers = Math.max(playerAnalyticsDocs.length, liveAnalytics.totalPlayers);
+    const effectiveTotalSessions = Math.max(playerAnalyticsDocs.length > 0 ? 1 : 0, liveAnalytics.totalSessions);
+    const insights: DashboardInsight[] = [...mergedEventTotals.entries()]
       .map(([eventType, value]) => ({ label: eventLabel(eventType), value, message: `${eventLabel(eventType)} occurred ${value} times.` }))
       .sort((a, b) => b.value - a.value);
-    const claims = perEventTotals.get("admin_confirm_kill_claim") ?? perEventTotals.get("kill_claim") ?? null;
-    const disputes = perEventTotals.get("admin_deny_kill_claim") ?? perEventTotals.get("kill_claim_denied") ?? null;
+    const claims = mergedEventTotals.get("admin_confirm_kill_claim") ?? mergedEventTotals.get("kill_claim") ?? null;
+    const disputes = mergedEventTotals.get("admin_deny_kill_claim") ?? mergedEventTotals.get("kill_claim_denied") ?? null;
     const disputeRate = claims != null && claims > 0 && disputes != null ? (disputes / claims) * 100 : null;
     if (claims != null) insights.unshift({ label: "Claims", value: claims, message: `Players submitted ${claims} kill claims.` });
     if (disputes != null) insights.unshift({ label: "Disputes", value: disputes, message: `${disputes} claims were disputed.` });
@@ -409,19 +547,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
           mode,
           startedAt,
           endedAt,
-          totalPlayers: playerAnalyticsDocs.length,
-          activePlayers: playerAnalyticsDocs.length,
-          totalSessions: playerAnalyticsDocs.length > 0 ? 1 : 0,
+          totalPlayers: effectiveTotalPlayers,
+          activePlayers: effectiveTotalPlayers,
+          totalSessions: effectiveTotalSessions,
         },
         insights,
-        playerPerformance,
+        playerPerformance: effectivePlayerPerformance,
         sessionSummary: {
-          totalSessions: playerAnalyticsDocs.length > 0 ? 1 : 0,
+          totalSessions: effectiveTotalSessions,
           avgSessionLengthSeconds: null,
           longestSessionSeconds: null,
           lastSessionAt: endedAt ?? startedAt,
         },
-        eventTotals: Object.fromEntries(perEventTotals.entries()),
+        eventTotals: Object.fromEntries(mergedEventTotals.entries()),
         totalEvents,
         updatedAt,
       },
