@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
+import { deriveLifecycleStatus, type AnalyticsAccess } from "@/lib/analytics/manager-dashboard";
 import { entitlementsForTier, hasFeature } from "@/lib/product/entitlements";
 import {
   assertOrgAccess,
@@ -60,17 +61,7 @@ type SessionAggregate = {
   successRate: number | null;
   disputeRate: number | null;
   avgResolutionTimeMs: number | null;
-  analyticsAccess: {
-    visibility: "limited_live" | "full_post_session";
-    allowedSections: {
-      overview: boolean;
-      insights: boolean;
-      playerComparison: boolean;
-      sessionSummary: boolean;
-      exports: boolean;
-    };
-    message: string | null;
-  };
+  analyticsAccess: AnalyticsAccess;
 };
 
 function asNonEmptyString(value: unknown): string | null {
@@ -118,16 +109,20 @@ function timestampToIso(value: unknown): string | null {
   return null;
 }
 
-
 function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
   const explicit = asNonEmptyString(overview.status);
   if (explicit) return explicit;
+  const startedAtIso = timestampToIso(overview.startedAt);
+  const endedAtIso = timestampToIso(overview.endedAt);
 
-  const ended = Boolean(game.ended);
-  const started = Boolean(game.started);
-
-  if (ended) return "ended";
-  if (started) return "active";
+  const derived = deriveLifecycleStatus({
+    started: Boolean(game.started),
+    ended: Boolean(game.ended),
+    startedAtMs: startedAtIso ? new Date(startedAtIso).getTime() : null,
+    endedAtMs: endedAtIso ? new Date(endedAtIso).getTime() : null,
+  });
+  if (derived === "completed") return "ended";
+  if (derived === "in_progress") return "active";
   return "not_started";
 }
 

@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { FieldPath, type Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
+import {
+  deriveLifecycleStatus,
+  eventLabel,
+  normalizePlayerAggregate,
+  pickFirstNumber,
+  type AnalyticsAccess,
+  type AnalyticsVisibility,
+} from "@/lib/analytics/manager-dashboard";
 import { entitlementsForTier, type ProductTier } from "@/lib/product/entitlements";
 import { resolveOrganizationTier } from "@/lib/product/org-tier";
 import {
@@ -162,30 +170,6 @@ function toIso(value: unknown): string | null {
   return null;
 }
 
-function eventLabel(eventType: string): string {
-  const normalized = eventType.trim().toLowerCase();
-  const labelMap: Record<string, string> = {
-    game_started: "Game Started",
-    game_ended: "Game Ended",
-    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
-    admin_deny_kill_claim: "Admin Deny Kill Claim",
-  };
-  if (labelMap[normalized]) return labelMap[normalized];
-  return normalized
-    .split("_")
-    .filter((token) => token.length > 0)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(" ");
-}
-
-function pickFirstNumber(...values: unknown[]): number | null {
-  for (const value of values) {
-    const parsed = asNumber(value);
-    if (parsed != null) return parsed;
-  }
-  return null;
-}
-
 function toUpperTrimmed(value: string): string {
   return value.trim().toUpperCase();
 }
@@ -193,20 +177,6 @@ function toUpperTrimmed(value: string): string {
 function normalizeMode(value: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
-
-type AnalyticsVisibility = "limited_live" | "full_post_session";
-
-type AnalyticsAccess = {
-  visibility: AnalyticsVisibility;
-  allowedSections: {
-    overview: boolean;
-    insights: boolean;
-    playerComparison: boolean;
-    sessionSummary: boolean;
-    exports: boolean;
-  };
-  message: string | null;
-};
 
 type InsightTrigger = {
   metric: string;
@@ -293,21 +263,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const perEventTotals = new Map<string, number>();
     const playerPerformance = playerAnalyticsDocs.map((doc) => {
       const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
-      const playerId = asString(data.playerId) ?? asString(data.userId) ?? doc.id;
-      const displayName = asString(data.displayName) ?? playerId;
       const eventCounts =
         data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
       for (const [eventType, rawCount] of Object.entries(eventCounts)) {
         const count = asNumber(rawCount) ?? 0;
         perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + count);
       }
-      const confirmedCount = pickFirstNumber(
-        data.confirmedCount,
-        data.convertedClaimCount,
-        data.convertedCount,
-        eventCounts.admin_confirm_kill_claim,
-        eventCounts.kill_claim_confirmed
-      );
       const claimCount = pickFirstNumber(
         data.claimCount,
         data.claimsCount,
@@ -316,59 +277,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         eventCounts.kill_claim_submitted,
         eventCounts.admin_confirm_kill_claim
       );
-      const kills = pickFirstNumber(data.kills, confirmedCount);
-      const eliminationDeaths = pickFirstNumber(
-        data.eliminationDeaths,
-        data.eliminationDeathCount,
-        data.deaths,
-        data.deathCount,
-        eventCounts.elimination_death,
-        eventCounts.eliminated,
-        eventCounts.death
-      );
-      const confirmedAgainst = pickFirstNumber(
-        data.confirmedAgainst,
-        data.confirmedAgainstCount,
-        data.claimsAgainstConfirmed,
-        data.claimsConfirmedAgainst,
-        eventCounts.confirmed_against,
-        eventCounts.admin_confirm_kill_claim_against,
-        eventCounts.kill_claim_confirmed_against,
-        eventCounts.victim_confirmed_claim
-      );
       const deniedCount = pickFirstNumber(data.deniedCount, data.disputeCount, eventCounts.admin_deny_kill_claim, eventCounts.kill_claim_denied);
-      const successRate = pickFirstNumber(data.successRate, data.accuracy, data.accuracyPct);
-      const sessionCount = pickFirstNumber(data.sessionCount, data.sessions, data.eventsTotal != null || claimCount != null ? 1 : null);
-      const accuracyPct = successRate ?? (confirmedCount != null && claimCount != null && claimCount > 0 ? (confirmedCount / claimCount) * 100 : null);
-      const kdDenominator = normalizedMode === "classic" ? confirmedAgainst : normalizedMode === "elimination" ? eliminationDeaths : pickFirstNumber(eliminationDeaths, confirmedAgainst);
-      const deaths = kdDenominator;
-      const kdRatio =
-        kills != null
-          ? kdDenominator != null && kdDenominator > 0
-            ? kills / kdDenominator
-            : kdDenominator === 0
-              ? kills > 0
-                ? kills
-                : null
-              : null
-          : null;
+      const normalized = normalizePlayerAggregate({
+        row: data,
+        fallbackPlayerId: doc.id,
+        normalizedMode,
+      });
       if (deniedCount != null) {
         perEventTotals.set("admin_deny_kill_claim", (perEventTotals.get("admin_deny_kill_claim") ?? 0) + deniedCount);
       }
       if (claimCount != null && !eventCounts.kill_claim) {
         perEventTotals.set("kill_claim", (perEventTotals.get("kill_claim") ?? 0) + claimCount);
       }
-      if (confirmedCount != null && !eventCounts.admin_confirm_kill_claim) {
-        perEventTotals.set("admin_confirm_kill_claim", (perEventTotals.get("admin_confirm_kill_claim") ?? 0) + confirmedCount);
+      if (normalized.kills != null && !eventCounts.admin_confirm_kill_claim) {
+        perEventTotals.set("admin_confirm_kill_claim", (perEventTotals.get("admin_confirm_kill_claim") ?? 0) + normalized.kills);
       }
       return {
-        playerId,
-        displayName,
-        kills,
-        deaths,
-        kdRatio,
-        accuracyPct,
-        sessionCount,
+        playerId: normalized.playerId,
+        displayName: normalized.displayName,
+        kills: normalized.kills,
+        deaths: normalized.deaths,
+        kdRatio: normalized.kdRatio,
+        accuracyPct: normalized.accuracyPct,
+        sessionCount: normalized.sessionCount,
       };
     });
 
@@ -391,7 +322,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
     const endedAt = toIso(game.endedAt) ?? toIso(game.ended);
     const started = asBoolean(game.started) ?? startedAt != null;
     const ended = asBoolean(game.ended) ?? endedAt != null;
-    const lifecycleStatus = ended ? "completed" : started ? "in_progress" : "not_started";
+    const lifecycleStatus = deriveLifecycleStatus({
+      started,
+      ended,
+      startedAtMs: startedAt ? new Date(startedAt).getTime() : null,
+      endedAtMs: endedAt ? new Date(endedAt).getTime() : null,
+    });
     const tierEntitlements = entitlementsForTier(tier);
     const analyticsAccessFromDoc =
       game.analyticsAccess && typeof game.analyticsAccess === "object"

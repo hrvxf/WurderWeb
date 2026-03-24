@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { adminDb } from "@/lib/firebase/admin";
+import { eventLabel, normalizePlayerAggregate } from "@/lib/analytics/manager-dashboard";
 import {
   assertManagerAccessForGame,
   ManagerAccessInfrastructureError,
@@ -89,22 +90,6 @@ function asString(value: unknown): string {
 function asNullableString(value: unknown): string | null {
   const parsed = asString(value).trim();
   return parsed.length > 0 ? parsed : null;
-}
-
-function eventLabel(eventType: string): string {
-  const normalized = eventType.trim().toLowerCase();
-  const labelMap: Record<string, string> = {
-    game_started: "Game Started",
-    game_ended: "Game Ended",
-    admin_confirm_kill_claim: "Admin Confirm Kill Claim",
-    admin_deny_kill_claim: "Admin Deny Kill Claim",
-  };
-  if (labelMap[normalized]) return labelMap[normalized];
-  return normalized
-    .split("_")
-    .filter((token) => token.length > 0)
-    .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
-    .join(" ");
 }
 
 function toCsvCell(value: string | number | null): string {
@@ -231,17 +216,19 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       for (const [eventType, rawCount] of Object.entries(eventCounts)) {
         perEventTotals.set(eventType, (perEventTotals.get(eventType) ?? 0) + asNumber(rawCount));
       }
-      const kills = asNumber(data.kills) || asNumber(eventCounts.kill) || asNumber(eventCounts.kill_claim);
-      const deaths = asNumber(data.deaths) || asNumber(eventCounts.death);
-      const kdRatio = deaths > 0 ? kills / deaths : kills;
+      const normalized = normalizePlayerAggregate({
+        row: data,
+        fallbackPlayerId: `row-${index}`,
+        normalizedMode: asString(gameData.mode).trim().toLowerCase(),
+      });
       return {
-        playerId: asString(data.playerId) || asString(data.userId) || `row-${index}`,
-        displayName: asString(data.displayName) || "Unknown",
-        kills,
-        deaths,
-        kdRatio,
-        accuracyPct: asNumber(data.accuracyPct),
-        sessionCount: Math.max(1, asNumber(data.sessionCount) || 1),
+        playerId: normalized.playerId,
+        displayName: normalized.displayName,
+        kills: normalized.kills ?? 0,
+        deaths: normalized.deaths ?? 0,
+        kdRatio: normalized.kdRatio ?? 0,
+        accuracyPct: normalized.accuracyPct ?? asNumber(data.accuracyPct),
+        sessionCount: Math.max(1, normalized.sessionCount ?? asNumber(data.sessionCount) ?? 1),
       };
     });
     if (playerAnalyticsSnap.empty) {

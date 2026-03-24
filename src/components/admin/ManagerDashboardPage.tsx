@@ -11,31 +11,19 @@ import ManagerRecommendations from "@/components/admin/ManagerRecommendations";
 import SessionTimeline from "@/components/admin/SessionTimeline";
 import { computeAccuracy, computeDisputeRate, computeDurationMs, computeKd, toNullableNumber } from "@wurder/shared-analytics";
 import type { DashboardResponse, PlayerPerformance } from "@wurder/shared-analytics";
-import type { ManagerInsight } from "@/components/admin/types";
+import type {
+  AnalyticsAccessState,
+  ManagerAnalyticsDocument,
+  ManagerBranding,
+  ManagerInsight,
+  ManagerOverview,
+  ManagerSessionSummary,
+} from "@/components/admin/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
 
 type ManagerDashboardPageProps = {
   gameCode: string;
-};
-
-type ManagerBranding = {
-  companyName: string | null;
-  companyLogoUrl: string | null;
-  brandAccentColor: string | null;
-  brandThemeLabel: string | null;
-};
-
-type AnalyticsAccessState = {
-  visibility: "limited_live" | "full_post_session";
-  allowedSections: {
-    overview: boolean;
-    insights: boolean;
-    playerComparison: boolean;
-    sessionSummary: boolean;
-    exports: boolean;
-  };
-  message: string | null;
 };
 
 function LockedSection({ title, message }: { title: string; message: string }) {
@@ -96,36 +84,6 @@ function formatInsightLabel(value: string): string {
     .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
     .join(" ");
 }
-
-type ManagerOverview = {
-  gameCode: string;
-  gameName: string;
-  status: string;
-  mode: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-  totalPlayers: number;
-  activePlayers: number;
-  totalSessions: number;
-};
-
-type ManagerSessionSummary = {
-  totalSessions: number;
-  avgSessionLengthSeconds: number | null;
-  longestSessionSeconds: number | null;
-  lastSessionAt: string | null;
-  startedAt: string | null;
-  endedAt: string | null;
-};
-
-type ManagerAnalyticsDocument = {
-  dashboard: DashboardResponse;
-  overview: ManagerOverview;
-  insights: ManagerInsight[];
-  playerPerformance: PlayerPerformance[];
-  sessionSummary: ManagerSessionSummary;
-  updatedAt: string | null;
-};
 
 function normalizeOverview(value: unknown, gameCode: string): ManagerOverview {
   const overview = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
