@@ -56,6 +56,7 @@ describe("member stats loader", () => {
       gamesPlayed: 11,
       lifetimeWins: 4,
       lifetimeKills: 19,
+      lifetimeCaught: 3,
       bestStreak: 6,
       lifetimePoints: 920,
     };
@@ -67,7 +68,7 @@ describe("member stats loader", () => {
       gamesPlayed: 11,
       wins: 4,
       kills: 19,
-      deaths: 0,
+      deaths: 3,
       bestStreak: 6,
       points: 920,
       lifetimePoints: 920,
@@ -148,5 +149,70 @@ describe("member stats loader", () => {
       profile: "accounts/{uid}",
       stats: "profiles/{uid}",
     });
+    expect(result.achievementIds).toEqual([]);
+  });
+
+  it("maps mvp awards from achievementIds array", async () => {
+    state.docs["profiles/uid-7"] = {
+      gamesPlayed: 15,
+      lifetimeKills: 18,
+      lifetimeWins: 6,
+      lifetimePoints: 90,
+      lifetimeCaught: 4,
+      bestStreak: 7,
+      achievementIds: ["mvp_1", "mvp_2", "streak_7"],
+    };
+
+    const result = await fetchMemberStatsSummary("uid-7");
+
+    expect(result.source).toBe("profiles/{uid}");
+    expect(result.stats.mvpAwards).toBe(3);
+  });
+
+  it("reads nested stats payload fields from profiles/{uid}", async () => {
+    state.docs["profiles/uid-8"] = {
+      stats: {
+        lifetimeGames: 15,
+        lifetimeKills: 18,
+        lifetimeWins: 6,
+        lifetimePoints: 90,
+        lifetimeCaught: 4,
+        streakBest: 7,
+        achievementIds: ["mvp_1", "mvp_2", "streak_7"],
+      },
+    };
+
+    const result = await fetchMemberStatsSummary("uid-8");
+
+    expect(result.source).toBe("profiles/{uid}");
+    expect(result.stats).toEqual({
+      gamesPlayed: 15,
+      wins: 6,
+      kills: 18,
+      deaths: 4,
+      bestStreak: 7,
+      points: 90,
+      lifetimePoints: 90,
+      mvpAwards: 3,
+    });
+  });
+
+  it("hydrates profile achievementIds from profiles stats source when missing on profile", async () => {
+    state.docs["profiles/uid-9"] = {
+      gamesPlayed: 1,
+      achievementIds: ["first_blood", "five_kills", "streak_three"],
+    };
+
+    const result = await composeMemberData({
+      uid: "uid-9",
+      profile: {
+        uid: "uid-9",
+        email: "a@b.com",
+        firstName: "Adam",
+      },
+    });
+
+    expect(result.achievementIds).toEqual(["first_blood", "five_kills", "streak_three"]);
+    expect(result.profile?.achievementIds).toEqual(["first_blood", "five_kills", "streak_three"]);
   });
 });

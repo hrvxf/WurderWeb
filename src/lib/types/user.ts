@@ -25,6 +25,15 @@ export type WurderUserProfile = {
   updatedAt?: unknown;
   activeGame?: unknown | null;
   stats?: WurderUserStats;
+  achievementIds?: string[];
+  achievements?: {
+    achievementIds?: string[];
+    [key: string]: unknown;
+  };
+  awards?: {
+    achievementIds?: string[];
+    [key: string]: unknown;
+  };
   roles?: {
     admin?: boolean;
     moderator?: boolean;

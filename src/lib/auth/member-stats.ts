@@ -21,12 +21,13 @@ export type MemberDataWarning = {
 
 export type MemberDataSources = {
   profile: "accounts/{uid}";
-  stats: "profiles/{uid}" | "fallback-none";
+  stats: "profiles/{uid}" | "users/{uid}" | "fallback-none";
 };
 
 export type MemberDataResult = {
   profile: WurderUserProfile | null;
   stats: MemberStatsSummary;
+  achievementIds: string[];
   warnings: MemberDataWarning[];
   sources: MemberDataSources;
 };
@@ -42,6 +43,18 @@ export const DEFAULT_MEMBER_STATS: MemberStatsSummary = {
   mvpAwards: 0,
 };
 
+function readStringArray(source: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = key.includes(".") ? readPathValue(source, key) : source[key];
+    if (!Array.isArray(value)) continue;
+    const normalized = value
+      .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+      .filter((entry) => entry.length > 0);
+    if (normalized.length > 0) return normalized;
+  }
+  return [];
+}
+
 function readNumber(source: Record<string, unknown>, keys: string[]): number {
   for (const key of keys) {
     const value = source[key];
@@ -52,21 +65,111 @@ function readNumber(source: Record<string, unknown>, keys: string[]): number {
   return 0;
 }
 
+function readPathValue(source: Record<string, unknown>, path: string): unknown {
+  const segments = path.split(".");
+  let current: unknown = source;
+  for (const segment of segments) {
+    if (!current || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function readNumberOrCollectionCount(source: Record<string, unknown>, keys: string[]): number {
+  for (const key of keys) {
+    const value = key.includes(".") ? readPathValue(source, key) : source[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (Array.isArray(value)) return value.length;
+    if (value && typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      if (Object.keys(obj).length > 0 && Object.values(obj).every((entry) => typeof entry === "boolean")) {
+        return Object.values(obj).filter(Boolean).length;
+      }
+    }
+  }
+  return 0;
+}
+
 function normalizeStats(data: DocumentData): MemberStatsSummary {
   const source = (data ?? {}) as Record<string, unknown>;
-  const lifetimePoints = readNumber(source, ["lifetimePoints", "pointsLifetime", "totalPoints"]);
-  const explicitPoints = readNumber(source, ["points"]);
+  const nestedStats =
+    source.stats && typeof source.stats === "object" ? (source.stats as Record<string, unknown>) : null;
+  const merged = nestedStats ? { ...source, ...nestedStats } : source;
+  const lifetimePoints = readNumber(merged, ["lifetimePoints", "pointsLifetime", "totalPoints"]);
+  const explicitPoints = readNumber(merged, ["points"]);
 
   return {
-    gamesPlayed: readNumber(source, ["gamesPlayed"]),
-    wins: readNumber(source, ["lifetimeWins", "wins"]),
-    kills: readNumber(source, ["lifetimeKills", "kills"]),
-    deaths: readNumber(source, ["lifetimeDeaths", "deaths", "totalDeaths"]),
-    bestStreak: readNumber(source, ["bestStreak", "streakBest", "streak"]),
+    gamesPlayed: readNumber(merged, ["gamesPlayed", "lifetimeGames", "totalGames", "games"]),
+    wins: readNumber(merged, ["lifetimeWins", "wins", "winCount", "totalWins"]),
+    kills: readNumber(merged, ["lifetimeKills", "kills", "killCount", "totalKills"]),
+    deaths: readNumber(merged, [
+      "lifetimeCaught",
+      "caughtLifetime",
+      "caught",
+      "totalCaught",
+      "timesCaught",
+      "lifetimeDefeats",
+      "defeatsLifetime",
+      "defeats",
+      "totalDefeats",
+      "lifetimeDeaths",
+      "deaths",
+      "totalDeaths",
+    ]),
+    bestStreak: readNumber(merged, ["bestStreak", "streakBest", "streak"]),
     points: explicitPoints || lifetimePoints,
     lifetimePoints,
-    mvpAwards: readNumber(source, ["mvpAwards", "lifetimeMvpAwards", "mvps"]),
+    mvpAwards: readNumberOrCollectionCount(merged, [
+      "achievementIds",
+      "achievements.achievementIds",
+      "awards.achievementIds",
+      "mvpAwards",
+      "lifetimeMvpAwards",
+      "mvps",
+      "mvpCount",
+      "lifetimeMvp",
+      "awards.mvp",
+      "awards.mvpAwards",
+      "awards.mvps",
+      "achievements.mvp",
+      "achievements.mvpAwards",
+      "achievements.mvpCount",
+      "achievements.mvps",
+      "achievements.awards.mvp",
+      "achievements.awards.mvpAwards",
+      "mvpHistory",
+    ]),
   };
+}
+
+function hasAnyStats(stats: MemberStatsSummary): boolean {
+  return (
+    stats.gamesPlayed > 0 ||
+    stats.wins > 0 ||
+    stats.kills > 0 ||
+    stats.deaths > 0 ||
+    stats.bestStreak > 0 ||
+    stats.points > 0 ||
+    stats.lifetimePoints > 0 ||
+    stats.mvpAwards > 0
+  );
+}
+
+async function readLegacyStatsFromUsers(uid: string): Promise<MemberStatsSummary | null> {
+  try {
+    const usersRef = doc(db, "users", uid);
+    const snapshot = await getDoc(usersRef);
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data() as Record<string, unknown>;
+    const rawStats =
+      data.stats && typeof data.stats === "object"
+        ? (data.stats as DocumentData)
+        : (data as DocumentData);
+    const normalized = normalizeStats(rawStats);
+    return hasAnyStats(normalized) ? normalized : null;
+  } catch {
+    return null;
+  }
 }
 
 function shouldLogDiagnostics(): boolean {
@@ -76,6 +179,7 @@ function shouldLogDiagnostics(): boolean {
 
 export async function fetchMemberStatsSummary(uid: string): Promise<{
   stats: MemberStatsSummary;
+  achievementIds: string[];
   warnings: MemberDataWarning[];
   source: MemberDataSources["stats"];
 }> {
@@ -85,6 +189,20 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
     const snapshot = await getDoc(profileRef);
 
     if (!snapshot.exists()) {
+      const usersFallback = await readLegacyStatsFromUsers(uid);
+      if (usersFallback) {
+        const warning: MemberDataWarning = {
+          code: "stats-missing",
+          message: `Gameplay stats missing at ${path}; loaded fallback stats from users/{uid}.`,
+        };
+        console.warn("[members] stats fallback to users/{uid}", { uid, path });
+        return {
+          stats: usersFallback,
+          achievementIds: [],
+          warnings: [warning],
+          source: "users/{uid}",
+        };
+      }
       const warning: MemberDataWarning = {
         code: "stats-missing",
         message: `Gameplay stats document missing at ${path}; using zero fallback values.`,
@@ -92,12 +210,22 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
       console.warn("[members] stats document missing", { uid, path });
       return {
         stats: { ...DEFAULT_MEMBER_STATS },
+        achievementIds: [],
         warnings: [warning],
         source: "fallback-none",
       };
     }
 
-    const stats = normalizeStats(snapshot.data());
+    const rawData = snapshot.data() as Record<string, unknown>;
+    const stats = normalizeStats(rawData);
+    const nestedStats =
+      rawData.stats && typeof rawData.stats === "object" ? (rawData.stats as Record<string, unknown>) : null;
+    const merged = nestedStats ? { ...rawData, ...nestedStats } : rawData;
+    const achievementIds = readStringArray(merged, [
+      "achievementIds",
+      "achievements.achievementIds",
+      "awards.achievementIds",
+    ]);
 
     if (shouldLogDiagnostics()) {
       console.info("MEMBERS_STATS_SOURCE", {
@@ -110,10 +238,25 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
 
     return {
       stats,
+      achievementIds,
       warnings: [],
       source: "profiles/{uid}",
     };
   } catch (error) {
+    const usersFallback = await readLegacyStatsFromUsers(uid);
+    if (usersFallback) {
+      const warning: MemberDataWarning = {
+        code: "stats-unreadable",
+        message: `Gameplay stats read failed at ${path}; loaded fallback stats from users/{uid}.`,
+      };
+      console.warn("[members] stats fallback to users/{uid} after profile read failure", { uid, path, error });
+      return {
+        stats: usersFallback,
+        achievementIds: [],
+        warnings: [warning],
+        source: "users/{uid}",
+      };
+    }
     const warning: MemberDataWarning = {
       code: "stats-unreadable",
       message: `Gameplay stats read failed at ${path}; using zero fallback values.`,
@@ -121,6 +264,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
     console.warn("[members] failed to load gameplay stats", { uid, path, error });
     return {
       stats: { ...DEFAULT_MEMBER_STATS },
+      achievementIds: [],
       warnings: [warning],
       source: "fallback-none",
     };
@@ -132,10 +276,23 @@ export async function composeMemberData(input: {
   uid: string;
 }): Promise<MemberDataResult> {
   const statsResolution = await fetchMemberStatsSummary(input.uid);
+  const existingAchievements = Array.isArray(input.profile?.achievementIds)
+    ? input.profile.achievementIds.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const achievementIds =
+    existingAchievements.length > 0 ? existingAchievements : statsResolution.achievementIds;
+  const profile =
+    input.profile == null
+      ? null
+      : {
+          ...input.profile,
+          achievementIds,
+        };
 
   return {
-    profile: input.profile,
+    profile,
     stats: statsResolution.stats,
+    achievementIds,
     warnings: statsResolution.warnings,
     sources: {
       profile: "accounts/{uid}",
