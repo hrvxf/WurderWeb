@@ -35,7 +35,7 @@ export default function ProfileForm() {
     "input-dark mt-1.5 h-10 rounded-lg border-white/20 bg-black/30 px-3 py-1.5 text-sm";
 
   const profileDisplayName = readDisplayName(profile?.name, profile?.firstName, profile?.lastName);
-  const profileEmail = profile?.email?.trim() || "Not available";
+  const profileEmail = profile?.email?.trim() || user?.email?.trim() || "Not available";
   const profileWurderId = profile?.wurderId?.trim() ? `@${profile.wurderId.trim()}` : "Not set";
 
   useEffect(() => {

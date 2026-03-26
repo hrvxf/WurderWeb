@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
+import { buildAndCacheManagerDashboard } from "@/lib/manager/dashboard-cache";
 import {
   assertManagerAccessForGame,
   ManagerAccessInfrastructureError,
@@ -57,6 +58,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ gam
 
       return { alreadyEnded: false };
     });
+
+    try {
+      const refreshedGame = (await gameRef.get()).data() ?? {};
+      await buildAndCacheManagerDashboard({
+        gameCode: normalizedCode,
+        includeTimeline: true,
+        game: refreshedGame,
+        analyticsEventLimit: 200,
+        buildReason: "end_game",
+      });
+    } catch (cacheError) {
+      console.warn("[manager:end] Cache rebuild failed", { gameCode: normalizedCode, cacheError });
+    }
 
     return NextResponse.json({
       ok: true,

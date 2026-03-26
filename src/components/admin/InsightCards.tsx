@@ -5,18 +5,25 @@ type InsightCardsProps = {
 };
 
 function formatMetricValue(metric: string, value: number): string {
-  return metric.toLowerCase().includes("rate") ? `${value.toFixed(1)}%` : value.toLocaleString();
+  return metric.toLowerCase().includes("rate") ? `${(value * 100).toFixed(1)}%` : value.toLocaleString();
 }
 
 function formatInsightSubtext(insight: ManagerInsight): string | null {
-  if (!insight.triggeredBy || insight.triggeredBy.length === 0) return null;
-  return insight.triggeredBy
-    .map((trigger) => {
-      const actual = formatMetricValue(trigger.metric, trigger.actual);
-      const expected = formatMetricValue(trigger.metric, trigger.expected);
-      return `${trigger.metric}: ${actual} (expected ${trigger.comparator} ${expected})`;
+  if (!insight.evidence || insight.evidence.length === 0) return null;
+  return insight.evidence
+    .map((entry) => {
+      const actual = formatMetricValue(entry.metric, entry.actual);
+      const expected = formatMetricValue(entry.metric, entry.expected);
+      return `${entry.metric}: ${actual} (expected ${entry.comparator} ${expected})`;
     })
-    .join(" • ");
+    .join(" | ");
+}
+
+function formatInsightValue(insight: ManagerInsight): string {
+  if (insight.value == null) return "--";
+  if (insight.unit === "ratio") return `${(insight.value * 100).toFixed(1)}%`;
+  if (insight.unit === "ms") return `${insight.value.toLocaleString()} ms`;
+  return insight.value.toLocaleString();
 }
 
 export default function InsightCards({ insights }: InsightCardsProps) {
@@ -28,10 +35,10 @@ export default function InsightCards({ insights }: InsightCardsProps) {
           {insights.map((insight) => {
             const subtext = formatInsightSubtext(insight);
             return (
-              <article key={insight.label} className="rounded-md bg-slate-50 p-3">
+              <article key={insight.id} className="rounded-md bg-slate-50 p-3">
                 <p className="text-xs uppercase tracking-wide text-slate-500">{insight.label}</p>
                 <p className="mt-1 text-sm font-medium text-slate-800">
-                  {insight.message ?? `${insight.label}: ${insight.value.toLocaleString()}`}
+                  {insight.message ?? `${insight.label}: ${formatInsightValue(insight)}`}
                 </p>
                 {subtext ? <p className="mt-1 text-xs text-slate-500">{subtext}</p> : null}
               </article>

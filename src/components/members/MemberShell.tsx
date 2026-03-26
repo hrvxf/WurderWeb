@@ -56,15 +56,14 @@ export default function MemberShell({
   initialWurderId,
 }: MemberShellProps) {
   const pathname = usePathname();
-  const { profile } = useAuth();
+  const { profile, user, stats } = useAuth();
 
   const profileDisplayName = getDisplayName(profile?.firstName, profile?.lastName, profile?.name);
   const profileWurderId = profile?.wurderId?.trim() ? profile.wurderId.trim() : null;
-  const profileAvatar = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || null;
-  const profileEmail = profile?.email?.trim() || null;
+  const profileAvatar = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || user?.photoURL?.trim() || null;
+  const profileEmail = profile?.email?.trim() || user?.email?.trim() || null;
   const activeGameCode = readActiveGameCode(profile?.activeGame);
-  const stats = profile?.stats ?? {};
-  const lifetimePoints = stats.pointsLifetime ?? stats.points ?? 0;
+  const lifetimePoints = stats.lifetimePoints ?? stats.points ?? 0;
   const playerRank = playerRankFromPoints(lifetimePoints);
 
   const displayName = initialDisplayName ?? profileDisplayName;

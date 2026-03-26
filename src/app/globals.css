@@ -88,4 +88,24 @@ a {
   animation: subtle-enter 220ms ease-out both;
 }
 
+.scroll-chrome {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) rgba(255, 255, 255, 0.04);
+}
+
+.scroll-chrome::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scroll-chrome::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.scroll-chrome::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(255, 255, 255, 0.2));
+  border: 2px solid rgba(0, 0, 0, 0.22);
+}
+
 

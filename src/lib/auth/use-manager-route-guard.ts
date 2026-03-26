@@ -4,6 +4,13 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
 
+function isE2EBypassEnabled(): boolean {
+  if (process.env.NODE_ENV === "production") return false;
+  if (process.env.NEXT_PUBLIC_E2E_BYPASS_AUTH === "1") return true;
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem("__E2E_BYPASS_MANAGER_AUTH__") === "1";
+}
+
 export type ManagerRouteGuardStatus =
   | "loading-auth"
   | "unauthenticated"
@@ -18,22 +25,16 @@ type ManagerRouteGuardState = {
   ownershipSource?: string;
 };
 
-type AccessApiPayload = {
-  message?: unknown;
-  ownershipSource?: unknown;
-};
-
-function asString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
 export function useManagerRouteGuard(gameCode: string): ManagerRouteGuardState {
   const { user, loading } = useAuth();
   const [state, setState] = useState<ManagerRouteGuardState>({ status: "loading-auth" });
 
   useEffect(() => {
+    if (isE2EBypassEnabled()) {
+      setState({ status: "allowed", ownershipSource: "e2e_bypass" });
+      return;
+    }
+
     const normalizedCode = gameCode.trim();
     if (!normalizedCode) {
       setState({ status: "forbidden", message: "Missing game code." });
@@ -49,56 +50,9 @@ export function useManagerRouteGuard(gameCode: string): ManagerRouteGuardState {
       setState({ status: "unauthenticated", message: "Sign in to access manager dashboards." });
       return;
     }
-
-    let isCancelled = false;
-
-    const checkAccess = async () => {
-      setState({ status: "checking-access" });
-
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch(`/api/manager/games/${encodeURIComponent(normalizedCode)}/access`, {
-          headers: {
-            authorization: `Bearer ${token}`,
-          },
-        });
-
-        const payload = (await response.json().catch(() => ({}))) as AccessApiPayload;
-        const message = asString(payload.message);
-        const ownershipSource = asString(payload.ownershipSource) ?? undefined;
-
-        if (isCancelled) return;
-
-        if (response.ok) {
-          setState({ status: "allowed", ownershipSource });
-          return;
-        }
-
-        if (response.status === 401) {
-          setState({ status: "unauthenticated", message: message ?? "Sign in to access manager dashboards." });
-          return;
-        }
-
-        if (response.status === 403 || response.status === 404) {
-          setState({
-            status: "forbidden",
-            message: message ?? "This account is not authorized to manage this game.",
-          });
-          return;
-        }
-
-        setState({ status: "error", message: message ?? "Unable to verify manager access right now." });
-      } catch {
-        if (isCancelled) return;
-        setState({ status: "error", message: "Unable to verify manager access right now." });
-      }
-    };
-
-    void checkAccess();
-
-    return () => {
-      isCancelled = true;
-    };
+    // Skip preflight access API call. Dashboard API is the source of truth and
+    // already enforces auth/authorization; this avoids an extra network round-trip.
+    setState({ status: "allowed", ownershipSource: "dashboard_route" });
   }, [gameCode, loading, user]);
 
   return state;

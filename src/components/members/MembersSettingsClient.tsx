@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 export default function MembersSettingsClient() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
 
   return (
     <section className="space-y-6">
@@ -23,7 +23,7 @@ export default function MembersSettingsClient() {
         <dl className="mt-4 divide-y divide-white/10 border-y border-white/10 text-sm">
           <div className="flex items-center justify-between gap-3 py-2.5">
             <dt className="text-muted">Email</dt>
-            <dd className="font-semibold text-white">{profile?.email ?? "Not available"}</dd>
+            <dd className="font-semibold text-white">{profile?.email ?? user?.email ?? "Not available"}</dd>
           </div>
           <div className="flex items-center justify-between gap-3 py-2.5">
             <dt className="text-muted">Wurder ID</dt>

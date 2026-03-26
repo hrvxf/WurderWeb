@@ -50,6 +50,27 @@ function getInitials(name?: string, wurderId?: string): string {
   return (parts[0]?.slice(0, 2) ?? "W").toUpperCase();
 }
 
+function AccountAvatar({
+  avatarUrl,
+  initials,
+  className,
+}: {
+  avatarUrl: string | null;
+  initials: string;
+  className: string;
+}) {
+  if (avatarUrl) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={avatarUrl} alt="Account avatar" className={`${className} rounded-full border border-white/15 object-cover`} />;
+  }
+
+  return (
+    <span className={`${className} inline-flex items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-bold text-white`}>
+      {initials}
+    </span>
+  );
+}
+
 function iconPath(icon: NavLink["icon"]): string {
   switch (icon) {
     case "home":
@@ -181,6 +202,7 @@ export default function SiteHeader() {
     () => getInitials(profile?.name, profile?.wurderId),
     [profile?.name, profile?.wurderId]
   );
+  const avatarUrl = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || null;
 
   const activeAreaLabel = useMemo(() => {
     if (pathname.startsWith("/members/host")) return "Host";
@@ -341,9 +363,7 @@ export default function SiteHeader() {
                   onClick={() => setDesktopMenuOpen((prev) => !prev)}
                   className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/30 px-3 py-2 text-sm font-semibold text-white transition hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 >
-                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white">
-                    {initials}
-                  </span>
+                  <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-7 w-7" />
                   <span className="max-w-[140px] truncate">{displayName}</span>
                 </button>
                 {desktopMenuVisible ? (
@@ -357,9 +377,7 @@ export default function SiteHeader() {
                   >
                     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm font-bold text-white">
-                          {initials}
-                        </span>
+                        <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-10 w-10 text-sm" />
                         <div>
                           <p className="text-sm font-semibold text-white">{displayName}</p>
                           <p className="text-xs text-white/60">{displayWurderId}</p>
@@ -444,9 +462,7 @@ export default function SiteHeader() {
             {isAuthenticated ? (
               <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-sm font-bold text-white">
-                    {initials}
-                  </span>
+                  <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-10 w-10 text-sm" />
                   <div>
                     <p className="text-sm font-semibold text-white">{displayName}</p>
                     <p className="text-xs text-white/60">{displayWurderId}</p>
