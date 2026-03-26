@@ -8,7 +8,7 @@ type PlayerAnalyticsModalProps = {
   onClose: () => void;
 };
 
-function formatCount(value: number | null): string {
+function formatCount(value: number | null | undefined): string {
   if (!Number.isFinite(value ?? NaN)) return "--";
   return (value ?? 0).toLocaleString();
 }

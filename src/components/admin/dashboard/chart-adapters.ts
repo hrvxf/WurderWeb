@@ -28,11 +28,11 @@ export function buildInsightBarSeries(insights: ManagerInsight[], maxItems = 8):
     .slice()
     .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
     .slice(0, maxItems)
-    .map((insight) => ({
-      id: insight.id,
+    .map((insight, index) => ({
+      id: insight.id || `insight-${index}`,
       label: insight.label,
       value: insight.value ?? 0,
-      unit: insight.unit,
+      unit: insight.unit ?? "count",
     }));
 }
 
@@ -54,7 +54,7 @@ export function buildPlayerScatterSeries(players: ManagerPlayerPerformance[]): C
     .filter((player) => player.accuracyRatio != null && player.kdRatio != null)
     .map((player) => ({
       id: player.playerId,
-      label: player.displayName,
+      label: player.displayName || player.playerName,
       x: Math.max(0, player.accuracyRatio ?? 0),
       y: Math.max(0, player.kdRatio ?? 0),
       size: Math.max(1, player.kills ?? 0),

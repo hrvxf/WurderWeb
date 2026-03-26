@@ -106,12 +106,24 @@ function normalizeOverview(value: unknown, gameCode: string): ManagerOverview {
     gameCode,
     gameName: parseString(overview.gameName),
     status: parseString(overview.status) || "unknown",
+    lifecycleStatus:
+      parseString(overview.lifecycleStatus) === "completed"
+        ? "completed"
+        : parseString(overview.lifecycleStatus) === "in_progress"
+          ? "in_progress"
+          : "not_started",
     mode: parseNullableString(overview.mode),
     startedAt: parseNullableString(overview.startedAt),
     endedAt: parseNullableString(overview.endedAt),
     totalPlayers: parseNumber(overview.totalPlayers),
     activePlayers: parseNumber(overview.activePlayers),
     totalSessions: parseNumber(overview.totalSessions),
+    totalEvents: parseNumber(overview.totalEvents),
+    metricSemantics: {
+      deaths: {
+        modeBasis: "fallback_death_events",
+      },
+    },
   };
 }
 
@@ -141,12 +153,21 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
 
   if (Array.isArray(value)) {
     return value
-      .map((item) => {
+      .map((item, index) => {
         const insight = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+        const unitRaw = parseString(insight.unit);
+        const severityRaw = parseString(insight.severity);
+        const unit: ManagerInsight["unit"] = unitRaw === "ratio" || unitRaw === "ms" ? unitRaw : "count";
+        const severity: ManagerInsight["severity"] =
+          severityRaw === "critical" ? "critical" : severityRaw === "warning" ? "warning" : "info";
         return {
+          id: parseString(insight.id) || `insight-${index}`,
           label: formatInsightLabel(parseString(insight.label)),
           value: parseNumber(insight.value),
-          message: parseNullableString(insight.message),
+          unit,
+          severity,
+          message: parseNullableString(insight.message) ?? "",
+          evidence: normalizeTriggeredBy(insight.evidence),
           triggeredBy: normalizeTriggeredBy(insight.triggeredBy),
         };
       })
@@ -155,10 +176,13 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
 
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)
-      .map(([label, insightValue]) => ({
+      .map(([label, insightValue], index) => ({
+        id: `insight-${index}`,
         label: formatInsightLabel(parseString(label)),
         value: parseNumber(insightValue),
-        message: null,
+        unit: "count" as const,
+        severity: "info" as const,
+        message: "",
       }))
       .filter((item) => item.label.length > 0);
   }
@@ -166,7 +190,7 @@ function normalizeInsights(value: unknown): ManagerInsight[] {
   return [];
 }
 
-function normalizePlayers(value: unknown): PlayerPerformance[] {
+function normalizePlayers(value: unknown): ManagerAnalyticsDocument["playerPerformance"] {
   const rows: unknown[] = Array.isArray(value)
     ? value
     : value && typeof value === "object"
@@ -184,24 +208,44 @@ function normalizePlayers(value: unknown): PlayerPerformance[] {
     const claims = toNullableNumber(player.claims);
     const disputes = toNullableNumber(player.disputes);
     const confirmedKills = toNullableNumber(player.confirmedKills) ?? kills;
+    const displayName = parseString(player.displayName) || parseString(player.playerName) || "Unknown";
+    const killsRatio = kills != null && deaths != null ? computeKd(kills, deaths) : null;
+    const accuracyRatio =
+      parseNullableNumber(player.accuracy) ??
+      parseNullableNumber(player.successRate) ??
+      (confirmedKills != null && claims != null ? computeAccuracy(confirmedKills, claims) : null);
+    const disputeRateRatio =
+      parseNullableNumber(player.disputeRate) ??
+      (disputes != null && claims != null ? computeDisputeRate(disputes, claims) : null);
+
     return {
       playerId: parseString(player.playerId) || `row-${index}`,
-      playerName: parseString(player.playerName) || parseString(player.displayName) || "Unknown",
+      playerName: parseString(player.playerName) || displayName,
+      displayName,
+      avatarUrl: parseNullableString(player.avatarUrl),
       userId: parseNullableString(player.userId),
-      kills: kills ?? undefined,
+      kills: kills ?? 0,
       confirmedKills: confirmedKills ?? undefined,
       deaths: deaths ?? 0,
-      kd: parseNullableNumber(player.kd) ?? (kills != null && deaths != null ? computeKd(kills, deaths) : null),
-      accuracy:
-        parseNullableNumber(player.accuracy) ??
-        parseNullableNumber(player.successRate) ??
-        (confirmedKills != null && claims != null ? computeAccuracy(confirmedKills, claims) : null),
+      kd: parseNullableNumber(player.kd) ?? killsRatio,
+      kdRatio: parseNullableNumber(player.kdRatio) ?? parseNullableNumber(player.kd) ?? killsRatio,
+      accuracy: accuracyRatio,
+      accuracyRatio,
       successRate: parseNullableNumber(player.successRate) ?? parseNullableNumber(player.accuracy),
       claims: claims ?? undefined,
+      claimsSubmitted: parseNullableNumber(player.claimsSubmitted) ?? claims,
+      claimsConfirmed: parseNullableNumber(player.claimsConfirmed) ?? confirmedKills,
+      claimsDenied: parseNullableNumber(player.claimsDenied) ?? parseNullableNumber(player.deniedClaims),
       disputes: disputes ?? undefined,
-      disputeRate:
-        parseNullableNumber(player.disputeRate) ??
-        (disputes != null && claims != null ? computeDisputeRate(disputes, claims) : null),
+      disputeRate: disputeRateRatio,
+      disputeRateRatio,
+      sessionCount: parseNullableNumber(player.sessionCount),
+      deathsBasis:
+        parseString(player.deathsBasis) === "confirmed_claims_against_player"
+          ? "confirmed_claims_against_player"
+          : parseString(player.deathsBasis) === "elimination_deaths"
+            ? "elimination_deaths"
+            : "fallback_death_events",
     };
   });
 }
@@ -216,6 +260,11 @@ function normalizeSessionSummary(value: unknown): ManagerSessionSummary {
     lastSessionAt: parseNullableString(summary.lastSessionAt),
     startedAt: parseNullableString(summary.startedAt),
     endedAt: parseNullableString(summary.endedAt),
+    durationMs: parseNullableNumber(summary.durationMs),
+    avgSessionDurationMs: parseNullableNumber(summary.avgSessionDurationMs),
+    longestSessionDurationMs: parseNullableNumber(summary.longestSessionDurationMs),
+    totalClaimsSubmitted: parseNumber(summary.totalClaimsSubmitted),
+    totalClaimsDenied: parseNumber(summary.totalClaimsDenied),
   };
 }
 
