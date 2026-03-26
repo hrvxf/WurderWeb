@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import AchievementsPanel from "@/components/members/AchievementsPanel";
+import { sanitizeAchievementBadgeAssetKeys } from "@/lib/achievements/badge-assets";
 import StatsPanel from "@/components/members/StatsPanel";
 import type { MemberStatsSummary } from "@/lib/auth/member-stats";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -635,6 +636,17 @@ export default function MembersStatsClient() {
       (value): value is string => typeof value === "string" && value.trim().length > 0
     );
   }, [profile]);
+  const achievementBadgeAssetKeys = useMemo(() => {
+    const root = sanitizeAchievementBadgeAssetKeys(profile?.achievementBadgeAssetKeys);
+    if (Object.keys(root).length > 0) return root;
+    const fromAchievements = profile?.achievements?.achievementBadgeAssetKeys;
+    const achievementsMap = sanitizeAchievementBadgeAssetKeys(fromAchievements);
+    if (Object.keys(achievementsMap).length > 0) return achievementsMap;
+    const fromAwards = profile?.awards?.achievementBadgeAssetKeys;
+    const awardsMap = sanitizeAchievementBadgeAssetKeys(fromAwards);
+    if (Object.keys(awardsMap).length > 0) return awardsMap;
+    return {};
+  }, [profile]);
   const achievementProgress = useMemo(() => resolveAchievementProgress(activeStats, profile), [activeStats, profile]);
 
   return (
@@ -729,7 +741,12 @@ export default function MembersStatsClient() {
 
       <MetricDrilldown metric={selectedMetric} trend={trend} />
       <TrendChart metric={selectedMetric} trend={trend} showOverlays={showOverlays} />
-      <AchievementsPanel achievementIds={achievementIds} stats={activeStats} progress={achievementProgress} />
+      <AchievementsPanel
+        achievementIds={achievementIds}
+        achievementBadgeAssetKeys={achievementBadgeAssetKeys}
+        stats={activeStats}
+        progress={achievementProgress}
+      />
 
       <StatsPanel stats={activeStats} timeframe={timeframe} />
     </section>

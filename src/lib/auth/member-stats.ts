@@ -1,5 +1,6 @@
 import { doc, getDoc, type DocumentData } from "firebase/firestore";
 
+import { sanitizeAchievementBadgeAssetKeys } from "@/lib/achievements/badge-assets";
 import { db } from "@/lib/firebase";
 import type { WurderUserProfile } from "@/lib/types/user";
 
@@ -180,6 +181,7 @@ function shouldLogDiagnostics(): boolean {
 export async function fetchMemberStatsSummary(uid: string): Promise<{
   stats: MemberStatsSummary;
   achievementIds: string[];
+  achievementBadgeAssetKeys: Record<string, string>;
   warnings: MemberDataWarning[];
   source: MemberDataSources["stats"];
 }> {
@@ -199,6 +201,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
         return {
           stats: usersFallback,
           achievementIds: [],
+          achievementBadgeAssetKeys: {},
           warnings: [warning],
           source: "users/{uid}",
         };
@@ -211,6 +214,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
       return {
         stats: { ...DEFAULT_MEMBER_STATS },
         achievementIds: [],
+        achievementBadgeAssetKeys: {},
         warnings: [warning],
         source: "fallback-none",
       };
@@ -226,6 +230,11 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
       "achievements.achievementIds",
       "awards.achievementIds",
     ]);
+    const achievementBadgeAssetKeys = sanitizeAchievementBadgeAssetKeys(
+      readPathValue(merged, "achievementBadgeAssetKeys") ??
+        readPathValue(merged, "achievements.achievementBadgeAssetKeys") ??
+        readPathValue(merged, "awards.achievementBadgeAssetKeys")
+    );
 
     if (shouldLogDiagnostics()) {
       console.info("MEMBERS_STATS_SOURCE", {
@@ -239,6 +248,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
     return {
       stats,
       achievementIds,
+      achievementBadgeAssetKeys,
       warnings: [],
       source: "profiles/{uid}",
     };
@@ -253,6 +263,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
       return {
         stats: usersFallback,
         achievementIds: [],
+        achievementBadgeAssetKeys: {},
         warnings: [warning],
         source: "users/{uid}",
       };
@@ -265,6 +276,7 @@ export async function fetchMemberStatsSummary(uid: string): Promise<{
     return {
       stats: { ...DEFAULT_MEMBER_STATS },
       achievementIds: [],
+      achievementBadgeAssetKeys: {},
       warnings: [warning],
       source: "fallback-none",
     };
@@ -281,12 +293,18 @@ export async function composeMemberData(input: {
     : [];
   const achievementIds =
     existingAchievements.length > 0 ? existingAchievements : statsResolution.achievementIds;
+  const existingBadgeAssetKeys = sanitizeAchievementBadgeAssetKeys(input.profile?.achievementBadgeAssetKeys);
+  const achievementBadgeAssetKeys =
+    Object.keys(existingBadgeAssetKeys).length > 0
+      ? existingBadgeAssetKeys
+      : statsResolution.achievementBadgeAssetKeys;
   const profile =
     input.profile == null
       ? null
       : {
           ...input.profile,
           achievementIds,
+          achievementBadgeAssetKeys,
         };
 
   return {

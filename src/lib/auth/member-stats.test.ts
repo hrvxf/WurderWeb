@@ -215,4 +215,28 @@ describe("member stats loader", () => {
     expect(result.achievementIds).toEqual(["first_blood", "five_kills", "streak_three"]);
     expect(result.profile?.achievementIds).toEqual(["first_blood", "five_kills", "streak_three"]);
   });
+
+  it("hydrates profile achievementBadgeAssetKeys from profiles stats source when missing on profile", async () => {
+    state.docs["profiles/uid-10"] = {
+      gamesPlayed: 1,
+      achievementBadgeAssetKeys: {
+        first_blood: "first_blood",
+        five_kills: "five_kills",
+      },
+    };
+
+    const result = await composeMemberData({
+      uid: "uid-10",
+      profile: {
+        uid: "uid-10",
+        email: "a@b.com",
+        firstName: "Adam",
+      },
+    });
+
+    expect(result.profile?.achievementBadgeAssetKeys).toEqual({
+      first_blood: "first_blood",
+      five_kills: "five_kills",
+    });
+  });
 });

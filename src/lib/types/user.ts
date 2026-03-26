@@ -26,12 +26,15 @@ export type WurderUserProfile = {
   activeGame?: unknown | null;
   stats?: WurderUserStats;
   achievementIds?: string[];
+  achievementBadgeAssetKeys?: Record<string, string>;
   achievements?: {
     achievementIds?: string[];
+    achievementBadgeAssetKeys?: Record<string, string>;
     [key: string]: unknown;
   };
   awards?: {
     achievementIds?: string[];
+    achievementBadgeAssetKeys?: Record<string, string>;
     [key: string]: unknown;
   };
   roles?: {

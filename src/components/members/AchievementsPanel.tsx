@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { resolveAchievementBadgeImageUrl, type AchievementBadgeAssetKeyMap } from "@/lib/achievements/badge-assets";
 import type { MemberStatsSummary } from "@/lib/auth/member-stats";
 
 type AchievementCategory = "combat" | "streak" | "wins" | "recognition" | "special";
@@ -418,10 +419,12 @@ function buildAchievementViews(input: {
 
 export default function AchievementsPanel({
   achievementIds,
+  achievementBadgeAssetKeys,
   stats,
   progress,
 }: {
   achievementIds: string[];
+  achievementBadgeAssetKeys?: AchievementBadgeAssetKeyMap;
   stats: MemberStatsSummary;
   progress: AchievementProgress;
 }) {
@@ -433,6 +436,11 @@ export default function AchievementsPanel({
     [achievementIds, progress, stats]
   );
   const [brokenImages, setBrokenImages] = useState<Record<string, true>>({});
+
+  useEffect(() => {
+    setBrokenImages({});
+  }, [achievementBadgeAssetKeys]);
+
   const unlockedCount = achievements.filter((item) => item.unlocked).length;
 
   const recentUnlocked = useMemo(() => achievements.filter((item) => item.unlocked).slice(0, 3), [achievements]);
@@ -525,6 +533,10 @@ export default function AchievementsPanel({
             {filtered.map((achievement) => {
               const active = selected?.id === achievement.id;
               const icon = achievement.unlocked ? "*" : "o";
+              const badgeImageUrl = resolveAchievementBadgeImageUrl({
+                achievementId: achievement.id,
+                badgeAssetKeys: achievementBadgeAssetKeys,
+              });
               return (
                 <button
                   key={achievement.id}
@@ -537,7 +549,7 @@ export default function AchievementsPanel({
                   {!brokenImages[achievement.id] ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={`/images/achievements/achievement_${achievement.id}.png`}
+                      src={badgeImageUrl}
                       alt=""
                       className="h-4 w-4 rounded-sm object-contain"
                       onError={() =>
