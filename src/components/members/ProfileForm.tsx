@@ -8,14 +8,29 @@ import { isValidWurderId, normalizePersonName } from "@/lib/auth/auth-helpers";
 import { updateUserProfile, UsernameTakenError } from "@/lib/auth/profile-bootstrap";
 import { storage } from "@/lib/firebase/client";
 
+type ProfileFormInitialProfile = {
+  email: string | null;
+  firstName?: string;
+  lastName?: string;
+  name?: string;
+  wurderId?: string;
+  avatar?: string | null;
+  avatarUrl?: string | null;
+};
+
 function readDisplayName(name?: string, firstName?: string, lastName?: string): string {
   if (name?.trim()) return name.trim();
   const full = `${firstName ?? ""} ${lastName ?? ""}`.trim();
   return full || "Not set";
 }
 
-export default function ProfileForm() {
+type ProfileFormProps = {
+  initialProfile?: ProfileFormInitialProfile;
+};
+
+export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const { user, profile, refreshProfile } = useAuth();
+  const activeProfile = profile ?? initialProfile ?? null;
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -29,23 +44,23 @@ export default function ProfileForm() {
   const [avatarPreviewFailed, setAvatarPreviewFailed] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const hasLockedWurderId = Boolean(profile?.wurderId?.trim());
+  const hasLockedWurderId = Boolean(activeProfile?.wurderId?.trim());
 
   const compactInputClass =
     "input-dark mt-1.5 h-10 rounded-lg border-white/20 bg-black/30 px-3 py-1.5 text-sm";
 
-  const profileDisplayName = readDisplayName(profile?.name, profile?.firstName, profile?.lastName);
-  const profileEmail = profile?.email?.trim() || user?.email?.trim() || "Not available";
-  const profileWurderId = profile?.wurderId?.trim() ? `@${profile.wurderId.trim()}` : "Not set";
+  const profileDisplayName = readDisplayName(activeProfile?.name, activeProfile?.firstName, activeProfile?.lastName);
+  const profileEmail = activeProfile?.email?.trim() || user?.email?.trim() || "Not available";
+  const profileWurderId = activeProfile?.wurderId?.trim() ? `@${activeProfile.wurderId.trim()}` : "Not set";
 
   useEffect(() => {
-    setFirstName(profile?.firstName ?? "");
-    setLastName(profile?.lastName ?? "");
-    setName(profile?.name ?? "");
-    setWurderId(profile?.wurderId ?? "");
-    setAvatarUrl(profile?.avatarUrl ?? profile?.avatar ?? "");
+    setFirstName(activeProfile?.firstName ?? "");
+    setLastName(activeProfile?.lastName ?? "");
+    setName(activeProfile?.name ?? "");
+    setWurderId(activeProfile?.wurderId ?? "");
+    setAvatarUrl(activeProfile?.avatarUrl ?? activeProfile?.avatar ?? "");
     setAvatarPreviewFailed(false);
-  }, [profile]);
+  }, [activeProfile]);
 
   useEffect(() => {
     setAvatarPreviewFailed(false);

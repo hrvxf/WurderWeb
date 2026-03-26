@@ -9,7 +9,11 @@ export default async function MembersLayout({ children }: { children: ReactNode 
   const { uid } = await requireMemberAccess({ nextPath: AUTH_ROUTES.members });
   const identity = await readMemberShellIdentity(uid);
   return (
-    <MemberShell initialDisplayName={identity.displayName} initialWurderId={identity.wurderId}>
+    <MemberShell
+      initialDisplayName={identity.displayName}
+      initialWurderId={identity.wurderId}
+      initialAvatarUrl={identity.avatarUrl}
+    >
       {children}
     </MemberShell>
   );

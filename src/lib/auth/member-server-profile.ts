@@ -5,6 +5,7 @@ import { adminDb } from "@/lib/firebase/admin";
 type MemberShellIdentity = {
   displayName: string;
   wurderId: string | null;
+  avatarUrl: string | null;
 };
 
 function cleanText(value: unknown): string | null {
@@ -45,9 +46,16 @@ export async function readMemberShellIdentity(uid: string): Promise<MemberShellI
   const wurderId =
     cleanText(usersData.wurderId) ??
     cleanText(accountsData.username);
+  const avatarUrl =
+    cleanText(usersData.avatarUrl) ??
+    cleanText(usersData.avatar) ??
+    cleanText(accountsData.avatarUrl) ??
+    cleanText(accountsData.photoURL) ??
+    cleanText(accountsData.avatar);
 
   return {
     displayName: buildDisplayName(firstName, lastName, name),
     wurderId,
+    avatarUrl: avatarUrl ?? null,
   };
 }

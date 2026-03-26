@@ -1,11 +1,13 @@
 import MembersSettingsClient from "@/components/members/MembersSettingsClient";
+import { readInitialMemberProfile } from "@/lib/auth/member-initial.server";
 import { requireMemberAccess } from "@/lib/auth/member-server-guard";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 
 export default async function MembersSettingsPage() {
-  await requireMemberAccess({
+  const { uid } = await requireMemberAccess({
     nextPath: AUTH_ROUTES.membersSettings,
     requireCompleteProfile: true,
   });
-  return <MembersSettingsClient />;
+  const initialProfile = await readInitialMemberProfile(uid);
+  return <MembersSettingsClient initialProfile={initialProfile} />;
 }

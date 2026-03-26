@@ -48,9 +48,13 @@ function formatWhen(createdAt: string | null, endedAt: string | null): string {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium" }).format(parsed);
 }
 
-export default function HostPreviousGamesCard() {
+type HostPreviousGamesCardProps = {
+  initialSessions?: SessionRow[];
+};
+
+export default function HostPreviousGamesCard({ initialSessions = [] }: HostPreviousGamesCardProps) {
   const { user } = useAuth();
-  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [sessions, setSessions] = useState<SessionRow[]>(initialSessions);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {

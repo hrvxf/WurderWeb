@@ -4,8 +4,19 @@ import Link from "next/link";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
 
-export default function MembersSettingsClient() {
+type MembersSettingsInitialProfile = {
+  email: string | null;
+  wurderId?: string;
+};
+
+type MembersSettingsClientProps = {
+  initialProfile?: MembersSettingsInitialProfile;
+};
+
+export default function MembersSettingsClient({ initialProfile }: MembersSettingsClientProps) {
   const { profile, user } = useAuth();
+  const email = profile?.email ?? user?.email ?? initialProfile?.email ?? "Not available";
+  const wurderId = profile?.wurderId ?? initialProfile?.wurderId ?? null;
 
   return (
     <section className="space-y-6">
@@ -23,12 +34,12 @@ export default function MembersSettingsClient() {
         <dl className="mt-4 divide-y divide-white/10 border-y border-white/10 text-sm">
           <div className="flex items-center justify-between gap-3 py-2.5">
             <dt className="text-muted">Email</dt>
-            <dd className="font-semibold text-white">{profile?.email ?? user?.email ?? "Not available"}</dd>
+            <dd className="font-semibold text-white">{email}</dd>
           </div>
           <div className="flex items-center justify-between gap-3 py-2.5">
             <dt className="text-muted">Wurder ID</dt>
             <dd className="font-semibold text-white">
-              {profile?.wurderId ? `@${profile.wurderId}` : "Not set"}
+              {wurderId ? `@${wurderId}` : "Not set"}
             </dd>
           </div>
         </dl>

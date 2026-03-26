@@ -20,6 +20,7 @@ type MemberShellProps = {
   children: ReactNode;
   initialDisplayName?: string;
   initialWurderId?: string | null;
+  initialAvatarUrl?: string | null;
 };
 
 function getDisplayName(firstName?: string, lastName?: string, fallbackName?: string): string {
@@ -54,13 +55,19 @@ export default function MemberShell({
   children,
   initialDisplayName,
   initialWurderId,
+  initialAvatarUrl,
 }: MemberShellProps) {
   const pathname = usePathname();
   const { profile, user, stats } = useAuth();
 
   const profileDisplayName = getDisplayName(profile?.firstName, profile?.lastName, profile?.name);
   const profileWurderId = profile?.wurderId?.trim() ? profile.wurderId.trim() : null;
-  const profileAvatar = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || user?.photoURL?.trim() || null;
+  const profileAvatar =
+    profile?.avatarUrl?.trim() ||
+    profile?.avatar?.trim() ||
+    user?.photoURL?.trim() ||
+    initialAvatarUrl?.trim() ||
+    null;
   const profileEmail = profile?.email?.trim() || user?.email?.trim() || null;
   const activeGameCode = readActiveGameCode(profile?.activeGame);
   const lifetimePoints = stats.lifetimePoints ?? stats.points ?? 0;

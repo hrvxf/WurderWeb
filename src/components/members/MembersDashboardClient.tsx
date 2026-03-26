@@ -15,9 +15,13 @@ function readActiveGameCode(activeGame: unknown): string | null {
   return gameCode;
 }
 
-export default function MembersDashboardClient() {
+type MembersDashboardClientProps = {
+  initialActiveGameCode?: string | null;
+};
+
+export default function MembersDashboardClient({ initialActiveGameCode = null }: MembersDashboardClientProps) {
   const { profile } = useAuth();
-  const activeGameCode = readActiveGameCode(profile?.activeGame);
+  const activeGameCode = readActiveGameCode(profile?.activeGame) ?? initialActiveGameCode;
   const hasActiveGame = Boolean(activeGameCode);
 
   return (

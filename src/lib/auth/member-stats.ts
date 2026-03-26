@@ -1,6 +1,6 @@
 import { doc, getDoc, type DocumentData } from "firebase/firestore";
 
-import { sanitizeAchievementBadgeAssetKeys } from "@/lib/achievements/badge-assets";
+import { sanitizeAchievementBadgeAssetKeys } from "@/lib/achievements/badge-asset-keys";
 import { db } from "@/lib/firebase";
 import type { WurderUserProfile } from "@/lib/types/user";
 

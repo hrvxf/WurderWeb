@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import AchievementsPanel from "@/components/members/AchievementsPanel";
-import { sanitizeAchievementBadgeAssetKeys } from "@/lib/achievements/badge-assets";
+import AchievementsCard from "@/components/achievements/AchievementsCard";
 import StatsPanel from "@/components/members/StatsPanel";
 import type { MemberStatsSummary } from "@/lib/auth/member-stats";
 import { useAuth } from "@/lib/auth/AuthProvider";
@@ -30,16 +29,9 @@ type TrendsResponse = {
   trend: TrendPoint[];
 };
 
-type AchievementProgress = {
-  kdQualifiedSessions: number;
-  accuracyPercent: number;
-  cleanClaims: number;
-  lowDisputeSessions: number;
-  topPerformerSessions: number;
-  comebackWins: number;
-  ironWallSessions: number;
-  activeDays30d: number;
-  consistencyQualifiedGames: number;
+type MemberStatsPageInitialData = {
+  stats: MemberStatsSummary;
+  achievementIds: string[];
 };
 
 const TIMEFRAME_OPTIONS: Array<{ value: Timeframe; label: string }> = [
@@ -56,97 +48,6 @@ const MODE_OPTIONS: Array<{ value: ModeFilter; label: string }> = [
   { value: "guild", label: "Guild" },
   { value: "team", label: "Team" },
 ];
-
-function readPathValue(source: Record<string, unknown>, path: string): unknown {
-  const segments = path.split(".");
-  let current: unknown = source;
-  for (const segment of segments) {
-    if (!current || typeof current !== "object") return undefined;
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current;
-}
-
-function readNumberFromPaths(source: Record<string, unknown>, paths: string[]): number {
-  for (const path of paths) {
-    const value = path.includes(".") ? readPathValue(source, path) : source[path];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      if (Number.isFinite(parsed)) return parsed;
-    }
-  }
-  return 0;
-}
-
-function resolveAchievementProgress(stats: MemberStatsSummary, profile: unknown): AchievementProgress {
-  const profileObject = profile && typeof profile === "object" ? (profile as Record<string, unknown>) : {};
-  const rawAccuracy = readNumberFromPaths(profileObject, [
-    "accuracyRatio",
-    "accuracy",
-    "stats.accuracyRatio",
-    "stats.accuracy",
-    "achievements.progress.accuracyRatio",
-    "achievements.progress.accuracyPercent",
-    "achievementProgress.accuracyRatio",
-    "achievementProgress.accuracyPercent",
-  ]);
-  const accuracyPercent = rawAccuracy <= 1 && rawAccuracy > 0 ? rawAccuracy * 100 : rawAccuracy;
-  const winRate = stats.gamesPlayed > 0 ? stats.wins / stats.gamesPlayed : 0;
-
-  return {
-    kdQualifiedSessions: readNumberFromPaths(profileObject, [
-      "kdQualifiedSessions",
-      "stats.kdQualifiedSessions",
-      "achievements.progress.kdQualifiedSessions",
-      "achievementProgress.kdQualifiedSessions",
-    ]),
-    accuracyPercent,
-    cleanClaims: readNumberFromPaths(profileObject, [
-      "cleanClaims",
-      "stats.cleanClaims",
-      "achievements.progress.cleanClaims",
-      "achievementProgress.cleanClaims",
-    ]),
-    lowDisputeSessions: readNumberFromPaths(profileObject, [
-      "lowDisputeSessions",
-      "stats.lowDisputeSessions",
-      "achievements.progress.lowDisputeSessions",
-      "achievementProgress.lowDisputeSessions",
-    ]),
-    topPerformerSessions: readNumberFromPaths(profileObject, [
-      "topPerformerSessions",
-      "stats.topPerformerSessions",
-      "achievements.progress.topPerformerSessions",
-      "achievementProgress.topPerformerSessions",
-    ]),
-    comebackWins: readNumberFromPaths(profileObject, [
-      "comebackWins",
-      "stats.comebackWins",
-      "achievements.progress.comebackWins",
-      "achievementProgress.comebackWins",
-    ]),
-    ironWallSessions: readNumberFromPaths(profileObject, [
-      "ironWallSessions",
-      "stats.ironWallSessions",
-      "achievements.progress.ironWallSessions",
-      "achievementProgress.ironWallSessions",
-    ]),
-    activeDays30d: readNumberFromPaths(profileObject, [
-      "activeDays30d",
-      "stats.activeDays30d",
-      "achievements.progress.activeDays30d",
-      "achievementProgress.activeDays30d",
-    ]),
-    consistencyQualifiedGames:
-      readNumberFromPaths(profileObject, [
-        "consistencyQualifiedGames",
-        "stats.consistencyQualifiedGames",
-        "achievements.progress.consistencyQualifiedGames",
-        "achievementProgress.consistencyQualifiedGames",
-      ]) || (winRate >= 0.55 ? stats.gamesPlayed : 0),
-  };
-}
 
 function safeRatio(numerator: number, denominator: number): number | null {
   if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) return null;
@@ -579,7 +480,35 @@ function MetricDrilldown({ metric, trend }: { metric: MetricKey; trend: TrendPoi
   );
 }
 
-export default function MembersStatsClient() {
+type MembersStatsClientProps = {
+  initialData?: MemberStatsPageInitialData;
+};
+
+function hasAnyStats(stats: MemberStatsSummary): boolean {
+  return (
+    stats.gamesPlayed > 0 ||
+    stats.wins > 0 ||
+    stats.kills > 0 ||
+    stats.deaths > 0 ||
+    stats.bestStreak > 0 ||
+    stats.points > 0 ||
+    stats.lifetimePoints > 0 ||
+    stats.mvpAwards > 0
+  );
+}
+
+function normalizeAchievementIds(values: unknown[]): string[] {
+  return [
+    ...new Set(
+      values
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim().toLowerCase())
+        .filter((value) => value.length > 0)
+    ),
+  ];
+}
+
+export default function MembersStatsClient({ initialData }: MembersStatsClientProps) {
   const { stats, user, profile } = useAuth();
   const [timeframe, setTimeframe] = useState<Timeframe>("30d");
   const [mode, setMode] = useState<ModeFilter>("all");
@@ -626,28 +555,16 @@ export default function MembersStatsClient() {
     };
   }, [mode, timeframe, user]);
 
-  const activeStats = stats;
+  const activeStats = hasAnyStats(stats) ? stats : initialData?.stats ?? stats;
   const kpis = useMemo(() => resolveKpiModel(activeStats), [activeStats]);
   const achievementIds = useMemo(() => {
     const fromProfile = Array.isArray(profile?.achievementIds) ? profile.achievementIds : [];
     const fromAchievements = Array.isArray(profile?.achievements?.achievementIds) ? profile.achievements.achievementIds : [];
     const fromAwards = Array.isArray(profile?.awards?.achievementIds) ? profile.awards.achievementIds : [];
-    return [...fromProfile, ...fromAchievements, ...fromAwards].filter(
-      (value): value is string => typeof value === "string" && value.trim().length > 0
-    );
-  }, [profile]);
-  const achievementBadgeAssetKeys = useMemo(() => {
-    const root = sanitizeAchievementBadgeAssetKeys(profile?.achievementBadgeAssetKeys);
-    if (Object.keys(root).length > 0) return root;
-    const fromAchievements = profile?.achievements?.achievementBadgeAssetKeys;
-    const achievementsMap = sanitizeAchievementBadgeAssetKeys(fromAchievements);
-    if (Object.keys(achievementsMap).length > 0) return achievementsMap;
-    const fromAwards = profile?.awards?.achievementBadgeAssetKeys;
-    const awardsMap = sanitizeAchievementBadgeAssetKeys(fromAwards);
-    if (Object.keys(awardsMap).length > 0) return awardsMap;
-    return {};
-  }, [profile]);
-  const achievementProgress = useMemo(() => resolveAchievementProgress(activeStats, profile), [activeStats, profile]);
+    const profileIds = normalizeAchievementIds([...fromProfile, ...fromAchievements, ...fromAwards]);
+    if (profileIds.length > 0) return profileIds;
+    return normalizeAchievementIds(initialData?.achievementIds ?? []);
+  }, [initialData?.achievementIds, profile]);
 
   return (
     <section className="space-y-6">
@@ -741,12 +658,7 @@ export default function MembersStatsClient() {
 
       <MetricDrilldown metric={selectedMetric} trend={trend} />
       <TrendChart metric={selectedMetric} trend={trend} showOverlays={showOverlays} />
-      <AchievementsPanel
-        achievementIds={achievementIds}
-        achievementBadgeAssetKeys={achievementBadgeAssetKeys}
-        stats={activeStats}
-        progress={achievementProgress}
-      />
+      <AchievementsCard achievementIds={achievementIds} stats={activeStats} />
 
       <StatsPanel stats={activeStats} timeframe={timeframe} />
     </section>

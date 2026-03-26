@@ -4,7 +4,20 @@ import Link from "next/link";
 
 import HostPreviousGamesCard from "@/components/members/HostPreviousGamesCard";
 
-export default function MembersHostClient() {
+type MembersHostInitialSession = {
+  id: string;
+  title: string;
+  orgId: string | null;
+  createdAt: string | null;
+  endedAt: string | null;
+  recencyMs: number;
+};
+
+type MembersHostClientProps = {
+  initialSessions?: MembersHostInitialSession[];
+};
+
+export default function MembersHostClient({ initialSessions = [] }: MembersHostClientProps) {
   return (
     <section className="space-y-6">
       <div className="border-t border-white/10 pt-6">
@@ -16,7 +29,7 @@ export default function MembersHostClient() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <HostPreviousGamesCard />
+        <HostPreviousGamesCard initialSessions={initialSessions} />
         <section className="border-t border-white/10 pt-6">
           <p className="text-xs uppercase tracking-[0.18em] text-muted">Actions</p>
           <h3 className="mt-2 text-lg font-semibold">Host Actions</h3>

@@ -18,6 +18,12 @@ type NavLink = {
   icon: "home" | "product" | "business" | "download" | "dashboard" | "host" | "profile" | "stats" | "settings" | "help";
 };
 
+type SiteHeaderInitialAccount = {
+  displayName: string;
+  wurderId: string | null;
+  avatarUrl: string | null;
+};
+
 const EXPLORE_LINKS: NavLink[] = [
   { href: "/", label: "Home", description: "Landing and latest updates", icon: "home" },
   { href: "/product", label: "Product", description: "Capabilities and plans", icon: "product" },
@@ -183,7 +189,7 @@ function handleMenuKeyNav(container: HTMLElement, event: KeyboardEvent) {
   }
 }
 
-export default function SiteHeader() {
+export default function SiteHeader({ initialAccount = null }: { initialAccount?: SiteHeaderInitialAccount | null }) {
   const pathname = usePathname();
   const router = useRouter();
   const { isAuthenticated, loading, logout, profile } = useAuth();
@@ -196,13 +202,20 @@ export default function SiteHeader() {
   const desktopMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLElement | null>(null);
 
-  const displayName = profile?.name?.trim() || "Member";
-  const displayWurderId = profile?.wurderId?.trim() ? `@${profile.wurderId.trim()}` : "Wurder ID not set";
+  const hasInitialAccount = Boolean(initialAccount);
+  const effectiveAuthenticated = isAuthenticated || (loading && hasInitialAccount);
+  const displayName = profile?.name?.trim() || initialAccount?.displayName || "Member";
+  const displayWurderId =
+    profile?.wurderId?.trim()
+      ? `@${profile.wurderId.trim()}`
+      : initialAccount?.wurderId?.trim()
+        ? `@${initialAccount.wurderId.trim()}`
+        : "Wurder ID not set";
   const initials = useMemo(
-    () => getInitials(profile?.name, profile?.wurderId),
-    [profile?.name, profile?.wurderId]
+    () => getInitials(profile?.name ?? initialAccount?.displayName, profile?.wurderId ?? initialAccount?.wurderId ?? undefined),
+    [initialAccount?.displayName, initialAccount?.wurderId, profile?.name, profile?.wurderId]
   );
-  const avatarUrl = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || null;
+  const avatarUrl = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || initialAccount?.avatarUrl?.trim() || null;
 
   const activeAreaLabel = useMemo(() => {
     if (pathname.startsWith("/members/host")) return "Host";
@@ -342,7 +355,7 @@ export default function SiteHeader() {
           </nav>
 
           <div className="hidden items-center gap-2 md:flex">
-            {isAuthenticated && activeAreaLabel ? (
+            {effectiveAuthenticated && activeAreaLabel ? (
               <span className="inline-flex items-center rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-white/75">
                 {activeAreaLabel}
               </span>
@@ -351,9 +364,7 @@ export default function SiteHeader() {
               Play Wurder
             </Button>
 
-            {loading ? (
-              <div className="h-10 w-36 animate-pulse rounded-xl border border-white/15 bg-white/[0.06]" />
-            ) : isAuthenticated ? (
+            {effectiveAuthenticated ? (
               <div className="relative" ref={desktopMenuRef}>
                 <button
                   type="button"
@@ -405,6 +416,8 @@ export default function SiteHeader() {
                   </div>
                 ) : null}
               </div>
+            ) : loading ? (
+              <div className="h-10 w-36 animate-pulse rounded-xl border border-white/15 bg-white/[0.06]" />
             ) : (
               <Button href={AUTH_ROUTES.login} variant="ghost">
                 Sign In
@@ -459,7 +472,7 @@ export default function SiteHeader() {
                 Close
               </button>
             </div>
-            {isAuthenticated ? (
+            {effectiveAuthenticated ? (
               <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
                 <div className="flex items-center gap-3">
                   <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-10 w-10 text-sm" />
@@ -486,7 +499,7 @@ export default function SiteHeader() {
               >
                 Play Wurder
               </Link>
-              {isAuthenticated ? (
+              {effectiveAuthenticated ? (
                 <>
                   {WORKSPACE_LINKS.map((item) => (
                     <MenuRow key={item.href} item={item} pathname={pathname} />
@@ -538,7 +551,7 @@ export default function SiteHeader() {
               </div>
             </div>
 
-            {isAuthenticated ? (
+            {effectiveAuthenticated ? (
               <div className="mt-5 border-t border-white/10 pt-4">
                 <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
                   <p className="text-sm font-semibold text-white">{displayName}</p>
