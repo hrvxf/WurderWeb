@@ -1,4 +1,5 @@
-import ManagerComparePage from "@/components/admin/dashboard/ManagerComparePage";
+import { redirect } from "next/navigation";
+import { businessSessionCompareRoute } from "@/lib/business/routes";
 
 type CompareRouteProps = {
   params: Promise<{
@@ -6,7 +7,7 @@ type CompareRouteProps = {
   }>;
 };
 
-export default async function ManagerCompareRoute({ params }: CompareRouteProps) {
+export default async function LegacyManagerCompareRoute({ params }: CompareRouteProps) {
   const { gameCode } = await params;
-  return <ManagerComparePage gameCode={gameCode} />;
+  redirect(businessSessionCompareRoute(gameCode));
 }

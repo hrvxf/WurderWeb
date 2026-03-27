@@ -93,6 +93,10 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (step === 1) {
+      continueToStepTwo();
+      return;
+    }
     setError("");
     setSuccess("");
 

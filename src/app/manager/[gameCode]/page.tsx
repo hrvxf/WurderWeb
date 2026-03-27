@@ -1,4 +1,5 @@
-import ManagerDashboardPage from "@/components/admin/ManagerDashboardPage";
+import { redirect } from "next/navigation";
+import { businessSessionRoute } from "@/lib/business/routes";
 
 type ManagerDashboardRouteProps = {
   params: Promise<{
@@ -6,8 +7,9 @@ type ManagerDashboardRouteProps = {
   }>;
 };
 
-export default async function ManagerGameDashboardRoute({ params }: ManagerDashboardRouteProps) {
+export default async function LegacyManagerGameDashboardRoute({
+  params,
+}: ManagerDashboardRouteProps) {
   const { gameCode } = await params;
-
-  return <ManagerDashboardPage gameCode={gameCode} />;
+  redirect(businessSessionRoute(gameCode));
 }

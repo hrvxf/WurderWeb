@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import type { ManagerPlayerPerformance, ManagerTimelineEntry } from "@/components/admin/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { businessSessionCompareRoute, businessSessionRoute } from "@/lib/business/routes";
 
 type PlayerHistoryRow = {
   gameCode: string;
@@ -78,13 +79,13 @@ export default function PlayerDrilldownPage({ gameCode, playerId }: { gameCode: 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 p-3 sm:p-5">
       <header className="surface-light p-5">
-        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Player Drill-Down</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Business Session Player Drill-Down</p>
         <h1 className="mt-2 text-2xl font-semibold text-slate-900">{decodeURIComponent(playerId)}</h1>
         <div className="mt-3 flex flex-wrap gap-3">
-          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}`}>
+          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={businessSessionRoute(gameCode)}>
             Back to dashboard
           </Link>
-          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}/compare`}>
+          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={businessSessionCompareRoute(gameCode)}>
             Compare users
           </Link>
         </div>

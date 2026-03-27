@@ -112,19 +112,13 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
           <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Host shortcuts</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Session tools</h3>
-            <p className="mt-2 text-sm text-soft">Create and review hosted sessions.</p>
+            <p className="mt-2 text-sm text-soft">Review your hosted sessions.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={AUTH_ROUTES.membersHost}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
               >
                 Open host area
-              </Link>
-              <Link
-                href="/admin/create-company-game"
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
-              >
-                Start session
               </Link>
             </div>
           </article>

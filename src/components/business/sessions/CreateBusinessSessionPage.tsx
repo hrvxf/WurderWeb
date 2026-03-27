@@ -3,11 +3,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-import CompanyGameCreatedState from "@/components/admin/create-company-game/CompanyGameCreatedState";
-import CreateCompanyGameStepper from "@/components/admin/create-company-game/CreateCompanyGameStepper";
-import CreateSessionBasicsStep from "@/components/admin/create-company-game/CreateSessionBasicsStep";
-import CreateSessionReviewStep from "@/components/admin/create-company-game/CreateSessionReviewStep";
-import CreateSessionStyleStep from "@/components/admin/create-company-game/CreateSessionStyleStep";
+import BusinessSessionBasicsStep from "@/components/business/sessions/BusinessSessionBasicsStep";
+import BusinessSessionCreatedState from "@/components/business/sessions/BusinessSessionCreatedState";
+import BusinessSessionReviewStep from "@/components/business/sessions/BusinessSessionReviewStep";
+import BusinessSessionSetupStep from "@/components/business/sessions/BusinessSessionSetupStep";
+import BusinessSessionStepper from "@/components/business/sessions/BusinessSessionStepper";
 import { buildJoinUniversalLink } from "@/domain/join/joinLink";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
@@ -15,13 +15,12 @@ import {
   STORAGE_ORG_ID_KEY,
   STORAGE_ORG_NAME_KEY,
 } from "@/lib/company-game/companyGameDefaults";
-import {
-  buildCreateCompanyGamePayload,
-  toSessionName,
-} from "@/lib/company-game/companyGamePayloadMapper";
+import { buildCreateCompanyGamePayload, toSessionName } from "@/lib/company-game/companyGamePayloadMapper";
 import type { SetupState, SetupStep } from "@/lib/company-game/companyGameOptions";
+import { persistLastCreatedSession } from "@/lib/game/last-created-session";
+import type { SessionGameType } from "@/lib/game/session-type";
 
-type CreatedSessionResult = {
+type CreatedBusinessSessionResult = {
   gameCode: string;
   orgId: string;
   orgName: string;
@@ -29,7 +28,7 @@ type CreatedSessionResult = {
   managerParticipation: "host_only" | "host_player";
 };
 
-export default function CreateCompanyGamePage() {
+export default function CreateBusinessSessionPage() {
   const { user, loading, profile } = useAuth();
   const searchParams = useSearchParams();
 
@@ -37,7 +36,7 @@ export default function CreateCompanyGamePage() {
   const [step, setStep] = useState<SetupStep>(1);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<CreatedSessionResult | null>(null);
+  const [result, setResult] = useState<CreatedBusinessSessionResult | null>(null);
   const [copyState, setCopyState] = useState<{ gameCode: boolean; joinLink: boolean }>({
     gameCode: false,
     joinLink: false,
@@ -100,7 +99,7 @@ export default function CreateCompanyGamePage() {
 
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/admin/create-company-game", {
+      const response = await fetch("/api/b2b/sessions", {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
@@ -113,28 +112,42 @@ export default function CreateCompanyGamePage() {
         message?: string;
         gameCode?: string;
         orgId?: string;
+        gameType?: SessionGameType;
       };
 
       if (!response.ok) {
-        throw new Error(payload.message ?? "Failed to start session.");
+        throw new Error(payload.message ?? "Failed to start business session.");
+      }
+
+      if (payload.gameType && payload.gameType !== "business") {
+        throw new Error("Unexpected session type returned for Business session creation.");
       }
 
       const resultOrgId = String(payload.orgId ?? setup.orgId ?? "");
       const gameCode = String(payload.gameCode ?? "");
+      const joinLink = buildJoinUniversalLink(gameCode);
       setResult({
         gameCode,
         orgId: resultOrgId,
         orgName: setup.orgName.trim(),
-        joinLink: buildJoinUniversalLink(gameCode),
+        joinLink,
         managerParticipation: setup.managerParticipation,
       });
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(STORAGE_ORG_NAME_KEY, setup.orgName.trim());
         if (resultOrgId) window.localStorage.setItem(STORAGE_ORG_ID_KEY, resultOrgId);
+        persistLastCreatedSession({
+          gameCode,
+          gameType: "business",
+          createdAtIso: new Date().toISOString(),
+          joinLink,
+          orgId: resultOrgId || null,
+          orgName: setup.orgName.trim(),
+        });
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Failed to start session.");
+      setMessage(error instanceof Error ? error.message : "Failed to start business session.");
     } finally {
       setBusy(false);
     }
@@ -183,14 +196,14 @@ export default function CreateCompanyGamePage() {
       <header className="space-y-3">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Start business session</h1>
         <p className="text-sm text-soft">
-          Configure game mode and session length in three steps, with reporting-ready defaults applied automatically.
+          Configure session mode and duration in three steps, with reporting-ready defaults applied automatically.
         </p>
-        {!result ? <CreateCompanyGameStepper step={step} /> : null}
+        {!result ? <BusinessSessionStepper step={step} /> : null}
       </header>
 
       {message ? <p className="rounded-xl border border-white/20 bg-black/25 px-4 py-3 text-sm">{message}</p> : null}
       {result ? (
-        <CompanyGameCreatedState
+        <BusinessSessionCreatedState
           result={result}
           copyState={copyState}
           onCopyGameCode={() => void copyText(result.gameCode, "gameCode")}
@@ -205,12 +218,12 @@ export default function CreateCompanyGamePage() {
         >
           {busy ? (
             <div className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/75">
-              Starting session and preparing manager reporting...
+              Starting business session and preparing reporting...
             </div>
           ) : null}
 
           {step === 1 ? (
-            <CreateSessionBasicsStep
+            <BusinessSessionBasicsStep
               setup={setup}
               onOrgNameChange={(value) =>
                 setSetup((prev) => ({ ...prev, orgName: value, orgId: undefined }))
@@ -220,7 +233,7 @@ export default function CreateCompanyGamePage() {
           ) : null}
 
           {step === 2 ? (
-            <CreateSessionStyleStep
+            <BusinessSessionSetupStep
               gameMode={setup.gameMode}
               length={setup.length}
               managerParticipation={setup.managerParticipation}
@@ -233,7 +246,7 @@ export default function CreateCompanyGamePage() {
           ) : null}
 
           {step === 3 ? (
-            <CreateSessionReviewStep setup={setup} resolvedSessionName={resolvedSessionName} />
+            <BusinessSessionReviewStep setup={setup} resolvedSessionName={resolvedSessionName} />
           ) : null}
 
           <div className="flex items-center justify-between gap-3 pt-2">

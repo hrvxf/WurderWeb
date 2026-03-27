@@ -1,5 +1,6 @@
-import CreateCompanyGamePage from "@/components/admin/create-company-game/CreateCompanyGamePage";
+import { redirect } from "next/navigation";
+import { BUSINESS_ROUTES } from "@/lib/business/routes";
 
-export default function Page() {
-  return <CreateCompanyGamePage />;
+export default function LegacyAdminCreateCompanyGameRoute() {
+  redirect(BUSINESS_ROUTES.createSession);
 }

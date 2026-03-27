@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { businessOrgRoute, businessSessionRoute } from "@/lib/business/routes";
 
 type SessionRow = {
   gameCode: string;
@@ -362,7 +363,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
 
   useEffect(() => {
     if (state.status !== "unauthenticated") return;
-    const next = encodeURIComponent(`/org/${orgId.trim()}`);
+    const next = encodeURIComponent(businessOrgRoute(orgId.trim()));
     router.replace(`/login?next=${next}`);
   }, [orgId, router, state.status]);
 
@@ -532,7 +533,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
                         </td>
                         <td className="px-3 py-2">
                           {session.analyticsAccess.allowedSections.overview ? (
-                            <Link className="font-medium text-blue-700 hover:text-blue-900" href={`/manager/${encodeURIComponent(session.gameCode)}`}>
+                            <Link className="font-medium text-blue-700 hover:text-blue-900" href={businessSessionRoute(session.gameCode)}>
                               Open
                             </Link>
                           ) : (

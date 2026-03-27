@@ -21,6 +21,7 @@ import type {
 } from "@/components/admin/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
+import { businessSessionRoute } from "@/lib/business/routes";
 
 type ManagerDashboardPageProps = {
   gameCode: string;
@@ -347,7 +348,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
   useEffect(() => {
     if (guard.status !== "unauthenticated") return;
-    const next = encodeURIComponent(`/manager/${gameCode.trim()}`);
+    const next = encodeURIComponent(businessSessionRoute(gameCode.trim()));
     router.replace(`/login?next=${next}`);
   }, [gameCode, guard.status, router]);
 
@@ -582,7 +583,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
             ) : null}
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">
-                {branding?.companyName ? `${branding.companyName} Manager Dashboard` : "Manager Dashboard V2"}
+                {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
               </h1>
               {branding?.brandThemeLabel ? <p className="text-xs uppercase tracking-wide text-slate-500">Theme: {branding.brandThemeLabel}</p> : null}
               <p className="text-sm text-slate-600">Game code: {gameCode || "--"}</p>
@@ -625,13 +626,13 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {(guard.status === "loading-auth" || guard.status === "checking-access") && (
         <section className="surface-light p-6 text-sm text-slate-600">
-          Checking manager access...
+          Checking Business session access...
         </section>
       )}
 
       {guard.status === "unauthenticated" && (
         <section className="rounded-lg border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900 shadow-sm">
-          Sign in to view this manager dashboard.
+          Sign in to view this Business session dashboard.
         </section>
       )}
 
@@ -643,7 +644,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {guard.status === "error" && (
         <section className="rounded-lg border border-red-200 bg-red-50 p-6 text-sm text-red-900 shadow-sm">
-          {guard.message ?? "Unable to verify manager access right now."}
+          {guard.message ?? "Unable to verify Business session access right now."}
         </section>
       )}
 

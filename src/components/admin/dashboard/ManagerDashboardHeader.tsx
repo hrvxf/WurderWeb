@@ -39,9 +39,9 @@ export default function ManagerDashboardHeader({ branding, gameCode, updatedAtLa
           ) : null}
           <div>
             <h1 className="text-2xl font-semibold text-white">
-              {branding?.companyName ? `${branding.companyName} Manager Dashboard` : "Manager Dashboard"}
+              {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
             </h1>
-            <p className="mt-1 text-sm text-white/75">Game code: {gameCode || "--"}</p>
+            <p className="mt-1 text-sm text-white/75">Session code: {gameCode || "--"}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {analytics ? <StatusBadge status={analytics.overview.lifecycleStatus} /> : null}
               {branding?.brandThemeLabel ? (

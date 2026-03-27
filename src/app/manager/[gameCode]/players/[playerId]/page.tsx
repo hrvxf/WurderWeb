@@ -1,4 +1,5 @@
-import PlayerDrilldownPage from "@/components/admin/dashboard/PlayerDrilldownPage";
+import { redirect } from "next/navigation";
+import { businessSessionPlayerRoute } from "@/lib/business/routes";
 
 type PlayerRouteProps = {
   params: Promise<{
@@ -7,7 +8,9 @@ type PlayerRouteProps = {
   }>;
 };
 
-export default async function ManagerPlayerDrilldownRoute({ params }: PlayerRouteProps) {
+export default async function LegacyManagerPlayerDrilldownRoute({
+  params,
+}: PlayerRouteProps) {
   const { gameCode, playerId } = await params;
-  return <PlayerDrilldownPage gameCode={gameCode} playerId={playerId} />;
+  redirect(businessSessionPlayerRoute(gameCode, playerId));
 }

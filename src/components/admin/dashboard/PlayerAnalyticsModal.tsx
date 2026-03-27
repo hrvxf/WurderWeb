@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { ManagerPlayerPerformance } from "@/components/admin/types";
+import { businessSessionPlayerRoute } from "@/lib/business/routes";
 
 type PlayerAnalyticsModalProps = {
   player: ManagerPlayerPerformance | null;
@@ -95,7 +96,7 @@ export default function PlayerAnalyticsModal({ player, gameCode, onClose }: Play
         </div>
         <div className="mt-4 flex justify-end">
           <Link
-            href={`/manager/${encodeURIComponent(gameCode)}/players/${encodeURIComponent(player.playerId)}`}
+            href={businessSessionPlayerRoute(gameCode, player.playerId)}
             className="rounded-md border border-white/25 bg-white/[0.05] px-2.5 py-1 text-sm text-white/85 hover:bg-white/[0.12]"
           >
             Open full player drill-down

@@ -20,7 +20,7 @@ import {
 
 export const runtime = "nodejs";
 
-type CreateCompanyGameBody = {
+type CreateBusinessSessionBody = {
   orgId?: string;
   orgName: string;
   companyLogoUrl?: string;
@@ -49,12 +49,12 @@ function toValidIntegerField(value: unknown, fieldName: string, minimum: number)
   return parsed;
 }
 
-function toValidBody(raw: unknown): CreateCompanyGameBody {
+function toValidBody(raw: unknown): CreateBusinessSessionBody {
   if (!raw || typeof raw !== "object") {
     throw new Error("Request body must be a JSON object.");
   }
 
-  const body = raw as Partial<CreateCompanyGameBody>;
+  const body = raw as Partial<CreateBusinessSessionBody>;
   const orgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
   const orgName = typeof body.orgName === "string" ? body.orgName.trim() : "";
   const templateId = typeof body.templateId === "string" ? body.templateId.trim() : "";
@@ -84,14 +84,8 @@ function toValidBody(raw: unknown): CreateCompanyGameBody {
     body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
 
-  if (
-    !orgName ||
-    !mode ||
-    !wordDifficulty ||
-    !Number.isFinite(durationMinutes) ||
-    durationMinutes <= 0
-  ) {
-    throw new Error("Missing or invalid create-company-game fields.");
+  if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    throw new Error("Missing or invalid b2b session fields.");
   }
 
   if (!templateId && saveTemplate && !templateName) {
@@ -246,13 +240,16 @@ export async function POST(request: Request) {
       templateId: templateId ?? null,
     });
 
-    return NextResponse.json({ gameCode, orgId, templateId: templateId ?? null }, { status: 201 });
+    return NextResponse.json(
+      { gameCode, orgId, templateId: templateId ?? null, gameType: "business" as const },
+      { status: 201 }
+    );
   } catch (error) {
     if (error instanceof UnauthenticatedCreateGameError) {
       return NextResponse.json(
         {
           code: "UNAUTHENTICATED",
-          message: "You must sign in with Firebase before creating a company game.",
+          message: "You must sign in with Firebase before creating a business session.",
         },
         { status: 401 }
       );
@@ -278,7 +275,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const message = error instanceof Error ? error.message : "Unable to create company game.";
+    const message = error instanceof Error ? error.message : "Unable to create business session.";
     const status = message.toLowerCase().includes("missing or invalid") ? 400 : 500;
 
     return NextResponse.json(

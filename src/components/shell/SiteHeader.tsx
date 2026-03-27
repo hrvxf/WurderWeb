@@ -38,6 +38,7 @@ const HELP_LINKS: NavLink[] = [
 ];
 
 const MENU_ANIMATION_MS = 180;
+const AVATAR_CACHE_KEY = "wurder:member:avatar-url";
 
 function getInitials(name?: string, wurderId?: string): string {
   const source = (name?.trim() || wurderId?.trim() || "W").trim();
@@ -174,13 +175,15 @@ function handleMenuKeyNav(container: HTMLElement, event: KeyboardEvent) {
 export default function SiteHeader({ initialAccount = null }: { initialAccount?: SiteHeaderInitialAccount | null }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, loading, logout, profile } = useAuth();
+  const { user, isAuthenticated, loading, logout, profile } = useAuth();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileMenuVisible, setMobileMenuVisible] = useState(false);
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [desktopMenuVisible, setDesktopMenuVisible] = useState(false);
+  const [businessWorkspaceActivated, setBusinessWorkspaceActivated] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [cachedAvatarUrl, setCachedAvatarUrl] = useState<string | null>(null);
   const desktopMenuRef = useRef<HTMLDivElement | null>(null);
   const mobileMenuRef = useRef<HTMLElement | null>(null);
 
@@ -197,15 +200,64 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
     () => getInitials(profile?.name ?? initialAccount?.displayName, profile?.wurderId ?? initialAccount?.wurderId ?? undefined),
     [initialAccount?.displayName, initialAccount?.wurderId, profile?.name, profile?.wurderId]
   );
-  const avatarUrl = profile?.avatarUrl?.trim() || profile?.avatar?.trim() || initialAccount?.avatarUrl?.trim() || null;
+  const liveAvatarUrl =
+    profile?.avatarUrl?.trim() ||
+    profile?.avatar?.trim() ||
+    user?.photoURL?.trim() ||
+    initialAccount?.avatarUrl?.trim() ||
+    null;
+  const avatarUrl = liveAvatarUrl || cachedAvatarUrl;
 
   const activeAreaLabel = useMemo(() => {
     if (pathname.startsWith("/members/host")) return "Host";
     if (pathname.startsWith("/members")) return "Members";
-    if (pathname.startsWith("/manager/")) return "Manager";
+    if (pathname.startsWith("/manager/")) return "Business";
     if (pathname.startsWith("/business")) return "Business";
     return null;
   }, [pathname]);
+
+  useEffect(() => {
+    if (!effectiveAuthenticated || !user) {
+      setBusinessWorkspaceActivated(false);
+      return;
+    }
+
+    let cancelled = false;
+    const resolveAccess = async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/business/workspace-access", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json().catch(() => ({}))) as { activated?: unknown };
+        if (cancelled) return;
+        setBusinessWorkspaceActivated(response.ok && payload.activated === true);
+      } catch {
+        if (cancelled) return;
+        setBusinessWorkspaceActivated(false);
+      }
+    };
+
+    void resolveAccess();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveAuthenticated, user]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const cached = window.localStorage.getItem(AVATAR_CACHE_KEY)?.trim() ?? "";
+    setCachedAvatarUrl(cached.length > 0 ? cached : null);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !liveAvatarUrl) return;
+    const img = new window.Image();
+    img.src = liveAvatarUrl;
+    window.localStorage.setItem(AVATAR_CACHE_KEY, liveAvatarUrl);
+    setCachedAvatarUrl(liveAvatarUrl);
+  }, [liveAvatarUrl]);
 
   useEffect(() => {
     setMobileMenuOpen(false);
@@ -382,14 +434,16 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                         href={AUTH_ROUTES.members}
                         className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
                       >
-                        Open Members Area
+                        Open personal dashboard
                       </Link>
-                      <Link
-                        href={BUSINESS_ROUTES.createSession}
-                        className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-                      >
-                        Start session
-                      </Link>
+                      {businessWorkspaceActivated ? (
+                        <Link
+                          href={BUSINESS_ROUTES.dashboard}
+                          className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                        >
+                          Open Business workspace
+                        </Link>
+                      ) : null}
                     </div>
                     <div className="mt-3 border-t border-white/10 pt-3">
                       <button
@@ -493,14 +547,16 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                     href={AUTH_ROUTES.members}
                     className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
                   >
-                    Open Members Area
+                    Open personal dashboard
                   </Link>
-                  <Link
-                    href={BUSINESS_ROUTES.createSession}
-                    className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-                  >
-                    Start session
-                  </Link>
+                  {businessWorkspaceActivated ? (
+                    <Link
+                      href={BUSINESS_ROUTES.dashboard}
+                      className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                    >
+                      Open Business workspace
+                    </Link>
+                  ) : null}
                 </>
               ) : (
                 loading ? (
