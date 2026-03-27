@@ -3,10 +3,34 @@
 ## Scope
 
 This backlog converts the March 27, 2026 audit into implementation-ready tickets for member profile, all member pages, and cross-site flow consistency.
+Last updated: March 27, 2026.
+
+## Triage Snapshot (Post B2B/B2C Split)
+
+### Completed in current migration
+- UX-001 Remove duplicate workspace navigation
+- UX-003 Block dead-end host actions (Business canonical routes)
+- UX-004 Add host history error state
+- UX-010 Redesign `/members` dashboard into action hub
+- UX-020 Improve stats chart interaction accessibility
+- UX-022 Clarify join information architecture
+- UX-031 Standardize CTA naming and intent
+
+### Next (active queue)
+- UX-021 Replace misleading "Games trend" metric
+- UX-030 Unify visual language across dark and light surfaces
+- UX-032 Polish legal/support/footer consistency
+
+### Verify / polish queue
+- UX-002 Fix corrupted character rendering (verify; likely resolved)
+- UX-011 Convert profile editor to staged flow (implemented; verify UX polish)
+- UX-012 Add avatar validation parity with UI copy (implemented; verify edge cases)
+- UX-013 Wurder ID claim confidence UX (implemented baseline; assess precheck endpoint)
 
 ## Milestone 1: Critical UX Debt (Week 1)
 
 ### Ticket UX-001: Remove duplicate workspace navigation
+- Status: Completed
 - Priority: P0
 - Areas: Members shell, site header
 - Files:
@@ -37,8 +61,10 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Acceptance criteria:
 - No corrupted symbols appear in header/admin UI.
 - Arrow/separator characters render correctly on Chrome, Safari, Edge.
+- Status: Verify-only after latest header/navigation refactor.
 
 ### Ticket UX-003: Block dead-end host actions
+- Status: Completed
 - Priority: P0
 - Areas: Member host page, business placeholders
 - Files:
@@ -50,12 +76,13 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Host actions lead to placeholder pages that read as unfinished.
 - Implementation:
 - Hide links to non-functional destinations or mark as "Coming soon" with clear expectation.
-- Route primary host CTA to fully functional flow (`/admin/create-company-game` or manager dashboard where available).
+- Route primary host CTA to fully functional Business flow (`/business/sessions/new` or `/business/dashboard` where available).
 - Acceptance criteria:
 - No host action leads to a page that feels broken/unavailable without warning.
 - Primary host action completes a real workflow.
 
 ### Ticket UX-004: Add host history error state
+- Status: Completed
 - Priority: P1
 - Areas: Host previous sessions card
 - File:
@@ -72,6 +99,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 ## Milestone 2: Member Experience Redesign (Week 2)
 
 ### Ticket UX-010: Redesign `/members` dashboard into action hub
+- Status: Completed
 - Priority: P0
 - Areas: Members dashboard
 - File:
@@ -104,6 +132,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Acceptance criteria:
 - User can progress through profile in clear steps with progress indicator.
 - Save state and validation feedback persist across step transitions.
+- Status: Implemented baseline (2-step Identity -> Avatar/review). Needs UX polish pass.
 
 ### Ticket UX-012: Add avatar validation parity with UI copy
 - Priority: P0
@@ -118,6 +147,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Acceptance criteria:
 - Files above 5MB are blocked client-side with explicit message.
 - Non-image uploads are blocked before upload request.
+- Status: Implemented baseline. Keep for regression/edge-case QA.
 
 ### Ticket UX-013: Wurder ID claim confidence UX
 - Priority: P1
@@ -133,10 +163,12 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Acceptance criteria:
 - First-time claim requires user confirmation.
 - Availability/uniqueness feedback appears before final submit.
+- Status: Confirmation implemented. Pre-submit availability endpoint remains optional.
 
 ## Milestone 3: Stats + Join Flow Clarity (Week 3)
 
 ### Ticket UX-020: Improve stats chart interaction accessibility
+- Status: Completed
 - Priority: P0
 - Areas: Member stats chart
 - File:
@@ -166,6 +198,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Metric behavior is explainable and consistent with timeframe filter.
 
 ### Ticket UX-022: Clarify join information architecture
+- Status: Completed (keep for future copy polish pass)
 - Priority: P0
 - Areas: Join and download funnel
 - Files:
@@ -173,15 +206,16 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - `src/app/join/[gameCode]/page.tsx`
 - `src/app/download/page.tsx`
 - Problem:
-- `/join` implies joining but is currently a host QR creation surface behind auth.
+- Join and session-start language drifted across `/join`, `/join/[gameCode]`, and `/download`.
 - Implementation:
-- Split entry options:
+- Keep `/join` as Personal surface with explicit split:
 - "I have a game code"
-- "I am hosting"
-- Update download copy from temporary placeholder language.
+- "I am starting a session"
+- Align `/join/[gameCode]` and `/download` copy to join-first intent.
 - Acceptance criteria:
 - User intent is clear within first screen on join route.
 - No conflicting language between join/create/download pages.
+- Route split and copy alignment implemented (`/join` Personal, `/business/...` Business).
 
 ## Milestone 4: System Consistency (Week 4+)
 
@@ -202,6 +236,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 - Cross-surface transition feels intentional, not like separate products.
 
 ### Ticket UX-031: Standardize CTA naming and intent
+- Status: Completed
 - Priority: P1
 - Areas: Header, members host, business pages
 - Files:
@@ -254,7 +289,7 @@ This backlog converts the March 27, 2026 audit into implementation-ready tickets
 
 ## Suggested Execution Order
 
-1. UX-001, UX-002, UX-003, UX-004
-2. UX-010, UX-011, UX-012, UX-013
-3. UX-020, UX-021, UX-022
-4. UX-030, UX-031, UX-032
+1. UX-021
+2. UX-030
+3. UX-032
+4. UX-002, UX-011, UX-012, UX-013 (verification/polish)
