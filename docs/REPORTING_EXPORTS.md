@@ -1,8 +1,8 @@
-# Reporting and Exports (Phase 9.2)
+# Business Reporting and Exports (Phase 9.2)
 
 ## Scope
 
-Manager exports are generated from aggregated analytics only.
+Business session exports are generated from aggregated analytics only.
 
 - Source: `gameAnalytics/{gameCode}`
 - No raw event-level export in this phase.
@@ -44,9 +44,10 @@ Includes:
 
 ## UI Integration
 
-Manager dashboard (`/manager/[gameCode]`) provides:
+Business session dashboard (canonical `/business/sessions/[gameCode]`, legacy `/manager/[gameCode]`) provides:
 
 - `Export CSV`
 - `Export PDF-ready`
 
 Buttons are gated by entitlement and show concise locked-state messaging otherwise.
+

@@ -26,7 +26,7 @@ function formatPercentFromRatio(value: number | null): string {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/12 bg-white/[0.04] p-3">
+    <div className="surface-panel-muted p-3">
       <p className="text-xs uppercase tracking-[0.14em] text-white/60">{label}</p>
       <p className="mt-1 text-sm font-semibold text-white">{value}</p>
     </div>
@@ -57,7 +57,7 @@ export default function PlayerAnalyticsModal({ player, gameCode, onClose }: Play
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/15 bg-[linear-gradient(165deg,rgba(14,17,24,0.96),rgba(9,12,18,0.98))] p-4 shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
+      <div className="surface-panel w-full max-w-2xl p-4 shadow-[0_24px_60px_rgba(0,0,0,0.55)]">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <PlayerAvatar player={player} />
@@ -67,7 +67,7 @@ export default function PlayerAnalyticsModal({ player, gameCode, onClose }: Play
             </div>
           </div>
           <button
-            className="rounded-md border border-white/25 bg-white/[0.05] px-2.5 py-1 text-sm text-white/85 hover:bg-white/[0.12]"
+            className="control-secondary min-h-0 rounded-md px-2.5 py-1 text-sm text-white/85"
             onClick={onClose}
             type="button"
           >
@@ -90,14 +90,14 @@ export default function PlayerAnalyticsModal({ player, gameCode, onClose }: Play
           <Metric label="Claims Denied" value={formatCount(player.claimsDenied)} />
         </div>
 
-        <div className="mt-4 rounded-lg border border-white/12 bg-white/[0.04] p-3">
+        <div className="surface-panel-muted mt-4 p-3">
           <p className="text-xs uppercase tracking-[0.14em] text-white/60">Deaths Basis</p>
           <p className="mt-1 text-sm text-white/85">{player.deathsBasis.replace(/_/g, " ")}</p>
         </div>
         <div className="mt-4 flex justify-end">
           <Link
             href={businessSessionPlayerRoute(gameCode, player.playerId)}
-            className="rounded-md border border-white/25 bg-white/[0.05] px-2.5 py-1 text-sm text-white/85 hover:bg-white/[0.12]"
+            className="control-secondary min-h-0 rounded-md px-2.5 py-1 text-sm text-white/85"
           >
             Open full player drill-down
           </Link>

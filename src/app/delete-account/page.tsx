@@ -1,7 +1,7 @@
 export default function DeleteAccountPage() {
   return (
-    <article className="mx-auto mt-2 max-w-4xl border-t border-white/10 pt-7 sm:pt-8">
-      <section className="surface-card p-6 sm:p-8">
+    <section className="legal-shell">
+      <article className="legal-card mx-auto max-w-4xl sm:p-8">
         <p className="text-xs uppercase tracking-[0.18em] text-muted">Account Deletion</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Delete your Wurder account</h1>
         <p className="mt-3 text-sm text-soft">Public URL: https://wurder.app/delete-account</p>
@@ -57,7 +57,7 @@ export default function DeleteAccountPage() {
             </p>
           </section>
         </div>
-      </section>
-    </article>
+      </article>
+    </section>
   );
 }

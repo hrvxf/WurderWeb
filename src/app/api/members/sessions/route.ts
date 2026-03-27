@@ -3,6 +3,8 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 import { getCurrentUser, CurrentUserInfrastructureError, CurrentUserUnauthenticatedError } from "@/lib/auth/getCurrentUser";
 import { adminDb } from "@/lib/firebase/admin";
+import { normalizeSessionGameType, type SessionGameType } from "@/lib/game/session-type";
+import { parseMemberGameTypeFilter, type SessionGameTypeFilter } from "@/lib/game/game-type-filter";
 
 export const runtime = "nodejs";
 
@@ -11,6 +13,7 @@ type UserGameDoc = {
   gameId?: unknown;
   sessionName?: unknown;
   gameName?: unknown;
+  gameType?: unknown;
   orgId?: unknown;
   joinedAt?: unknown;
   createdAt?: unknown;
@@ -19,6 +22,7 @@ type UserGameDoc = {
 };
 
 type GameDoc = {
+  gameType?: unknown;
   orgId?: unknown;
   createdAt?: unknown;
   endedAt?: unknown;
@@ -27,6 +31,7 @@ type GameDoc = {
 type SessionRow = {
   gameCode: string;
   sessionName: string;
+  gameType: SessionGameType | null;
   orgId: string | null;
   createdAt: string | null;
   endedAt: string | null;
@@ -99,6 +104,7 @@ export async function GET(request: Request) {
   try {
     const { uid } = await getCurrentUser(request.headers.get("authorization"));
     const { searchParams } = new URL(request.url);
+    const gameTypeFilter: SessionGameTypeFilter = parseMemberGameTypeFilter(searchParams.get("gameType"));
     const limit = parseLimit(searchParams.get("limit"));
     const cursor = decodeCursor(searchParams.get("cursor"));
     const offset = cursor?.offset ?? 0;
@@ -121,6 +127,7 @@ export async function GET(request: Request) {
       const row: SessionRow = {
         gameCode,
         sessionName: asNonEmptyString(data.sessionName) ?? asNonEmptyString(data.gameName) ?? gameCode,
+        gameType: normalizeSessionGameType(data.gameType),
         orgId: asNonEmptyString(data.orgId),
         createdAt,
         endedAt,
@@ -135,6 +142,7 @@ export async function GET(request: Request) {
       const game = (doc.data() ?? {}) as GameDoc;
       const createdAt = timestampToIso(game.createdAt);
       const endedAt = timestampToIso(game.endedAt);
+      const gameType = normalizeSessionGameType(game.gameType);
       const orgId = asNonEmptyString(game.orgId);
       const recencyMs = toRecencyMs(createdAt, endedAt);
 
@@ -143,6 +151,7 @@ export async function GET(request: Request) {
         sessionMap.set(gameCode, {
           gameCode,
           sessionName: gameCode,
+          gameType,
           orgId,
           createdAt,
           endedAt,
@@ -153,6 +162,7 @@ export async function GET(request: Request) {
 
       sessionMap.set(gameCode, {
         ...existing,
+        gameType: existing.gameType ?? gameType,
         orgId: existing.orgId ?? orgId,
         createdAt: existing.createdAt ?? createdAt,
         endedAt: existing.endedAt ?? endedAt,
@@ -165,8 +175,15 @@ export async function GET(request: Request) {
       return b.gameCode.localeCompare(a.gameCode);
     });
 
-    const paged = sorted.slice(offset, offset + limit);
-    const hasMore = sorted.length > offset + limit;
+    const filtered = sorted.filter((entry) => {
+      // Temporary backfill fallback: infer type from orgId when gameType is missing.
+      const resolvedGameType = entry.gameType ?? (entry.orgId ? "b2b" : "b2c");
+      if (gameTypeFilter === "all") return true;
+      return resolvedGameType === gameTypeFilter;
+    });
+
+    const paged = filtered.slice(offset, offset + limit);
+    const hasMore = filtered.length > offset + limit;
     const nextCursor = hasMore
       ? encodeCursor({
           v: 2,
@@ -175,14 +192,16 @@ export async function GET(request: Request) {
       : null;
 
     const sessions = paged.map((entry) => ({
-        gameCode: entry.gameCode,
-        sessionName: entry.sessionName,
-        orgId: entry.orgId,
-        createdAt: entry.createdAt,
-        endedAt: entry.endedAt,
-      }));
+      gameCode: entry.gameCode,
+      sessionName: entry.sessionName,
+      // Temporary backfill fallback: infer type from orgId when gameType is missing.
+      gameType: entry.gameType ?? (entry.orgId ? "b2b" : "b2c"),
+      orgId: entry.orgId,
+      createdAt: entry.createdAt,
+      endedAt: entry.endedAt,
+    }));
 
-    return NextResponse.json({ sessions, limit, hasMore, nextCursor });
+    return NextResponse.json({ sessions, limit, hasMore, nextCursor, gameType: gameTypeFilter });
   } catch (error) {
     if (error instanceof CurrentUserUnauthenticatedError) {
       return NextResponse.json({ code: "UNAUTHENTICATED", message: "Sign in before loading previous sessions." }, { status: 401 });

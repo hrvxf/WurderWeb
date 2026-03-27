@@ -242,16 +242,16 @@ export default function AdminPage() {
         <p className="mt-2 text-soft">Signed in as {session.email ?? session.uid}</p>
       </div>
 
-      <div className="rounded-2xl border border-white/20 p-4 space-y-3">
+      <div className="surface-panel p-4 space-y-3">
         <h2 className="font-semibold">Game Lookup</h2>
         <div className="flex gap-3">
           <input
             value={gameCode}
             onChange={(event) => setGameCode(event.target.value.toUpperCase())}
             placeholder="Enter game code"
-            className="w-full rounded-xl border border-white/20 bg-black/20 px-3 py-2"
+            className="input-dark"
           />
-          <button className="rounded-xl border border-white/30 px-4 py-2" disabled={isBusy} onClick={() => void loadGame()}>
+          <button className="control-secondary" disabled={isBusy} onClick={() => void loadGame()}>
             Open
           </button>
         </div>
@@ -339,7 +339,7 @@ export default function AdminPage() {
 
           {activeTab === "Diagnostics" ? (
             <div className="space-y-3">
-              <button className="rounded-xl border border-white/30 px-4 py-2" disabled={isBusy} onClick={() => void runDiagnostics()}>
+              <button className="control-secondary" disabled={isBusy} onClick={() => void runDiagnostics()}>
                 Run diagnostics
               </button>
               {diagnostics ? (
@@ -359,14 +359,14 @@ export default function AdminPage() {
             </div>
           ) : null}
 
-          <div className="rounded-2xl border border-white/20 p-4 space-y-2">
+          <div className="surface-panel p-4 space-y-2">
             <h3 className="font-semibold">Repair Actions</h3>
             <p className="text-xs text-soft">Backend-owned actions only. Unsafe cases are refused by reason code.</p>
             <div className="flex flex-wrap gap-2">
-              <button className="rounded-xl border border-white/30 px-3 py-1 text-sm" onClick={() => void runRepair("recomputeAliveCount")}>Recompute aliveCount</button>
-              <button className="rounded-xl border border-white/30 px-3 py-1 text-sm" onClick={() => void runRepair("reissueContract")}>Reissue contract</button>
-              <button className="rounded-xl border border-white/30 px-3 py-1 text-sm" onClick={() => void runRepair("markNeedsRepair")}>Mark needsRepair</button>
-              <button className="rounded-xl border border-white/30 px-3 py-1 text-sm" onClick={() => void runRepair("clearNeedsRepair")}>Clear needsRepair</button>
+              <button className="control-secondary" onClick={() => void runRepair("recomputeAliveCount")}>Recompute aliveCount</button>
+              <button className="control-secondary" onClick={() => void runRepair("reissueContract")}>Reissue contract</button>
+              <button className="control-secondary" onClick={() => void runRepair("markNeedsRepair")}>Mark needsRepair</button>
+              <button className="control-secondary" onClick={() => void runRepair("clearNeedsRepair")}>Clear needsRepair</button>
             </div>
           </div>
         </>

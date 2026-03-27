@@ -8,8 +8,12 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <article className="mx-auto mt-2 max-w-4xl border-t border-white/10 pt-7 sm:pt-8">
-      <TermsContent />
-    </article>
+    <section className="legal-shell">
+      <article className="legal-card mx-auto max-w-4xl">
+        <div className="max-w-none">
+          <TermsContent />
+        </div>
+      </article>
+    </section>
   );
 }

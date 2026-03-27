@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 
 import { adminDb } from "@/lib/firebase/admin";
 import {
-  CreateGameAuthInfrastructureError,
-  UnauthenticatedCreateGameError,
+  FirebaseAuthInfrastructureError,
+  FirebaseAuthUnauthenticatedError,
   verifyFirebaseAuthHeader,
-} from "@/lib/game/create-game";
+} from "@/lib/auth/verify-firebase-auth-header";
 
 export const runtime = "nodejs";
 
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
       source: hasActiveMembership ? "manager" : "none",
     });
   } catch (error) {
-    if (error instanceof UnauthenticatedCreateGameError) {
+    if (error instanceof FirebaseAuthUnauthenticatedError) {
       return NextResponse.json(
         {
           code: "UNAUTHENTICATED",
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
       );
     }
 
-    if (error instanceof CreateGameAuthInfrastructureError) {
+    if (error instanceof FirebaseAuthInfrastructureError) {
       return NextResponse.json(
         {
           code: "AUTH_VERIFICATION_FAILED",

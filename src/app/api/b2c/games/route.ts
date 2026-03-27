@@ -1,23 +1,25 @@
 import { NextResponse } from "next/server";
 import {
-  CreateGameAuthInfrastructureError,
   createGameForHostUid,
   GameCodeCollisionError,
-  UnauthenticatedCreateGameError,
-  verifyFirebaseAuthHeader,
 } from "@/lib/game/create-game";
+import {
+  FirebaseAuthInfrastructureError,
+  FirebaseAuthUnauthenticatedError,
+  verifyFirebaseAuthHeader,
+} from "@/lib/auth/verify-firebase-auth-header";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
     const hostUid = await verifyFirebaseAuthHeader(request.headers.get("authorization"));
-    const result = await createGameForHostUid(hostUid);
-    return NextResponse.json({ ...result, gameType: "personal" as const }, { status: 201 });
+    const result = await createGameForHostUid({ hostUid, gameType: "b2c" });
+    return NextResponse.json({ ...result, gameType: "b2c" as const }, { status: 201 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown b2c create-game error.";
 
-    if (error instanceof UnauthenticatedCreateGameError) {
+    if (error instanceof FirebaseAuthUnauthenticatedError) {
       return NextResponse.json(
         {
           code: "UNAUTHENTICATED",
@@ -27,7 +29,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error instanceof CreateGameAuthInfrastructureError) {
+    if (error instanceof FirebaseAuthInfrastructureError) {
       console.error("[b2c:games] Server auth verification misconfigured", error);
       return NextResponse.json(
         {

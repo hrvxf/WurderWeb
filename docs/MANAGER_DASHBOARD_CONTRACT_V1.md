@@ -1,8 +1,13 @@
-# Manager Dashboard Contract V1
+# Business Session Dashboard Contract V1
 
 ## Purpose
 
-Define the canonical web contract for manager dashboard analytics payloads and lock metric semantics before UI redesign or shared-package extraction.
+Define the canonical web contract for Business session dashboard analytics payloads and lock metric semantics before UI redesign or shared-package extraction.
+
+Canonical product route context:
+
+- Business session dashboard route: `/business/sessions/[gameCode]`
+- Legacy redirect route: `/manager/[gameCode]`
 
 - Schema id: `manager_dashboard.v1`
 - Primary producer: `GET /api/manager/games/[gameCode]/dashboard`

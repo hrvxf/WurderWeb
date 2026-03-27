@@ -3,6 +3,8 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 import { getCurrentUser, CurrentUserInfrastructureError, CurrentUserUnauthenticatedError } from "@/lib/auth/getCurrentUser";
 import { adminDb } from "@/lib/firebase/admin";
+import { normalizeSessionGameType } from "@/lib/game/session-type";
+import { parseMemberGameTypeFilter, type SessionGameTypeFilter } from "@/lib/game/game-type-filter";
 
 export const runtime = "nodejs";
 
@@ -11,11 +13,15 @@ type Timeframe = "7d" | "30d" | "90d" | "all";
 type UserGameDoc = {
   gameCode?: unknown;
   gameId?: unknown;
+  gameType?: unknown;
+  orgId?: unknown;
   createdAt?: unknown;
   joinedAt?: unknown;
 };
 
 type GameDoc = {
+  gameType?: unknown;
+  orgId?: unknown;
   mode?: unknown;
   createdAt?: unknown;
   endedAt?: unknown;
@@ -139,6 +145,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const timeframe = (url.searchParams.get("timeframe") ?? "30d").toLowerCase() as Timeframe;
     const modeFilter = normalizeMode(url.searchParams.get("mode")) ?? "all";
+    const gameTypeFilter: SessionGameTypeFilter = parseMemberGameTypeFilter(url.searchParams.get("gameType"));
     const sinceMs = sinceForTimeframe(timeframe);
 
     const userGamesSnap = await adminDb.collection("users").doc(uid).collection("games").limit(300).get();
@@ -151,6 +158,13 @@ export async function GET(request: Request) {
       const gameDoc = await adminDb.collection("games").doc(link.gameCode).get();
       if (!gameDoc.exists) continue;
       const game = (gameDoc.data() ?? {}) as GameDoc;
+      // Temporary backfill fallback: infer type from orgId when gameType is missing.
+      const resolvedGameType =
+        normalizeSessionGameType(game.gameType) ??
+        normalizeSessionGameType(link.data.gameType) ??
+        (asNonEmptyString(game.orgId) ?? asNonEmptyString(link.data.orgId) ? "b2b" : "b2c");
+      if (gameTypeFilter !== "all" && resolvedGameType !== gameTypeFilter) continue;
+
       const mode = normalizeMode(game.mode);
       if (modeFilter !== "all" && mode !== modeFilter) continue;
       const occurredAt = timestampToIso(game.endedAt) ?? timestampToIso(game.createdAt) ?? timestampToIso(link.data.createdAt) ?? timestampToIso(link.data.joinedAt);
@@ -213,6 +227,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       timeframe,
       mode: modeFilter,
+      gameType: gameTypeFilter,
       totals: {
         gamesPlayed,
         wins,

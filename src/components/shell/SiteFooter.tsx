@@ -5,10 +5,10 @@ export default function SiteFooter() {
     <footer className="mt-16 border-t border-white/10 bg-black/20">
       <div className="page-wrap flex flex-col gap-3 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
         <p>© {new Date().getFullYear()} Wurder. Fair play starts with clear rules.</p>
-        <div className="flex gap-4">
-          <Link href="/privacy" className="hover:text-white">Privacy</Link>
-          <Link href="/terms" className="hover:text-white">Terms</Link>
-          <Link href="/contact" className="hover:text-white">Support</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/privacy" className="legal-action-link">Privacy</Link>
+          <Link href="/terms" className="legal-action-link">Terms</Link>
+          <Link href="/contact" className="legal-action-link">Support</Link>
         </div>
       </div>
     </footer>

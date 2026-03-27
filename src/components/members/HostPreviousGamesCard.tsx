@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { businessSessionRoute } from "@/lib/business/routes";
+import { isBusinessSessionType, normalizeSessionGameType, type SessionGameType } from "@/lib/game/session-type";
 
 type SessionRow = {
   id: string;
   title: string;
+  gameType: SessionGameType | null;
   orgId: string | null;
   createdAt: string | null;
   endedAt: string | null;
@@ -19,6 +20,7 @@ type SessionsApiPayload = {
   sessions?: Array<{
     gameCode?: unknown;
     sessionName?: unknown;
+    gameType?: unknown;
     orgId?: unknown;
     createdAt?: unknown;
     endedAt?: unknown;
@@ -65,7 +67,7 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
     setLoadError(null);
     try {
       const token = await user.getIdToken();
-      const response = await fetch("/api/members/sessions?limit=8", {
+      const response = await fetch("/api/members/sessions?limit=8&gameType=b2c", {
         headers: { authorization: `Bearer ${token}` },
       });
       const payload = (await response.json().catch(() => ({}))) as SessionsApiPayload;
@@ -78,11 +80,12 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
         .map((entry, index): SessionRow | null => {
           const id = asString(entry.gameCode) ?? `session-${index}`;
           const title = asString(entry.sessionName) ?? id;
+          const gameType = normalizeSessionGameType(entry.gameType);
           const orgId = asString(entry.orgId);
           const createdAt = asString(entry.createdAt);
           const endedAt = asString(entry.endedAt);
           const recencyMs = Math.max(parseDateMs(createdAt), parseDateMs(endedAt));
-          return { id, title, orgId, createdAt, endedAt, recencyMs };
+          return { id, title, gameType, orgId, createdAt, endedAt, recencyMs };
         })
         .filter((entry): entry is SessionRow => Boolean(entry))
         .sort((a, b) => b.recencyMs - a.recencyMs);
@@ -143,34 +146,40 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
         <ul className="mt-4 divide-y divide-white/10 border-y border-white/10">
           {topSessions.map((session) => (
             <li key={session.id} className="px-0 py-2.5">
-              {isValidGameCode(session.id) ? (
-                <Link
-                  href={
-                    session.orgId
-                      ? businessSessionRoute(session.id)
-                      : `/join/${encodeURIComponent(session.id)}`
-                  }
-                  className="block"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-white">{session.title}</p>
-                    <span className="rounded-full border border-white/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
-                      {session.orgId ? "Business" : "Personal"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-white/60">{formatWhen(session.createdAt, session.endedAt)}</p>
-                </Link>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-semibold text-white">{session.title}</p>
-                    <span className="rounded-full border border-white/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
-                      {session.orgId ? "Business" : "Personal"}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-white/60">{formatWhen(session.createdAt, session.endedAt)}</p>
-                </>
-              )}
+              {(() => {
+                const resolvedGameType = session.gameType ?? "b2c";
+                const isBusiness = isBusinessSessionType(resolvedGameType);
+                const sessionLabel = isBusiness ? "Business" : "Personal";
+
+                return isValidGameCode(session.id) ? (
+                  <Link
+                    href={
+                      isBusiness
+                        ? `/business/sessions/${encodeURIComponent(session.id)}`
+                        : `/join/${encodeURIComponent(session.id)}`
+                    }
+                    className="block"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-white">{session.title}</p>
+                      <span className="rounded-full border border-white/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+                        {sessionLabel}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-white/60">{formatWhen(session.createdAt, session.endedAt)}</p>
+                  </Link>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-white">{session.title}</p>
+                      <span className="rounded-full border border-white/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">
+                        {sessionLabel}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-white/60">{formatWhen(session.createdAt, session.endedAt)}</p>
+                  </>
+                );
+              })()}
             </li>
           ))}
         </ul>

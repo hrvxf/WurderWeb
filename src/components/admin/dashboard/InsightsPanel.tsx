@@ -23,16 +23,16 @@ function SeverityBadge({ severity }: { severity: ManagerInsight["severity"] }) {
 
 export default function InsightsPanel({ insights }: InsightsPanelProps) {
   return (
-    <section className="rounded-2xl border border-white/15 bg-[linear-gradient(165deg,rgba(14,17,24,0.92),rgba(10,12,18,0.95))] p-4 sm:p-5 shadow-[0_16px_35px_rgba(0,0,0,0.28)]">
+    <section className="surface-panel p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-white">Insights</h2>
         <span className="text-xs text-white/55">{insights.length} signals</span>
       </div>
       {insights.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-sm text-white/70">No insight metrics available yet for this session.</p>
+        <p className="surface-panel-muted mt-3 p-3 text-sm text-white/70">No insight metrics available yet for this session.</p>
       ) : (
         <div className="relative mt-3">
-          <div className="scroll-chrome max-h-[24rem] overflow-auto rounded-xl border border-white/10 bg-white/[0.03]">
+          <div className="surface-panel-muted scroll-chrome max-h-[24rem] overflow-auto">
             {insights.map((insight) => (
               <article key={insight.id} className="border-b border-white/8 p-3 last:border-b-0">
                 <div className="flex items-start justify-between gap-2">

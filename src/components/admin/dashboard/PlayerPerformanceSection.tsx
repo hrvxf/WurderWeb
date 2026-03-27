@@ -115,7 +115,7 @@ export default function PlayerPerformanceSection({
   };
 
   return (
-    <section className="rounded-2xl border border-white/15 bg-[linear-gradient(165deg,rgba(14,17,24,0.92),rgba(10,12,18,0.95))] p-4 sm:p-5 shadow-[0_16px_35px_rgba(0,0,0,0.28)]">
+    <section className="surface-panel p-4 sm:p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-base font-semibold text-white">Player Performance</h2>
@@ -125,13 +125,13 @@ export default function PlayerPerformanceSection({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
-            className="w-full rounded-lg border border-white/20 bg-black/25 px-3 py-2 text-sm text-white placeholder:text-white/45 focus:border-white/40 focus:outline-none"
+            className="input-dark w-full py-2 text-sm placeholder:text-white/45"
             placeholder="Search player"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
           <select
-            className="rounded-lg border border-white/20 bg-black/25 px-2 py-2 text-sm text-white"
+            className="input-dark py-2 text-sm"
             value={deathsBasisFilter}
             onChange={(event) => setDeathsBasisFilter(event.target.value as DeathsBasisFilter)}
           >
@@ -144,7 +144,7 @@ export default function PlayerPerformanceSection({
             <input type="checkbox" checked={activeOnly} onChange={(event) => setActiveOnly(event.target.checked)} />
             Active Only
           </label>
-          <div className="inline-flex rounded-lg border border-white/20 bg-black/20 p-0.5">
+          <div className="surface-panel-muted inline-flex p-0.5">
             <button
               type="button"
               className={`rounded-md px-2 py-1 text-xs font-semibold ${
@@ -169,7 +169,7 @@ export default function PlayerPerformanceSection({
 
       <div className="relative mt-4">
         <div
-          className="scroll-chrome max-h-[32rem] overflow-auto rounded-xl border border-white/10"
+          className="surface-panel-muted scroll-chrome max-h-[32rem] overflow-auto"
           onScroll={(event) => {
             const target = event.currentTarget;
             const nearBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 240;

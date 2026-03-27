@@ -9,7 +9,10 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:contract": "vitest run src/lib/auth/member-data.test.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "backfill:games:game-type": "node scripts/backfill-games-game-type.js",
+    "ci:legacy-surface-gate": "node scripts/ci-legacy-surface-gate.js",
+    "ci:game-type-literal-gate": "node scripts/ci-game-type-literal-gate.js"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

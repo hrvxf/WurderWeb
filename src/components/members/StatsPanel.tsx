@@ -60,12 +60,12 @@ export default function StatsPanel({ stats, timeframe }: { stats: MemberStatsSum
 
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
         {STAT_GROUPS.map((group) => (
-          <section key={group.title} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <section key={group.title} className="surface-panel p-3">
             <h4 className="text-sm font-semibold text-white">{group.title}</h4>
             <p className="mt-1 text-xs text-white/55">{group.subtitle}</p>
             <div className="mt-3 space-y-2">
               {group.fields.map((field) => (
-                <div key={field.key} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div key={field.key} className="surface-panel-muted px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs uppercase tracking-wide text-muted" title={field.definition}>
                       {field.label}

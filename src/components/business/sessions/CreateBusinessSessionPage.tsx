@@ -11,12 +11,12 @@ import BusinessSessionStepper from "@/components/business/sessions/BusinessSessi
 import { buildJoinUniversalLink } from "@/domain/join/joinLink";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
-  defaultSetup,
-  STORAGE_ORG_ID_KEY,
-  STORAGE_ORG_NAME_KEY,
-} from "@/lib/company-game/companyGameDefaults";
-import { buildCreateCompanyGamePayload, toSessionName } from "@/lib/company-game/companyGamePayloadMapper";
-import type { SetupState, SetupStep } from "@/lib/company-game/companyGameOptions";
+  defaultBusinessSetup,
+  BUSINESS_STORAGE_ORG_ID_KEY,
+  BUSINESS_STORAGE_ORG_NAME_KEY,
+} from "@/lib/business/session-defaults";
+import { buildCreateBusinessSessionPayload, toBusinessSessionName } from "@/lib/business/session-payload-mapper";
+import type { SetupState, SetupStep } from "@/lib/business/session-options";
 import { persistLastCreatedSession } from "@/lib/game/last-created-session";
 import type { SessionGameType } from "@/lib/game/session-type";
 
@@ -32,7 +32,7 @@ export default function CreateBusinessSessionPage() {
   const { user, loading, profile } = useAuth();
   const searchParams = useSearchParams();
 
-  const [setup, setSetup] = useState<SetupState>(defaultSetup);
+  const [setup, setSetup] = useState<SetupState>(defaultBusinessSetup);
   const [step, setStep] = useState<SetupStep>(1);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -47,11 +47,11 @@ export default function CreateBusinessSessionPage() {
     const queryOrgId = searchParams.get("orgId")?.trim() ?? "";
     const storedOrgName =
       typeof window !== "undefined"
-        ? window.localStorage.getItem(STORAGE_ORG_NAME_KEY)?.trim() ?? ""
+        ? window.localStorage.getItem(BUSINESS_STORAGE_ORG_NAME_KEY)?.trim() ?? ""
         : "";
     const storedOrgId =
       typeof window !== "undefined"
-        ? window.localStorage.getItem(STORAGE_ORG_ID_KEY)?.trim() ?? ""
+        ? window.localStorage.getItem(BUSINESS_STORAGE_ORG_ID_KEY)?.trim() ?? ""
         : "";
 
     const initialOrgName = queryOrgName || storedOrgName || "";
@@ -67,7 +67,7 @@ export default function CreateBusinessSessionPage() {
   }, [profile?.firstName, profile?.name, searchParams]);
 
   const resolvedSessionName = useMemo(
-    () => toSessionName(setup.orgName, setup.sessionLabel),
+    () => toBusinessSessionName(setup.orgName, setup.sessionLabel),
     [setup.orgName, setup.sessionLabel]
   );
   const isOrgNameValid = setup.orgName.trim().length > 0;
@@ -105,7 +105,7 @@ export default function CreateBusinessSessionPage() {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(buildCreateCompanyGamePayload(setup)),
+        body: JSON.stringify(buildCreateBusinessSessionPayload(setup)),
       });
 
       const payload = (await response.json().catch(() => ({}))) as {
@@ -119,7 +119,7 @@ export default function CreateBusinessSessionPage() {
         throw new Error(payload.message ?? "Failed to start business session.");
       }
 
-      if (payload.gameType && payload.gameType !== "business") {
+      if (payload.gameType && payload.gameType !== "b2b") {
         throw new Error("Unexpected session type returned for Business session creation.");
       }
 
@@ -135,11 +135,11 @@ export default function CreateBusinessSessionPage() {
       });
 
       if (typeof window !== "undefined") {
-        window.localStorage.setItem(STORAGE_ORG_NAME_KEY, setup.orgName.trim());
-        if (resultOrgId) window.localStorage.setItem(STORAGE_ORG_ID_KEY, resultOrgId);
+        window.localStorage.setItem(BUSINESS_STORAGE_ORG_NAME_KEY, setup.orgName.trim());
+        if (resultOrgId) window.localStorage.setItem(BUSINESS_STORAGE_ORG_ID_KEY, resultOrgId);
         persistLastCreatedSession({
           gameCode,
-          gameType: "business",
+          gameType: "b2b",
           createdAtIso: new Date().toISOString(),
           joinLink,
           orgId: resultOrgId || null,
@@ -201,7 +201,7 @@ export default function CreateBusinessSessionPage() {
         {!result ? <BusinessSessionStepper step={step} /> : null}
       </header>
 
-      {message ? <p className="rounded-xl border border-white/20 bg-black/25 px-4 py-3 text-sm">{message}</p> : null}
+      {message ? <p className="surface-panel-muted px-4 py-3 text-sm">{message}</p> : null}
       {result ? (
         <BusinessSessionCreatedState
           result={result}
@@ -213,11 +213,11 @@ export default function CreateBusinessSessionPage() {
       ) : (
         <form
           onSubmit={(event) => void createSession(event)}
-          className="space-y-6 rounded-2xl border border-white/15 bg-black/25 p-4 shadow-[0_10px_40px_rgba(0,0,0,0.22)] sm:p-6"
+          className="surface-panel space-y-6 p-4 sm:p-6"
           aria-busy={busy}
         >
           {busy ? (
-            <div className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/75">
+            <div className="surface-panel-muted px-3 py-2 text-xs text-white/75">
               Starting business session and preparing reporting...
             </div>
           ) : null}
@@ -252,7 +252,7 @@ export default function CreateBusinessSessionPage() {
           <div className="flex items-center justify-between gap-3 pt-2">
             <button
               type="button"
-              className="rounded-xl border border-white/25 px-4 py-2 text-sm font-medium transition hover:bg-white/5 disabled:opacity-50"
+              className="control-secondary rounded-xl px-4 py-2 text-sm font-medium disabled:opacity-50"
               onClick={goBack}
               disabled={step === 1 || busy}
             >

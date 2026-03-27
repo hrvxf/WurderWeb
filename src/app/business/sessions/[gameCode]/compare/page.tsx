@@ -1,4 +1,4 @@
-import ManagerComparePage from "@/components/admin/dashboard/ManagerComparePage";
+import BusinessSessionComparePage from "@/components/business/dashboard/BusinessSessionComparePage";
 
 type BusinessSessionCompareRouteProps = {
   params: Promise<{
@@ -10,5 +10,5 @@ export default async function BusinessSessionCompareRoute({
   params,
 }: BusinessSessionCompareRouteProps) {
   const { gameCode } = await params;
-  return <ManagerComparePage gameCode={gameCode} />;
+  return <BusinessSessionComparePage gameCode={gameCode} />;
 }

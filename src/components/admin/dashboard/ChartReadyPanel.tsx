@@ -23,7 +23,7 @@ function formatValue(value: number, unit: ChartBarDatum["unit"]): string {
 
 function SeriesCard({ title, data }: { title: string; data: ChartBarDatum[] }) {
   return (
-    <article className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <article className="surface-panel-muted p-3">
       <h3 className="text-sm font-semibold text-white">{title}</h3>
       {data.length === 0 ? (
         <p className="mt-2 text-xs text-white/60">No chart data yet.</p>
@@ -44,7 +44,7 @@ export default function ChartReadyPanel({ analytics, onSelectPlayerById }: Chart
   const scatter = buildPlayerScatterSeries(analytics.playerPerformance);
 
   return (
-    <section className="rounded-2xl border border-white/15 bg-[linear-gradient(165deg,rgba(14,17,24,0.92),rgba(10,12,18,0.95))] p-4 sm:p-5 shadow-[0_16px_35px_rgba(0,0,0,0.28)]">
+    <section className="surface-panel p-4 sm:p-5">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-white">Visual Analytics</h2>
         <span className="text-xs text-white/55">chart-ready adapters</span>
@@ -55,7 +55,7 @@ export default function ChartReadyPanel({ analytics, onSelectPlayerById }: Chart
         <SeriesCard title="Claims Funnel" data={claimsBars} />
         <SeriesCard title="Deaths Basis Distribution" data={deathsBasisBars} />
       </div>
-      <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <div className="surface-panel-muted mt-3 p-3">
         <p className="text-sm font-semibold text-white">Player Scatter Dataset</p>
         <p className="mt-1 text-xs text-white/65">
           {scatter.length} points (x = accuracy ratio, y = K/D ratio, size = kills). Click a point for player drill-down.

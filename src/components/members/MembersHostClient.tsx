@@ -5,11 +5,15 @@ import { useEffect, useState } from "react";
 
 import HostPreviousGamesCard from "@/components/members/HostPreviousGamesCard";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { BUSINESS_ROUTES } from "@/lib/business/routes";
+
+const BUSINESS_HOME_ROUTE = "/business";
+const BUSINESS_DASHBOARD_ROUTE = "/business/dashboard";
+const BUSINESS_CREATE_SESSION_ROUTE = "/business/sessions/new";
 
 type MembersHostInitialSession = {
   id: string;
   title: string;
+  gameType: "b2c" | "b2b" | null;
   orgId: string | null;
   createdAt: string | null;
   endedAt: string | null;
@@ -64,7 +68,7 @@ export default function MembersHostClient({ initialSessions = [] }: MembersHostC
 
       <div className="grid gap-6 lg:grid-cols-2">
         <HostPreviousGamesCard initialSessions={initialSessions} />
-        <section className="border-t border-white/10 pt-6">
+        <section className="surface-panel p-5">
           <p className="text-xs uppercase tracking-[0.18em] text-muted">Actions</p>
           <h3 className="mt-2 text-lg font-semibold">Host Actions</h3>
           <p className="mt-2 text-sm text-soft">
@@ -74,14 +78,14 @@ export default function MembersHostClient({ initialSessions = [] }: MembersHostC
             {businessWorkspaceActivated ? (
               <>
                 <Link
-                  href={BUSINESS_ROUTES.createSession}
+                  href={BUSINESS_CREATE_SESSION_ROUTE}
                   className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-4 py-2.5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D]"
                 >
                   Start business session
                 </Link>
                 <Link
-                  href={BUSINESS_ROUTES.dashboard}
-                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                  href={BUSINESS_DASHBOARD_ROUTE}
+                  className="control-secondary"
                 >
                   Open Business dashboard
                 </Link>
@@ -89,8 +93,8 @@ export default function MembersHostClient({ initialSessions = [] }: MembersHostC
             ) : (
               <>
                 <Link
-                  href={BUSINESS_ROUTES.home}
-                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                  href={BUSINESS_HOME_ROUTE}
+                  className="control-secondary"
                 >
                   Explore Business
                 </Link>

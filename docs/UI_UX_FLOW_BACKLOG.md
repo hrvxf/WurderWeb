@@ -9,23 +9,22 @@ Last updated: March 27, 2026.
 
 ### Completed in current migration
 - UX-001 Remove duplicate workspace navigation
+- UX-002 Fix corrupted character rendering
 - UX-003 Block dead-end host actions (Business canonical routes)
 - UX-004 Add host history error state
 - UX-010 Redesign `/members` dashboard into action hub
 - UX-020 Improve stats chart interaction accessibility
+- UX-021 Replace misleading "Games trend" metric
 - UX-022 Clarify join information architecture
+- UX-012 Add avatar validation parity with UI copy
+- UX-013 Wurder ID claim confidence UX
 - UX-031 Standardize CTA naming and intent
 
 ### Next (active queue)
-- UX-021 Replace misleading "Games trend" metric
-- UX-030 Unify visual language across dark and light surfaces
-- UX-032 Polish legal/support/footer consistency
+- None.
 
 ### Verify / polish queue
-- UX-002 Fix corrupted character rendering (verify; likely resolved)
-- UX-011 Convert profile editor to staged flow (implemented; verify UX polish)
-- UX-012 Add avatar validation parity with UI copy (implemented; verify edge cases)
-- UX-013 Wurder ID claim confidence UX (implemented baseline; assess precheck endpoint)
+- None.
 
 ## Milestone 1: Critical UX Debt (Week 1)
 
@@ -48,8 +47,9 @@ Last updated: March 27, 2026.
 - No loss of route discoverability on desktop or mobile.
 
 ### Ticket UX-002: Fix corrupted character rendering
+- Status: Completed
 - Priority: P0
-- Areas: Header labels, admin console content
+- Areas: Header labels, legacy admin console content
 - Files:
 - `src/components/shell/SiteHeader.tsx`
 - `src/app/(admin)/admin/page.tsx`
@@ -61,7 +61,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - No corrupted symbols appear in header/admin UI.
 - Arrow/separator characters render correctly on Chrome, Safari, Edge.
-- Status: Verify-only after latest header/navigation refactor.
+- Status: Verified and completed.
 
 ### Ticket UX-003: Block dead-end host actions
 - Status: Completed
@@ -71,7 +71,7 @@ Last updated: March 27, 2026.
 - `src/components/members/MembersHostClient.tsx`
 - `src/app/business/dashboard/page.tsx`
 - `src/app/business/settings/page.tsx`
-- `src/components/business/BusinessSurfacePlaceholder.tsx`
+- `src/components/business/dashboard/*` and `src/components/business/sessions/*`
 - Problem:
 - Host actions lead to placeholder pages that read as unfinished.
 - Implementation:
@@ -80,6 +80,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - No host action leads to a page that feels broken/unavailable without warning.
 - Primary host action completes a real workflow.
+- Note: `src/components/business/BusinessSurfacePlaceholder.tsx` has been removed after no-caller verification.
 
 ### Ticket UX-004: Add host history error state
 - Status: Completed
@@ -118,6 +119,7 @@ Last updated: March 27, 2026.
 - User can complete common paths (join session, edit profile, open host flow) in one tap each.
 
 ### Ticket UX-011: Convert profile editor to staged flow
+- Status: Completed
 - Priority: P0
 - Areas: Member profile
 - File:
@@ -132,9 +134,10 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - User can progress through profile in clear steps with progress indicator.
 - Save state and validation feedback persist across step transitions.
-- Status: Implemented baseline (2-step Identity -> Avatar/review). Needs UX polish pass.
+- Status: Completed. Final polish pass adds explicit readiness gating and clearer step guidance/checklist.
 
 ### Ticket UX-012: Add avatar validation parity with UI copy
+- Status: Completed
 - Priority: P0
 - Areas: Profile avatar upload
 - File:
@@ -147,9 +150,10 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - Files above 5MB are blocked client-side with explicit message.
 - Non-image uploads are blocked before upload request.
-- Status: Implemented baseline. Keep for regression/edge-case QA.
+- Status: Completed. Avatar upload now enforces PNG/JPG and 5MB limit in picker + validation.
 
 ### Ticket UX-013: Wurder ID claim confidence UX
+- Status: Completed
 - Priority: P1
 - Areas: Profile handle claim
 - Files:
@@ -163,7 +167,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - First-time claim requires user confirmation.
 - Availability/uniqueness feedback appears before final submit.
-- Status: Confirmation implemented. Pre-submit availability endpoint remains optional.
+- Status: Completed. Confirmation plus pre-submit availability endpoint and inline feedback are implemented.
 
 ## Milestone 3: Stats + Join Flow Clarity (Week 3)
 
@@ -184,6 +188,7 @@ Last updated: March 27, 2026.
 - Selected point state is persistent and visually clear.
 
 ### Ticket UX-021: Replace misleading "Games trend" metric
+- Status: Completed
 - Priority: P1
 - Areas: Member stats KPI logic
 - File:
@@ -196,6 +201,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - Games chart no longer always rises by definition.
 - Metric behavior is explainable and consistent with timeframe filter.
+- Status: Completed. Games KPI now uses rolling timeframe-aligned windows with explicit basis copy.
 
 ### Ticket UX-022: Clarify join information architecture
 - Status: Completed (keep for future copy polish pass)
@@ -208,20 +214,20 @@ Last updated: March 27, 2026.
 - Problem:
 - Join and session-start language drifted across `/join`, `/join/[gameCode]`, and `/download`.
 - Implementation:
-- Keep `/join` as Personal surface with explicit split:
-- "I have a game code"
-- "I am starting a session"
-- Align `/join/[gameCode]` and `/download` copy to join-first intent.
+- Keep `/join` as Personal start-session surface only (no inline game-code entry).
+- Use `/join/[gameCode]` and `/download` as explicit app-handoff steps for code-based joins.
+- Align `/join/[gameCode]` and `/download` copy to app-first join intent.
 - Acceptance criteria:
 - User intent is clear within first screen on join route.
 - No conflicting language between join/create/download pages.
-- Route split and copy alignment implemented (`/join` Personal, `/business/...` Business).
+- Route split and copy alignment implemented (`/join` Personal start flow, `/business/...` Business).
 
 ## Milestone 4: System Consistency (Week 4+)
 
 ### Ticket UX-030: Unify visual language across dark and light surfaces
+- Status: Completed
 - Priority: P1
-- Areas: Members/public (dark) vs manager/org/admin (light)
+- Areas: Members/public (dark) vs business/org/admin (light)
 - Files:
 - `src/app/globals.css`
 - `src/components/admin/*`
@@ -234,6 +240,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - Shared components use common token set.
 - Cross-surface transition feels intentional, not like separate products.
+- Status: Completed. Shared surface/control tokens in `globals.css` now back member dashboard/host/stats panels, business dashboard/settings/session-creation flows, and core admin dashboard panels/modals with common card/input/secondary-control primitives.
 
 ### Ticket UX-031: Standardize CTA naming and intent
 - Status: Completed
@@ -244,7 +251,7 @@ Last updated: March 27, 2026.
 - `src/components/members/MembersHostClient.tsx`
 - `src/app/business/page.tsx`
 - Problem:
-- CTA naming is inconsistent (`Play Wurder`, `Start session`, `Create company game`).
+- CTA naming is inconsistent (`Play Wurder`, `Start session`, `Create business session`).
 - Implementation:
 - Define canonical action verbs by context:
 - Player: Join game
@@ -255,6 +262,7 @@ Last updated: March 27, 2026.
 - Primary CTA labels are predictable and role-aligned.
 
 ### Ticket UX-032: Polish legal/support/footer consistency
+- Status: Completed
 - Priority: P2
 - Areas: Footer and legal/support entry points
 - Files:
@@ -272,6 +280,7 @@ Last updated: March 27, 2026.
 - Acceptance criteria:
 - Legal/support pages follow consistent layout rhythm.
 - Footer format is polished and standards-compliant.
+- Status: Completed. Shared legal shell/card/action-link styles now align contact/privacy/terms/delete-account pages and footer legal link hierarchy.
 
 ## QA Checklist (Per Milestone)
 
@@ -287,9 +296,12 @@ Last updated: March 27, 2026.
 - `npm run test`
 - targeted E2E path checks for business/member journeys.
 
+### Current Verification Snapshot (March 27, 2026)
+- `npx tsc --noEmit`: pass
+- `npm run lint`: pass (2 existing unused-symbol warnings in admin analytics tests/payload)
+- `npm run test`: failing in `src/lib/achievements/catalog.test.ts` (2 assertions around badge URL ordering/prefix), not in the UX/UI migration surface
+- Manual desktop/mobile visual and keyboard traversal still required for final sign-off.
+
 ## Suggested Execution Order
 
-1. UX-021
-2. UX-030
-3. UX-032
-4. UX-002, UX-011, UX-012, UX-013 (verification/polish)
+1. Verify QA checklist and close milestone.

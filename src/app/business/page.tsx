@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { gameModeOptions } from "@/lib/company-game/companyGameOptions";
+import { gameModeOptions } from "@/lib/business/session-options";
 import { BUSINESS_ROUTES } from "@/lib/business/routes";
 
 export const metadata: Metadata = {

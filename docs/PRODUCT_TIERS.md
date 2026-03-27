@@ -1,5 +1,10 @@
 # Product Tiers (Phase 9.1)
 
+Canonical product context:
+
+- Business web workspace routes are under `/business/...` (for example `/business/sessions/[gameCode]`, `/business/orgs/[orgId]`, `/business/sessions/new`).
+- Legacy `/manager/...` and `/admin/...` paths are migration compatibility surfaces only.
+
 ## Tier Model
 
 - `basic`
@@ -16,37 +21,39 @@ Source of truth:
 
 - single session creation
 - limited metrics
-- core manager dashboard access
+- core Business session dashboard access
 
 ### Pro
 
 - all Basic features
-- manager insights
-- manager summaries
+- Business session insights
+- Business session summaries
 
 ### Enterprise
 
 - all Pro features
 - org dashboard
 - template reuse
-- exports (manager CSV + PDF-ready report path)
-- branding (org brand fields applied to manager/org headers + exports)
+- exports (Business session CSV + PDF-ready report path)
+- branding (org brand fields applied to Business session/org headers + exports)
 
 ## Entitlement Application (Web)
 
-- Manager dashboard API returns tier entitlements and UI gates insights/summaries.
+- Business session dashboard API returns tier entitlements and UI gates insights/summaries.
   - [src/app/api/manager/games/[gameCode]/dashboard/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/manager/games/[gameCode]/dashboard/route.ts)
   - [src/components/admin/ManagerDashboardPage.tsx](/c:/Users/adamj/Documents/Wurder/wurder-website/src/components/admin/ManagerDashboardPage.tsx)
 - Org dashboard endpoint is enterprise-gated with feature-locked messaging.
   - [src/app/api/orgs/[orgId]/sessions/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/orgs/[orgId]/sessions/route.ts)
   - [src/components/admin/OrganizationDashboardPage.tsx](/c:/Users/adamj/Documents/Wurder/wurder-website/src/components/admin/OrganizationDashboardPage.tsx)
 - Template APIs and template UI are enterprise-gated.
-  - [src/app/api/admin/company-templates/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/admin/company-templates/route.ts)
-  - [src/app/(admin)/admin/create-company-game/page.tsx](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/(admin)/admin/create-company-game/page.tsx)
+  - Canonical: [src/app/api/business/templates/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/business/templates/route.ts)
+  - Legacy compatibility wrapper: [src/app/api/admin/company-templates/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/admin/company-templates/route.ts)
+  - Canonical product route: `/business/sessions/new`
+  - Legacy compatibility route/component path: [src/app/(admin)/admin/create-company-game/page.tsx](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/(admin)/admin/create-company-game/page.tsx)
 - Export APIs and export buttons are enterprise-gated.
   - [src/app/api/manager/games/[gameCode]/export/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/manager/games/[gameCode]/export/route.ts)
   - [src/components/admin/ManagerDashboardPage.tsx](/c:/Users/adamj/Documents/Wurder/wurder-website/src/components/admin/ManagerDashboardPage.tsx)
-- Branding fields are enterprise-scoped and applied on manager/org surfaces.
+- Branding fields are enterprise-scoped and applied on Business session/org surfaces.
   - [src/lib/types/organization.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/lib/types/organization.ts)
   - [src/app/api/manager/games/[gameCode]/dashboard/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/manager/games/[gameCode]/dashboard/route.ts)
   - [src/app/api/orgs/[orgId]/sessions/route.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/app/api/orgs/[orgId]/sessions/route.ts)
@@ -56,4 +63,4 @@ Source of truth:
 Organization docs now include `tier`:
 
 - [src/lib/types/organization.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/lib/types/organization.ts)
-- default for newly created orgs is currently `enterprise`.
+- safe-default rule: missing/unknown tier must never imply `enterprise`.

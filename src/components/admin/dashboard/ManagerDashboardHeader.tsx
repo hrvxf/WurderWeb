@@ -27,7 +27,7 @@ function StatusBadge({ status }: { status: ManagerAnalyticsDocument["overview"][
 export default function ManagerDashboardHeader({ branding, gameCode, updatedAtLabel, analytics }: ManagerDashboardHeaderProps) {
   return (
     <header
-      className="relative overflow-hidden rounded-2xl border border-white/15 bg-[linear-gradient(160deg,rgba(8,10,15,0.95),rgba(17,20,29,0.92))] p-5 shadow-[0_18px_45px_rgba(0,0,0,0.35)]"
+      className="surface-panel relative overflow-hidden p-5"
       style={branding?.brandAccentColor ? { borderTopWidth: "4px", borderTopColor: branding.brandAccentColor } : undefined}
     >
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,rgba(217,106,90,0.2),transparent_36%),radial-gradient(circle_at_88%_14%,rgba(81,125,214,0.16),transparent_35%)]" />
@@ -52,7 +52,7 @@ export default function ManagerDashboardHeader({ branding, gameCode, updatedAtLa
             </div>
           </div>
         </div>
-        <div className="rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-xs uppercase tracking-wide text-white/75">
+        <div className="surface-panel-muted px-3 py-2 text-xs uppercase tracking-wide text-white/75">
           Updated: {updatedAtLabel}
         </div>
       </div>

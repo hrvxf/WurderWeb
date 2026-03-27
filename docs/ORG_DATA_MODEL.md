@@ -51,9 +51,9 @@ For business session access (canonical `/business/sessions/[gameCode]`, legacy `
 
 These fields are mirrored to `organizations/{orgId}` for legacy compatibility and are used by:
 
-- manager dashboard header
+- Business session dashboard header
 - org dashboard header
-- manager CSV / PDF-ready exports
+- Business session CSV / PDF-ready exports
 
 ## Company Game Linkage
 

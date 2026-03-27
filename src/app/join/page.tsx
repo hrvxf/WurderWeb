@@ -3,7 +3,7 @@ import JoinPageClient from "@/app/join/page.client";
 
 export const metadata: Metadata = {
   title: "Join",
-  description: "Join with a game code or start a personal session.",
+  description: "Enter a game code and continue in app, or start a personal session.",
   alternates: { canonical: "/join" },
 };
 

@@ -36,7 +36,7 @@ export default async function JoinGameCodePage({ params }: JoinGameCodePageProps
         Continue into the app to join game <span className="font-mono">{parsedCode.value}</span>.
       </p>
 
-      <div className="mt-5 rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-sm text-soft">
+      <div className="surface-panel mt-5 px-4 py-3 text-sm text-soft">
         <p className="text-xs uppercase tracking-[0.16em] text-muted">Universal link</p>
         <p className="mt-2 break-all">{buildJoinUniversalLink(parsedCode.value)}</p>
       </div>

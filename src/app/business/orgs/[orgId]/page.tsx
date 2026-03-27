@@ -1,4 +1,4 @@
-import OrganizationDashboardPage from "@/components/admin/OrganizationDashboardPage";
+import BusinessOrganizationDashboardPage from "@/components/business/dashboard/BusinessOrganizationDashboardPage";
 
 type BusinessOrganizationRouteProps = {
   params: Promise<{
@@ -10,5 +10,5 @@ export default async function BusinessOrganizationRoute({
   params,
 }: BusinessOrganizationRouteProps) {
   const { orgId } = await params;
-  return <OrganizationDashboardPage orgId={orgId} />;
+  return <BusinessOrganizationDashboardPage orgId={orgId} />;
 }

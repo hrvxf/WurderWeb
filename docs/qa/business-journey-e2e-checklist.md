@@ -7,7 +7,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 ## Environment
 
 - Web app running with Firebase auth configured
-- At least one valid manager account for email/password sign-in
+- At least one valid business account for email/password sign-in
 - One test account intentionally lacking create access or with injected API failure path for negative testing
 - Desktop browser + mobile viewport (or real device)
 
@@ -48,7 +48,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 - Direct entry into create flow.
 - Successful create returns full success state.
 - `Open host dashboard` CTA is functional.
-- If manager role = host_player, `Join as host-player` CTA appears and is functional.
+- If host role = host_player, `Join as host-player` CTA appears and is functional.
 
 ## 3. Error path (server-side failure)
 
@@ -68,7 +68,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 - Session name
 - Game mode
 - Session length
-- Manager role
+- Host role
 - User can retry after correcting issue or when backend recovers.
 
 ## 4. Mobile path
@@ -93,17 +93,17 @@ Validate the full business path from public discovery (`/business`) to successfu
 - Success state QR is readable/scannable and link is copyable.
 - Primary next actions remain visible without awkward clipping.
 
-## 5. Manager role behavior checks
+## 5. Host role behavior checks
 
 ### Host only
 
-1. Create session with `Manager role = Host only`.
-2. Confirm success text does not imply manager must join gameplay.
+1. Create session with `Host role = Host only`.
+2. Confirm success text does not imply host must join gameplay.
 3. Confirm host-first CTA points to host dashboard.
 
 ### Host participates
 
-1. Create session with `Manager role = Host participates as a player`.
+1. Create session with `Host role = Host participates as a player`.
 2. Confirm success state includes host-player join CTA.
 
 ## 6. Regression checks

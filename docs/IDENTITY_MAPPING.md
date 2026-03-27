@@ -51,7 +51,7 @@ Define the canonical identity model so Codex changes keep authorization and data
 
 ## Authorization Decision Order
 
-For manager game access (`/manager/[gameCode]`), evaluate in this order:
+For manager game access (canonical `/business/sessions/[gameCode]`, legacy `/manager/[gameCode]`), evaluate in this order:
 
 1. `games/{gameCode}.createdByAccountId === auth.uid`
 2. `games/{gameCode}.managerAccountId === auth.uid`
@@ -59,7 +59,7 @@ For manager game access (`/manager/[gameCode]`), evaluate in this order:
 4. Legacy fallback: `organizations/{orgId}.ownerAccountId === auth.uid`
 5. Deny
 
-For org route access (`/org/[orgId]`), evaluate in this order:
+For org route access (canonical `/business/orgs/[orgId]`, legacy `/org/[orgId]`), evaluate in this order:
 
 1. `orgs/{orgId}.ownerAccountId === auth.uid`
 2. `orgs/{orgId}/managers/{uid}` active membership
@@ -85,3 +85,4 @@ For org route access (`/org/[orgId]`), evaluate in this order:
   - [src/lib/game/company-config.ts](/c:/Users/adamj/Documents/Wurder/wurder-website/src/lib/game/company-config.ts)
 - Members profile canonical path:
   - [docs/MEMBERS_AREA.md](/c:/Users/adamj/Documents/Wurder/wurder-website/docs/MEMBERS_AREA.md)
+

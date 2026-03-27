@@ -1,10 +1,10 @@
 import "server-only";
 
 import {
-  CreateGameAuthInfrastructureError,
-  UnauthenticatedCreateGameError,
+  FirebaseAuthInfrastructureError,
+  FirebaseAuthUnauthenticatedError,
   verifyFirebaseAuthHeader,
-} from "@/lib/game/create-game";
+} from "@/lib/auth/verify-firebase-auth-header";
 
 export class CurrentUserUnauthenticatedError extends Error {
   constructor(message = "Authentication required.") {
@@ -25,11 +25,11 @@ export async function getCurrentUser(authorizationHeader: string | null): Promis
     const uid = await verifyFirebaseAuthHeader(authorizationHeader);
     return { uid };
   } catch (error) {
-    if (error instanceof UnauthenticatedCreateGameError) {
+    if (error instanceof FirebaseAuthUnauthenticatedError) {
       throw new CurrentUserUnauthenticatedError(error.message);
     }
 
-    if (error instanceof CreateGameAuthInfrastructureError) {
+    if (error instanceof FirebaseAuthInfrastructureError) {
       throw new CurrentUserInfrastructureError(error.message);
     }
 

@@ -4,6 +4,7 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 import { resolveCanonicalAccountProfile } from "@/lib/auth/canonical-account-resolver";
 import { adminDb } from "@/lib/firebase/admin";
+import { normalizeSessionGameType, type SessionGameType } from "@/lib/game/session-type";
 
 export type MemberInitialProfile = {
   email: string | null;
@@ -18,6 +19,7 @@ export type MemberInitialProfile = {
 export type MemberInitialSession = {
   id: string;
   title: string;
+  gameType: SessionGameType | null;
   orgId: string | null;
   createdAt: string | null;
   endedAt: string | null;
@@ -29,6 +31,7 @@ type UserGameDoc = {
   gameId?: unknown;
   sessionName?: unknown;
   gameName?: unknown;
+  gameType?: unknown;
   orgId?: unknown;
   joinedAt?: unknown;
   createdAt?: unknown;
@@ -37,10 +40,13 @@ type UserGameDoc = {
 };
 
 type GameDoc = {
+  gameType?: unknown;
   orgId?: unknown;
   createdAt?: unknown;
   endedAt?: unknown;
 };
+
+type GameTypeFilter = SessionGameType | "all";
 
 function asNonEmptyString(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -67,6 +73,23 @@ function toRecencyMs(createdAt: string | null, endedAt: string | null): number {
   const endedMs = endedAt ? Date.parse(endedAt) : 0;
   const createdMs = createdAt ? Date.parse(createdAt) : 0;
   return Math.max(Number.isFinite(endedMs) ? endedMs : 0, Number.isFinite(createdMs) ? createdMs : 0);
+}
+
+async function resolveGameTypesForCodes(gameCodes: string[]): Promise<Map<string, SessionGameType>> {
+  if (gameCodes.length === 0) return new Map();
+
+  const refs = gameCodes.map((gameCode) => adminDb.collection("games").doc(gameCode));
+  const snapshots = await adminDb.getAll(...refs);
+  const resolved = new Map<string, SessionGameType>();
+
+  for (const snapshot of snapshots) {
+    if (!snapshot.exists) continue;
+    const gameType = normalizeSessionGameType((snapshot.data() ?? {}).gameType);
+    if (!gameType) continue;
+    resolved.set(snapshot.id, gameType);
+  }
+
+  return resolved;
 }
 
 export async function readInitialMemberProfile(uid: string): Promise<MemberInitialProfile> {
@@ -120,7 +143,11 @@ export async function readInitialMemberActiveGameCode(uid: string): Promise<stri
   );
 }
 
-export async function readInitialMemberSessions(uid: string, limit = 8): Promise<MemberInitialSession[]> {
+export async function readInitialMemberSessions(
+  uid: string,
+  limit = 8,
+  gameTypeFilter: GameTypeFilter = "b2c"
+): Promise<MemberInitialSession[]> {
   const safeLimit = Math.min(Math.max(1, Math.floor(limit)), 20);
 
   const [userGamesSnap, createdGamesSnap] = await Promise.all([
@@ -139,6 +166,7 @@ export async function readInitialMemberSessions(uid: string, limit = 8): Promise
     const row: MemberInitialSession = {
       id,
       title: asNonEmptyString(data.sessionName) ?? asNonEmptyString(data.gameName) ?? id,
+      gameType: normalizeSessionGameType(data.gameType),
       orgId: asNonEmptyString(data.orgId),
       createdAt,
       endedAt,
@@ -153,6 +181,7 @@ export async function readInitialMemberSessions(uid: string, limit = 8): Promise
     const game = (doc.data() ?? {}) as GameDoc;
     const createdAt = timestampToIso(game.createdAt);
     const endedAt = timestampToIso(game.endedAt);
+    const gameType = normalizeSessionGameType(game.gameType);
     const orgId = asNonEmptyString(game.orgId);
     const recencyMs = toRecencyMs(createdAt, endedAt);
     const existing = sessionMap.get(id);
@@ -160,6 +189,7 @@ export async function readInitialMemberSessions(uid: string, limit = 8): Promise
       sessionMap.set(id, {
         id,
         title: id,
+        gameType,
         orgId,
         createdAt,
         endedAt,
@@ -169,6 +199,7 @@ export async function readInitialMemberSessions(uid: string, limit = 8): Promise
     }
     sessionMap.set(id, {
       ...existing,
+      gameType: existing.gameType ?? gameType,
       orgId: existing.orgId ?? orgId,
       createdAt: existing.createdAt ?? createdAt,
       endedAt: existing.endedAt ?? endedAt,
@@ -176,10 +207,21 @@ export async function readInitialMemberSessions(uid: string, limit = 8): Promise
     });
   }
 
-  return [...sessionMap.values()]
+  const sorted = [...sessionMap.values()]
     .sort((a, b) => {
       if (b.recencyMs !== a.recencyMs) return b.recencyMs - a.recencyMs;
       return b.id.localeCompare(a.id);
-    })
-    .slice(0, safeLimit);
+    });
+
+  const unresolvedCodes = sorted.filter((entry) => !entry.gameType).map((entry) => entry.id);
+  const resolvedTypes = await resolveGameTypesForCodes(unresolvedCodes);
+
+  const withResolvedTypes = sorted.map((entry) => ({
+    ...entry,
+    // Temporary backfill fallback: infer type from orgId when gameType is missing.
+    gameType: entry.gameType ?? resolvedTypes.get(entry.id) ?? (entry.orgId ? "b2b" : "b2c"),
+  }));
+
+  const filtered = gameTypeFilter === "all" ? withResolvedTypes : withResolvedTypes.filter((entry) => entry.gameType === gameTypeFilter);
+  return filtered.slice(0, safeLimit);
 }

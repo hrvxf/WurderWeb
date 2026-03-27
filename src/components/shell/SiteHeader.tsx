@@ -409,7 +409,11 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                 {activeAreaLabel}
               </span>
             ) : null}
-            <Button href="/join" variant="glass">
+            <Button
+              href="/join"
+              variant="glass"
+              className="!rounded-md !border-0 !bg-transparent !px-2.5 !py-1.5 !text-sm !font-medium text-soft hover:!bg-transparent hover:!text-white sm:!text-sm"
+            >
               Join game
             </Button>
 
@@ -421,59 +425,69 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                   aria-expanded={desktopMenuOpen}
                   aria-controls="desktop-account-menu"
                   onClick={() => setDesktopMenuOpen((prev) => !prev)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/30 px-3 py-2 text-sm font-semibold text-white transition hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                  className={`inline-flex items-center gap-2 px-2.5 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black ${
+                    desktopMenuOpen
+                      ? "rounded-t-md border-x border-t border-white/10 bg-[linear-gradient(180deg,#1A1D23_0%,#151820_100%)] text-white"
+                      : "rounded-md text-soft hover:text-white"
+                  }`}
                 >
                   <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-7 w-7" />
                   <span className="max-w-[140px] truncate">{displayName}</span>
+                  <svg
+                    viewBox="0 0 20 20"
+                    width="14"
+                    height="14"
+                    aria-hidden="true"
+                    className={`transition-transform duration-150 ${desktopMenuOpen ? "rotate-180 text-white/90" : "text-white/55"}`}
+                  >
+                    <path d="M5 8l5 5 5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
                 {desktopMenuVisible ? (
                   <div
                     id="desktop-account-menu"
-                    className={`absolute right-0 top-[calc(100%+10px)] z-50 w-[330px] rounded-2xl border border-white/10 bg-[linear-gradient(180deg,#1A1D23_0%,#121316_100%)] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] transition-all duration-200 ${
+                    className={`absolute right-0 top-full z-50 w-[248px] origin-top-right rounded-b-2xl rounded-t-none border border-white/10 border-t-0 bg-[linear-gradient(180deg,#1A1D23_0%,#121316_100%)] p-3 shadow-[0_20px_50px_rgba(0,0,0,0.45)] transition-all duration-150 ease-out ${
                       desktopMenuOpen
                         ? "translate-y-0 scale-100 opacity-100"
                         : "pointer-events-none -translate-y-2 scale-[0.98] opacity-0"
                     }`}
                   >
-                    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
-                      <div className="flex items-center gap-3">
-                        <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-10 w-10 text-sm" />
-                        <div>
-                          <p className="text-sm font-semibold text-white">{displayName}</p>
-                          <p className="text-xs text-white/60">{displayWurderId}</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-3 space-y-1.5">
+                    <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Account</div>
+                    <div className="border-t border-white/10 pt-2">
                       {MEMBER_ACCOUNT_LINKS.map((item) => (
                         <Link
                           key={item.href}
                           href={item.href}
                           aria-current={pathname === item.href ? "page" : undefined}
-                          className={`block rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                          className={`block border-l-2 px-3 py-2 text-sm font-semibold transition focus-visible:outline-none ${
                             pathname === item.href
-                              ? "border-[#D96A5A]/45 bg-[#D96A5A]/15 text-white"
-                              : "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                              ? "border-[#D96A5A]/80 text-white"
+                              : "border-transparent text-white/72 hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white"
                           }`}
                         >
                           {item.label}
                         </Link>
                       ))}
-                      {businessWorkspaceActivated ? (
-                        <Link
-                          href={BUSINESS_ROUTES.dashboard}
-                          className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-                        >
-                          Open Business dashboard
-                        </Link>
-                      ) : null}
                     </div>
+                    {businessWorkspaceActivated ? (
+                      <div className="mt-3">
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Workspace</div>
+                        <div className="border-t border-white/10 pt-2">
+                          <Link
+                            href={BUSINESS_ROUTES.dashboard}
+                            className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
+                          >
+                            Open Business dashboard
+                          </Link>
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="mt-3 border-t border-white/10 pt-3">
                       <button
                         type="button"
                         onClick={() => void handleSignOut()}
                         disabled={signingOut}
-                        className="w-full rounded-lg border border-red-200/30 bg-red-600/20 px-3 py-2 text-left text-sm font-semibold text-red-100 transition hover:bg-red-600/30 disabled:opacity-60"
+                        className="w-full border-l-2 border-transparent px-3 py-2 text-left text-sm font-semibold text-red-200 transition hover:border-red-300/70 hover:text-red-100 focus-visible:border-red-300/70 focus-visible:text-red-100 focus-visible:outline-none disabled:opacity-60"
                       >
                         {signingOut ? "Signing out..." : "Sign Out"}
                       </button>
@@ -532,13 +546,13 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(false)}
-                className="rounded-lg border border-white/20 px-2 py-1 text-xs font-semibold text-white hover:bg-white/10"
+                className="px-2 py-1 text-xs font-semibold text-white/75 transition hover:text-white"
               >
                 Close
               </button>
             </div>
             {effectiveAuthenticated ? (
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+              <div className="mt-4 px-1 py-1">
                 <div className="flex items-center gap-3">
                   <AccountAvatar avatarUrl={avatarUrl} initials={initials} className="h-10 w-10 text-sm" />
                   <div>
@@ -560,7 +574,7 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
               <p className="text-xs uppercase tracking-wide text-white/45">Account</p>
               <Link
                 href="/join"
-                className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
               >
                 Join game
               </Link>
@@ -571,10 +585,10 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                       key={item.href}
                       href={item.href}
                       aria-current={pathname === item.href ? "page" : undefined}
-                      className={`block rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                      className={`block border-l-2 px-3 py-2 text-sm font-semibold transition focus-visible:outline-none ${
                         pathname === item.href
-                          ? "border-[#D96A5A]/45 bg-[#D96A5A]/15 text-white"
-                          : "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                          ? "border-[#D96A5A]/80 text-white"
+                          : "border-transparent text-white/72 hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white"
                       }`}
                     >
                       {item.label}
@@ -583,7 +597,7 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                   {businessWorkspaceActivated ? (
                     <Link
                       href={BUSINESS_ROUTES.dashboard}
-                      className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                      className="mt-2 block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                     >
                       Open Business dashboard
                     </Link>
@@ -599,13 +613,13 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                   <>
                   <Link
                     href={AUTH_ROUTES.login}
-                    className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                    className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                   >
                     Sign In
                   </Link>
                   <Link
                     href={AUTH_ROUTES.signup}
-                    className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                    className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                   >
                     Create Account
                   </Link>
@@ -616,12 +630,12 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
 
             <div className="mt-5 space-y-2">
               <p className="text-xs uppercase tracking-wide text-white/45">Help</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="space-y-1">
                 {HELP_LINKS.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="rounded-full border border-white/15 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/85 hover:bg-white/[0.08] hover:text-white"
+                    className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                   >
                     {item.label}
                   </Link>
@@ -631,15 +645,11 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
 
             {effectiveAuthenticated ? (
               <div className="mt-5 border-t border-white/10 pt-4">
-                <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5">
-                  <p className="text-sm font-semibold text-white">{displayName}</p>
-                  <p className="text-xs text-white/60">{displayWurderId}</p>
-                </div>
                 <button
                   type="button"
                   onClick={() => void handleSignOut()}
                   disabled={signingOut}
-                  className="w-full rounded-lg border border-red-200/30 bg-red-600/20 px-3 py-2.5 text-left text-sm font-semibold text-red-100 transition hover:bg-red-600/30 disabled:opacity-60"
+                  className="w-full border-l-2 border-transparent px-3 py-2 text-left text-sm font-semibold text-red-200 transition hover:border-red-300/70 hover:text-red-100 focus-visible:border-red-300/70 focus-visible:text-red-100 focus-visible:outline-none disabled:opacity-60"
                 >
                   {signingOut ? "Signing out..." : "Sign Out"}
                 </button>

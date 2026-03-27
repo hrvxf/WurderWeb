@@ -11,12 +11,14 @@ import {
 } from "@/lib/game/company-config";
 import { hasFeature } from "@/lib/product/entitlements";
 import {
-  CreateGameAuthInfrastructureError,
   createGameForHostUid,
   GameCodeCollisionError,
-  UnauthenticatedCreateGameError,
-  verifyFirebaseAuthHeader,
 } from "@/lib/game/create-game";
+import {
+  FirebaseAuthInfrastructureError,
+  FirebaseAuthUnauthenticatedError,
+  verifyFirebaseAuthHeader,
+} from "@/lib/auth/verify-firebase-auth-header";
 
 export const runtime = "nodejs";
 
@@ -215,6 +217,7 @@ export async function POST(request: Request) {
 
     const { gameCode } = await createGameForHostUid({
       hostUid,
+      gameType: "b2b",
       orgId,
       templateId,
       analyticsEnabled: true,
@@ -241,11 +244,11 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json(
-      { gameCode, orgId, templateId: templateId ?? null, gameType: "business" as const },
+      { gameCode, orgId, templateId: templateId ?? null, gameType: "b2b" as const },
       { status: 201 }
     );
   } catch (error) {
-    if (error instanceof UnauthenticatedCreateGameError) {
+    if (error instanceof FirebaseAuthUnauthenticatedError) {
       return NextResponse.json(
         {
           code: "UNAUTHENTICATED",
@@ -255,7 +258,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error instanceof CreateGameAuthInfrastructureError) {
+    if (error instanceof FirebaseAuthInfrastructureError) {
       return NextResponse.json(
         {
           code: "AUTH_VERIFICATION_FAILED",

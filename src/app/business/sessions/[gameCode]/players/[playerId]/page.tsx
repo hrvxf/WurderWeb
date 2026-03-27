@@ -1,4 +1,4 @@
-import PlayerDrilldownPage from "@/components/admin/dashboard/PlayerDrilldownPage";
+import BusinessSessionPlayerDrilldownPage from "@/components/business/dashboard/BusinessSessionPlayerDrilldownPage";
 
 type BusinessSessionPlayerRouteProps = {
   params: Promise<{
@@ -11,5 +11,5 @@ export default async function BusinessSessionPlayerRoute({
   params,
 }: BusinessSessionPlayerRouteProps) {
   const { gameCode, playerId } = await params;
-  return <PlayerDrilldownPage gameCode={gameCode} playerId={playerId} />;
+  return <BusinessSessionPlayerDrilldownPage gameCode={gameCode} playerId={playerId} />;
 }

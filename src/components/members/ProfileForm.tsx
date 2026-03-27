@@ -19,12 +19,19 @@ type ProfileFormInitialProfile = {
 };
 
 type ProfileStep = 1 | 2;
+type HandleAvailabilityState =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "available" }
+  | { status: "taken" }
+  | { status: "error"; message: string };
 
 type ProfileFormProps = {
   initialProfile?: ProfileFormInitialProfile;
 };
 
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+const ALLOWED_AVATAR_MIME_TYPES = new Set(["image/png", "image/jpeg"]);
 
 function readDisplayName(name?: string, firstName?: string, lastName?: string): string {
   if (name?.trim()) return name.trim();
@@ -48,6 +55,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const [success, setSuccess] = useState("");
   const [avatarPreviewFailed, setAvatarPreviewFailed] = useState(false);
   const [acknowledgeHandleLock, setAcknowledgeHandleLock] = useState(false);
+  const [handleAvailability, setHandleAvailability] = useState<HandleAvailabilityState>({ status: "idle" });
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasLockedWurderId = Boolean(activeProfile?.wurderId?.trim());
@@ -67,8 +75,17 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const hasIdentityInput = Boolean(candidateName || (candidateFirstName && candidateLastName));
   const hasWurderIdInput = Boolean(hasLockedWurderId || candidateWurderId);
   const wurderIdLooksValid = !candidateWurderId || isValidWurderId(candidateWurderId);
+  const wurderIdTaken = !hasLockedWurderId && handleAvailability.status === "taken";
   const requiresHandleConfirmation = !hasLockedWurderId && Boolean(candidateWurderId);
-  const canContinueIdentity = hasIdentityInput && hasWurderIdInput && wurderIdLooksValid;
+  const handleConfirmationReady = !requiresHandleConfirmation || acknowledgeHandleLock;
+  const handleAvailabilityReady =
+    hasLockedWurderId ||
+    !candidateWurderId ||
+    !wurderIdLooksValid ||
+    handleAvailability.status === "available" ||
+    handleAvailability.status === "idle";
+  const canContinueIdentity = hasIdentityInput && hasWurderIdInput && wurderIdLooksValid && !wurderIdTaken;
+  const canSaveProfile = canContinueIdentity && handleConfirmationReady && handleAvailabilityReady && !uploadingAvatar;
 
   useEffect(() => {
     setStep(1);
@@ -79,6 +96,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
     setAvatarUrl(activeProfile?.avatarUrl ?? activeProfile?.avatar ?? "");
     setAvatarPreviewFailed(false);
     setAcknowledgeHandleLock(false);
+    setHandleAvailability({ status: "idle" });
   }, [activeProfile]);
 
   useEffect(() => {
@@ -90,6 +108,58 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       setAcknowledgeHandleLock(false);
     }
   }, [hasLockedWurderId]);
+
+  useEffect(() => {
+    if (hasLockedWurderId || !candidateWurderId || !wurderIdLooksValid) {
+      setHandleAvailability({ status: "idle" });
+      return;
+    }
+    if (!user) {
+      setHandleAvailability({ status: "error", message: "Sign in to check Wurder ID availability." });
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setHandleAvailability({ status: "checking" });
+        try {
+          const token = await user.getIdToken();
+          const response = await fetch(
+            `/api/members/wurder-id/availability?wurderId=${encodeURIComponent(candidateWurderId)}`,
+            {
+              headers: { authorization: `Bearer ${token}` },
+              signal: controller.signal,
+            }
+          );
+          const payload = (await response.json().catch(() => ({}))) as {
+            available?: unknown;
+            message?: string;
+          };
+          if (cancelled) return;
+          if (!response.ok) {
+            setHandleAvailability({
+              status: "error",
+              message: payload.message ?? "Unable to check Wurder ID right now.",
+            });
+            return;
+          }
+          setHandleAvailability(payload.available === true ? { status: "available" } : { status: "taken" });
+        } catch (availabilityError) {
+          if (cancelled) return;
+          if (availabilityError instanceof Error && availabilityError.name === "AbortError") return;
+          setHandleAvailability({ status: "error", message: "Unable to check Wurder ID right now." });
+        }
+      })();
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [candidateWurderId, hasLockedWurderId, user, wurderIdLooksValid]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -119,6 +189,12 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
 
     if (!hasLockedWurderId && candidateWurderId && !isValidWurderId(candidateWurderId)) {
       setError("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
+      setStep(1);
+      return;
+    }
+
+    if (!hasLockedWurderId && handleAvailability.status === "taken") {
+      setError("That Wurder ID is already taken.");
       setStep(1);
       return;
     }
@@ -165,8 +241,8 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      setError("Please choose an image file.");
+    if (!ALLOWED_AVATAR_MIME_TYPES.has(file.type)) {
+      setError("Avatar must be a PNG or JPG file.");
       return;
     }
 
@@ -207,6 +283,8 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
         setError("Add a full name or first and last name.");
       } else if (!hasWurderIdInput) {
         setError("Wurder ID is required.");
+      } else if (wurderIdTaken) {
+        setError("That Wurder ID is already taken.");
       } else {
         setError("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
       }
@@ -223,7 +301,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
         Keep your public identity consistent across members, join flow, and hosted sessions.
       </p>
 
-      <div className="mt-4 rounded-xl border border-white/12 bg-black/20 p-3">
+      <div className="surface-panel-muted mt-4 p-3">
         <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] text-muted">
           <span>Step {step} of 2</span>
           <span>{step === 1 ? "Identity" : "Avatar + review"}</span>
@@ -265,7 +343,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       ) : null}
 
       <form className="mt-5 lg:grid lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-7" onSubmit={handleSave}>
-        <aside className="border border-white/12 bg-black/20 p-4 lg:sticky lg:top-20 lg:h-fit">
+        <aside className="surface-panel-muted p-4 lg:sticky lg:top-20 lg:h-fit">
           <p className="text-xs uppercase tracking-[0.18em] text-muted">Current profile</p>
           <div className="mt-3 flex items-center gap-3">
             {avatarUrl.trim() && !avatarPreviewFailed ? (
@@ -365,8 +443,31 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
                         Use 3-20 characters, letters, numbers, or underscores only.
                       </span>
                     ) : null}
+                    {!hasLockedWurderId && candidateWurderId && wurderIdLooksValid ? (
+                      <span
+                        className={`mt-2 block text-xs ${
+                          handleAvailability.status === "available"
+                            ? "text-emerald-300"
+                            : handleAvailability.status === "taken"
+                              ? "text-red-300"
+                              : handleAvailability.status === "error"
+                                ? "text-amber-200"
+                                : "text-muted"
+                        }`}
+                      >
+                        {handleAvailability.status === "checking"
+                          ? "Checking Wurder ID availability..."
+                          : handleAvailability.status === "available"
+                            ? "Wurder ID is available."
+                            : handleAvailability.status === "taken"
+                              ? "That Wurder ID is already taken."
+                              : handleAvailability.status === "error"
+                                ? handleAvailability.message
+                                : "Wurder ID availability will be checked before save."}
+                      </span>
+                    ) : null}
                   </label>
-                  <div className="border border-white/12 bg-black/20 p-3">
+                  <div className="surface-panel-muted p-3">
                     <p className="text-xs uppercase tracking-[0.16em] text-muted">Step guidance</p>
                     <p className="mt-2 text-sm text-soft">
                       Set identity and handle in this step, then continue to upload avatar and save.
@@ -390,13 +491,13 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
             <section className="border-y border-white/10 py-3">
               <p className="text-xs uppercase tracking-[0.18em] text-muted">Avatar and review</p>
               <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-                <div className="border border-white/12 bg-black/20 p-3">
+                <div className="surface-panel-muted p-3">
                   <p className="text-xs uppercase tracking-[0.16em] text-muted">Avatar image</p>
                   <div className="mt-2 flex items-center gap-3">
                     <input
                       ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg"
                       onChange={(event) => void handleAvatarFileChange(event)}
                       className="hidden"
                     />
@@ -404,23 +505,37 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
                       type="button"
                       disabled={uploadingAvatar}
                       onClick={() => fileInputRef.current?.click()}
-                      className="inline-flex min-h-9 items-center justify-center rounded-lg border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30 disabled:opacity-60"
+                      className="control-secondary min-h-9 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
                     >
                       {uploadingAvatar ? "Uploading..." : "Upload avatar"}
                     </button>
                     <span className="text-xs text-muted">PNG/JPG up to 5MB</span>
                   </div>
                 </div>
-                <div className="border border-white/12 bg-black/20 p-3 text-sm text-soft">
+                <div className="surface-panel-muted p-3 text-sm text-soft">
                   <p className="text-xs uppercase tracking-[0.16em] text-muted">Save checklist</p>
                   <ul className="mt-2 space-y-1.5">
                     <li>{hasIdentityInput ? "Identity: ready" : "Identity: add name details"}</li>
                     <li>{hasWurderIdInput ? "Wurder ID: ready" : "Wurder ID: required"}</li>
                     <li>
+                      {hasLockedWurderId || !candidateWurderId
+                        ? "Wurder ID availability: ready"
+                        : handleAvailability.status === "checking"
+                          ? "Wurder ID availability: checking"
+                          : handleAvailability.status === "available"
+                            ? "Wurder ID availability: ready"
+                            : handleAvailability.status === "taken"
+                              ? "Wurder ID availability: resolve"
+                              : handleAvailability.status === "error"
+                                ? "Wurder ID availability: retry"
+                                : "Wurder ID availability: ready"}
+                    </li>
+                    <li>
                       {requiresHandleConfirmation && !acknowledgeHandleLock
                         ? "Handle lock confirmation: required"
                         : "Handle lock confirmation: ready"}
                     </li>
+                    <li>{uploadingAvatar ? "Avatar upload: in progress" : "Avatar upload: ready"}</li>
                   </ul>
                 </div>
               </div>
@@ -435,7 +550,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
                   <button
                     type="button"
                     onClick={() => setStep(1)}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                    className="control-secondary min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
                   >
                     Back
                   </button>
@@ -445,14 +560,15 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
                   <button
                     type="button"
                     onClick={continueToStepTwo}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                    disabled={!canContinueIdentity}
+                    className="control-secondary min-h-10 rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
                   >
-                    Continue
+                    Continue to avatar
                   </button>
                 ) : (
                   <button
                     type="submit"
-                    disabled={saving}
+                    disabled={saving || !canSaveProfile}
                     className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-5 py-2.5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D] disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {saving ? "Saving..." : "Save profile"}
@@ -466,3 +582,4 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
     </div>
   );
 }
+

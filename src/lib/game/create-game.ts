@@ -1,12 +1,13 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { adminAuth, adminDb } from "@/lib/firebase/admin";
+import { adminDb } from "@/lib/firebase/admin";
 import {
   buildInitialGameDoc,
   generateGameCode,
   resolveDefaultClassicWordGroupId,
 } from "@/domain/game/create-game";
+import type { SessionGameType } from "@/lib/game/session-type";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
@@ -25,6 +26,7 @@ export type ManagerConfig = {
 
 type CreateGameForHostUidInput = {
   hostUid: string;
+  gameType?: SessionGameType;
   orgId?: string;
   templateId?: string;
   analyticsEnabled?: boolean;
@@ -51,53 +53,10 @@ export class GameCodeCollisionError extends Error {
   }
 }
 
-export class CreateGameAuthInfrastructureError extends Error {
-  constructor(message = "Unable to verify Firebase auth token on server.") {
-    super(message);
-    this.name = "CreateGameAuthInfrastructureError";
-  }
-}
-
-function extractBearerToken(value: string | null): string | null {
-  if (!value) return null;
-  const [scheme, token] = value.split(" ");
-  if (!scheme || !token) return null;
-  if (scheme.toLowerCase() !== "bearer") return null;
-  return token.trim() || null;
-}
-
-export async function verifyFirebaseAuthHeader(authorization: string | null): Promise<string> {
-  const token = extractBearerToken(authorization);
-  if (!token) {
-    throw new UnauthenticatedCreateGameError("Missing Firebase bearer token.");
-  }
-
-  try {
-    const decodedToken = await adminAuth.verifyIdToken(token);
-    return decodedToken.uid;
-  } catch (error) {
-    const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : "";
-    if (code.includes("auth/invalid") || code.includes("auth/id-token") || code.includes("auth/argument-error")) {
-      throw new UnauthenticatedCreateGameError(
-        error instanceof Error ? error.message : "Invalid Firebase authentication token."
-      );
-    }
-
-    if (code.includes("auth/internal-error")) {
-      throw new CreateGameAuthInfrastructureError(
-        error instanceof Error ? error.message : "Firebase auth verification failed on server."
-      );
-    }
-
-    throw new UnauthenticatedCreateGameError(
-      error instanceof Error ? error.message : "Authentication token verification failed."
-    );
-  }
-}
-
 export async function createGameForHostUid(input: string | CreateGameForHostUidInput): Promise<{ gameCode: string }> {
   const payload: CreateGameForHostUidInput = typeof input === "string" ? { hostUid: input } : input;
   const { hostUid } = payload;
+  const gameType: SessionGameType = payload.gameType === "b2b" ? "b2b" : "b2c";
 
   if (!hostUid) {
     throw new UnauthenticatedCreateGameError("Missing authenticated host uid.");
@@ -121,6 +80,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
         const baseDoc = buildInitialGameDoc({
           gameCode,
+          gameType,
           hostPlayerId,
           createdByAccountId: hostUid,
           createdAt: FieldValue.serverTimestamp(),

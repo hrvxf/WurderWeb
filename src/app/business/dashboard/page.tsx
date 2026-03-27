@@ -14,7 +14,7 @@ export default function BusinessDashboardPage() {
   return (
     <AuthGate>
       <section className="mx-auto w-full max-w-[54rem] space-y-5 py-4">
-        <div className="surface-card p-5 sm:p-6">
+        <div className="surface-panel p-5 sm:p-6">
           <p className="text-xs uppercase tracking-[0.18em] text-white/65">Business</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Business dashboard</h1>
           <p className="mt-2 text-sm text-white/75">
@@ -27,7 +27,7 @@ export default function BusinessDashboardPage() {
             </Link>
             <Link
               href={BUSINESS_ROUTES.home}
-              className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+              className="control-secondary"
             >
               Open Business overview
             </Link>
@@ -35,14 +35,14 @@ export default function BusinessDashboardPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <article className="surface-card p-5">
+          <article className="surface-panel p-5">
             <p className="text-xs uppercase tracking-[0.16em] text-white/65">Reporting</p>
             <h2 className="mt-2 text-lg font-semibold text-white">Session analytics</h2>
             <p className="mt-2 text-sm text-white/75">
               Open a session to review compare views, player details, and export outputs.
             </p>
           </article>
-          <article className="surface-card p-5">
+          <article className="surface-panel p-5">
             <p className="text-xs uppercase tracking-[0.16em] text-white/65">Organisation</p>
             <h2 className="mt-2 text-lg font-semibold text-white">Workspace controls</h2>
             <p className="mt-2 text-sm text-white/75">

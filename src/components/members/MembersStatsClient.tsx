@@ -4,12 +4,13 @@ import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import AchievementsCard from "@/components/achievements/AchievementsCard";
 import StatsPanel from "@/components/members/StatsPanel";
-import type { MemberStatsSummary } from "@/lib/auth/member-stats";
+import { DEFAULT_MEMBER_STATS, type MemberStatsSummary } from "@/lib/auth/member-stats";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 type Timeframe = "7d" | "30d" | "90d" | "all";
 type ModeFilter = "all" | "classic" | "ring" | "guild" | "team";
 type MetricKey = "games" | "winRate" | "kd" | "points";
+type GameTypeFilter = "b2c" | "b2b" | "all";
 
 type TrendPoint = {
   gameCode: string;
@@ -25,6 +26,7 @@ type TrendPoint = {
 type TrendsResponse = {
   timeframe: Timeframe;
   mode: string;
+  gameType: GameTypeFilter;
   totals: MemberStatsSummary;
   trend: TrendPoint[];
 };
@@ -64,19 +66,28 @@ function formatKpi(value: number | null, digits = 2): string {
   return digits === 0 ? value.toLocaleString() : value.toFixed(digits);
 }
 
-function buildMetricSeries(metric: MetricKey, trend: TrendPoint[]): number[] {
+function resolveGamesWindowDays(timeframe: Timeframe): number {
+  if (timeframe === "7d") return 1;
+  if (timeframe === "30d") return 7;
+  if (timeframe === "90d") return 14;
+  return 30;
+}
+
+function buildMetricSeries(metric: MetricKey, trend: TrendPoint[], timeframe: Timeframe): number[] {
   const capped = trend.slice(-30);
   if (capped.length === 0) return [];
 
   if (metric === "games") {
+    const windowDays = resolveGamesWindowDays(timeframe);
+    const windowMs = windowDays * 24 * 60 * 60 * 1000;
     return capped.map((point, index) => {
       const currentMs = point.occurredAt ? Date.parse(point.occurredAt) : Number.NaN;
       if (!Number.isFinite(currentMs)) {
-        const windowStart = Math.max(0, index - 6);
+        const fallbackWindow = timeframe === "7d" ? 1 : timeframe === "30d" ? 7 : timeframe === "90d" ? 10 : 14;
+        const windowStart = Math.max(0, index - (fallbackWindow - 1));
         return index - windowStart + 1;
       }
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      const windowStartMs = currentMs - sevenDaysMs;
+      const windowStartMs = currentMs - windowMs;
       return capped.slice(0, index + 1).filter((candidate) => {
         const candidateMs = candidate.occurredAt ? Date.parse(candidate.occurredAt) : Number.NaN;
         if (!Number.isFinite(candidateMs)) return false;
@@ -199,15 +210,17 @@ function periodDelta(metric: MetricKey, trend: TrendPoint[]): {
 function TrendChart({
   metric,
   trend,
+  timeframe,
   showOverlays,
 }: {
   metric: MetricKey;
   trend: TrendPoint[];
+  timeframe: Timeframe;
   showOverlays: boolean;
 }) {
-  const points = useMemo(() => buildMetricSeries(metric, trend), [metric, trend]);
-  const overlayWinRate = useMemo(() => buildMetricSeries("winRate", trend), [trend]);
-  const overlayKd = useMemo(() => buildMetricSeries("kd", trend), [trend]);
+  const points = useMemo(() => buildMetricSeries(metric, trend, timeframe), [metric, timeframe, trend]);
+  const overlayWinRate = useMemo(() => buildMetricSeries("winRate", trend, timeframe), [timeframe, trend]);
+  const overlayKd = useMemo(() => buildMetricSeries("kd", trend, timeframe), [timeframe, trend]);
   const [animateKey, setAnimateKey] = useState(0);
   const labels = useMemo(
     () =>
@@ -239,10 +252,12 @@ function TrendChart({
   }, [points.length]);
 
   const chartLabel = metric === "games" ? "Games" : metric === "winRate" ? "Win Rate" : metric === "kd" ? "K/D" : "Points";
+  const gamesBasisLabel = `Games uses a rolling ${resolveGamesWindowDays(timeframe)}-day session window.`;
   if (points.length < 2) {
     return (
-      <section className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+      <section className="surface-panel p-4">
         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">{chartLabel} Trend Chart</h3>
+        {metric === "games" ? <p className="mt-1 text-xs text-white/55">{gamesBasisLabel}</p> : null}
         <p className="mt-2 text-sm text-white/60">Not enough session history to render a chart yet.</p>
       </section>
     );
@@ -306,7 +321,7 @@ function TrendChart({
   }
 
   return (
-    <section className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+    <section className="surface-panel p-4">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">{chartLabel} Trend Chart</h3>
         {delta.delta != null ? (
@@ -323,6 +338,7 @@ function TrendChart({
           </span>
         ) : null}
       </div>
+      {metric === "games" ? <p className="mt-1 text-xs text-white/55">{gamesBasisLabel}</p> : null}
       <p className="mt-1 text-xs text-white/55">Hover, tap, or focus points for session details. Series is based on your selected KPI.</p>
       <div
         className="mt-3 overflow-auto rounded-lg focus-within:ring-2 focus-within:ring-[#D96A5A]/60"
@@ -439,7 +455,7 @@ function TrendChart({
         </div>
       ) : null}
       {activePoint && activeMeta ? (
-        <div className="mt-3 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/80" aria-live="polite">
+        <div className="surface-panel-muted mt-3 px-3 py-2 text-xs text-white/80" aria-live="polite">
           <span className="font-semibold text-white">{activeMeta.gameCode}</span>
           <span className="mx-2 text-white/45">|</span>
           <span>{activeMeta.mode ?? "unknown mode"}</span>
@@ -478,7 +494,7 @@ function KpiCard({
       : tone === "watch"
         ? "border-amber-300/35 bg-amber-400/8"
         : "border-rose-300/35 bg-rose-400/8";
-  const points = useMemo(() => buildMetricSeries(metric, trend), [metric, trend]);
+  const points = useMemo(() => buildMetricSeries(metric, trend, timeframe), [metric, timeframe, trend]);
 
   return (
     <button
@@ -488,7 +504,11 @@ function KpiCard({
     >
       <p className="text-[11px] uppercase tracking-[0.14em] text-white/65">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
-      <p className="text-[11px] text-white/45">Trend ({timeframe.toUpperCase()})</p>
+      <p className="text-[11px] text-white/45">
+        {metric === "games"
+          ? `Rolling sessions (${resolveGamesWindowDays(timeframe)}d)`
+          : `Trend (${timeframe.toUpperCase()})`}
+      </p>
       {points.length >= 2 ? <Sparkline points={points} /> : <p className="mt-2 text-[11px] text-white/45">Not enough data yet</p>}
     </button>
   );
@@ -530,7 +550,7 @@ function MetricDrilldown({ metric, trend }: { metric: MetricKey; trend: TrendPoi
   const label = metric === "games" ? "Games" : metric === "winRate" ? "Win Rate" : metric === "kd" ? "K/D" : "Points";
   const recent = [...trend].slice(-20).reverse();
   return (
-    <section className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+    <section className="surface-panel p-4">
       <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">{label} Drill-down</h3>
       <p className="mt-1 text-xs text-white/55">Latest sessions contributing to the selected KPI.</p>
       <div className="mt-3 space-y-2">
@@ -540,7 +560,7 @@ function MetricDrilldown({ metric, trend }: { metric: MetricKey; trend: TrendPoi
           recent.map((point) => {
             const value = metricValue(point, metric);
             return (
-              <div key={`${point.gameCode}-${point.occurredAt ?? "na"}`} className="grid grid-cols-[1fr_auto] gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+              <div key={`${point.gameCode}-${point.occurredAt ?? "na"}`} className="surface-panel-muted grid grid-cols-[1fr_auto] gap-3 px-3 py-2">
                 <div>
                   <p className="text-sm font-semibold text-white">{point.gameCode}</p>
                   <p className="text-xs text-white/55">
@@ -563,19 +583,6 @@ type MembersStatsClientProps = {
   initialData?: MemberStatsPageInitialData;
 };
 
-function hasAnyStats(stats: MemberStatsSummary): boolean {
-  return (
-    stats.gamesPlayed > 0 ||
-    stats.wins > 0 ||
-    stats.kills > 0 ||
-    stats.deaths > 0 ||
-    stats.bestStreak > 0 ||
-    stats.points > 0 ||
-    stats.lifetimePoints > 0 ||
-    stats.mvpAwards > 0
-  );
-}
-
 function normalizeAchievementIds(values: unknown[]): string[] {
   return [
     ...new Set(
@@ -587,11 +594,37 @@ function normalizeAchievementIds(values: unknown[]): string[] {
   ];
 }
 
+function asFiniteNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+function normalizeStatsSummary(value: unknown): MemberStatsSummary | null {
+  if (!value || typeof value !== "object") return null;
+  const stats = value as Record<string, unknown>;
+  return {
+    gamesPlayed: asFiniteNumber(stats.gamesPlayed),
+    wins: asFiniteNumber(stats.wins),
+    kills: asFiniteNumber(stats.kills),
+    deaths: asFiniteNumber(stats.deaths),
+    bestStreak: asFiniteNumber(stats.bestStreak),
+    points: asFiniteNumber(stats.points),
+    lifetimePoints: asFiniteNumber(stats.lifetimePoints),
+    mvpAwards: asFiniteNumber(stats.mvpAwards),
+  };
+}
+
 export default function MembersStatsClient({ initialData }: MembersStatsClientProps) {
-  const { stats, user, profile } = useAuth();
+  const { user, profile } = useAuth();
+  const defaultGameType: GameTypeFilter = "b2c";
   const [timeframe, setTimeframe] = useState<Timeframe>("30d");
   const [mode, setMode] = useState<ModeFilter>("all");
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("games");
+  const [filteredTotals, setFilteredTotals] = useState<MemberStatsSummary | null>(null);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [loadingTrends, setLoadingTrends] = useState(false);
   const [trendError, setTrendError] = useState<string | null>(null);
@@ -606,7 +639,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
       try {
         const token = await user.getIdToken();
         const response = await fetch(
-          `/api/members/stats/trends?timeframe=${encodeURIComponent(timeframe)}&mode=${encodeURIComponent(mode)}`,
+          `/api/members/stats/trends?timeframe=${encodeURIComponent(timeframe)}&mode=${encodeURIComponent(mode)}&gameType=${defaultGameType}`,
           {
             headers: {
               authorization: `Bearer ${token}`,
@@ -619,6 +652,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
           setTrendError(payload.message ?? "Unable to load trends.");
           return;
         }
+        setFilteredTotals(normalizeStatsSummary(payload.totals));
         setTrend(Array.isArray(payload.trend) ? (payload.trend as TrendPoint[]) : []);
       } catch {
         if (cancelled) return;
@@ -632,9 +666,9 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
     return () => {
       cancelled = true;
     };
-  }, [mode, timeframe, user]);
+  }, [defaultGameType, mode, timeframe, user]);
 
-  const activeStats = hasAnyStats(stats) ? stats : initialData?.stats ?? stats;
+  const activeStats = filteredTotals ?? DEFAULT_MEMBER_STATS;
   const kpis = useMemo(() => resolveKpiModel(activeStats), [activeStats]);
   const achievementIds = useMemo(() => {
     const fromProfile = Array.isArray(profile?.achievementIds) ? profile.achievementIds : [];
@@ -657,7 +691,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-white/15 bg-black/25 p-1">
+          <div className="surface-panel-muted inline-flex p-1">
             {TIMEFRAME_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -672,7 +706,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
             ))}
           </div>
           <select
-            className="rounded-xl border border-white/20 bg-black/25 px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white"
+            className="input-dark py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white"
             value={mode}
             onChange={(event) => setMode(event.target.value as ModeFilter)}
           >
@@ -682,7 +716,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
               </option>
             ))}
           </select>
-          <label className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-black/25 px-3 py-2 text-xs text-white/80">
+          <label className="surface-panel-muted inline-flex items-center gap-2 px-3 py-2 text-xs text-white/80">
             <input type="checkbox" checked={showOverlays} onChange={(event) => setShowOverlays(event.target.checked)} />
             Show overlays
           </label>
@@ -736,7 +770,7 @@ export default function MembersStatsClient({ initialData }: MembersStatsClientPr
       </div>
 
       <MetricDrilldown metric={selectedMetric} trend={trend} />
-      <TrendChart metric={selectedMetric} trend={trend} showOverlays={showOverlays} />
+      <TrendChart metric={selectedMetric} trend={trend} timeframe={timeframe} showOverlays={showOverlays} />
       <AchievementsCard achievementIds={achievementIds} stats={activeStats} />
 
       <StatsPanel stats={activeStats} timeframe={timeframe} />

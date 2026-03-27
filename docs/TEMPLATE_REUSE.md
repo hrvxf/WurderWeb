@@ -1,5 +1,11 @@
 # Company Template Reuse (Phase 8.3)
 
+Canonical product context:
+
+- Templates are a Business workspace capability used from `/business/sessions/new`.
+- Canonical template API is `/api/business/templates`.
+- Legacy `/api/admin/company-templates` remains as a compatibility wrapper with telemetry during transition.
+
 ## Template Data Model
 
 Templates are stored in:
@@ -26,11 +32,19 @@ Template fields:
 
 ## API Flow
 
-- `GET /api/admin/company-templates?orgName=...`
+- `GET /api/business/templates?orgName=...`
+  - canonical Business template retrieval endpoint
   - resolves org by owner + org name
   - returns saved templates for org
-- `POST /api/admin/company-templates`
+- `POST /api/business/templates`
+  - canonical Business template create endpoint
   - saves a new template for org
+
+Legacy compatibility:
+
+- `GET /api/admin/company-templates?orgName=...` -> compatibility wrapper to `/api/business/templates`
+- `POST /api/admin/company-templates` -> compatibility wrapper to `/api/business/templates`
+- wrappers emit `x-legacy-surface: admin-company-templates` and server telemetry logs
 
 ## Game Creation Reuse
 

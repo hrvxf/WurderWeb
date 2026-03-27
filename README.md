@@ -56,14 +56,23 @@ Routes:
 See [docs/MEMBERS_AREA.md](docs/MEMBERS_AREA.md) for setup details, auth behavior, and caveats.
 See [docs/achievements-web.md](docs/achievements-web.md) for shared badge catalog/image wiring.
 
-## B2B Manager Documentation
+## B2C/B2B Architecture and Business Docs
+
+Canonical architecture:
+
+- [docs/B2B_WEB_APP_ARCHITECTURE.md](docs/B2B_WEB_APP_ARCHITECTURE.md)
+
+Legacy addendum (historical backlog context only):
+
+- [docs/WURDER_BUSINESS_FLOW_APP_BACKEND_ARCHITECTURE_NOTES.md](docs/WURDER_BUSINESS_FLOW_APP_BACKEND_ARCHITECTURE_NOTES.md)
+
+Supporting docs:
 
 - [docs/MANAGER_ACCESS_CONTROL.md](docs/MANAGER_ACCESS_CONTROL.md)
 - [docs/ORG_DATA_MODEL.md](docs/ORG_DATA_MODEL.md)
 - [docs/TEMPLATE_REUSE.md](docs/TEMPLATE_REUSE.md)
 - [docs/PRODUCT_TIERS.md](docs/PRODUCT_TIERS.md)
 - [docs/REPORTING_EXPORTS.md](docs/REPORTING_EXPORTS.md)
-- [docs/B2B_WEB_APP_ARCHITECTURE.md](docs/B2B_WEB_APP_ARCHITECTURE.md)
 
 ## Scripts
 

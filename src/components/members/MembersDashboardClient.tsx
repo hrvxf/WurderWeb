@@ -6,7 +6,9 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 import { getProfileCompletionStatus } from "@/lib/auth/profile-completion";
-import { BUSINESS_ROUTES } from "@/lib/business/routes";
+
+const BUSINESS_HOME_ROUTE = "/business";
+const BUSINESS_CREATE_SESSION_ROUTE = "/business/sessions/new";
 
 function readActiveGameCode(activeGame: unknown): string | null {
   if (typeof activeGame === "string" && activeGame.trim()) {
@@ -82,20 +84,20 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
           </Link>
           <Link
             href={AUTH_ROUTES.membersProfile}
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+            className="control-secondary"
           >
             Edit profile
           </Link>
           <Link
             href="/join"
-            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+            className="control-secondary"
           >
             Start session
           </Link>
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
-          <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+          <article className="surface-panel p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Session status</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Current session</h3>
             {hasActiveGame ? (
@@ -115,14 +117,14 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
               </Link>
               <Link
                 href="/join"
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                className="control-secondary"
               >
                 Enter code
               </Link>
             </div>
           </article>
 
-          <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+          <article className="surface-panel p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Profile completion</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Identity status</h3>
             {completion.complete ? (
@@ -138,26 +140,26 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
             <div className="mt-3">
               <Link
                 href={AUTH_ROUTES.membersProfile}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                className="control-secondary"
               >
                 Edit profile
               </Link>
             </div>
           </article>
 
-          <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+          <article className="surface-panel p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Performance snapshot</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Recent totals</h3>
             <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
-              <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
+              <p className="surface-panel-muted px-3 py-2 text-soft">
                 Games
                 <span className="mt-1 block text-lg font-semibold text-white">{stats.gamesPlayed}</span>
               </p>
-              <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
+              <p className="surface-panel-muted px-3 py-2 text-soft">
                 Win rate
                 <span className="mt-1 block text-lg font-semibold text-white">{winRate}%</span>
               </p>
-              <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
+              <p className="surface-panel-muted px-3 py-2 text-soft">
                 Points
                 <span className="mt-1 block text-lg font-semibold text-white">{lifetimePoints}</span>
               </p>
@@ -165,14 +167,14 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
             <div className="mt-3">
               <Link
                 href={AUTH_ROUTES.membersStats}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                className="control-secondary"
               >
                 Open stats
               </Link>
             </div>
           </article>
 
-          <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
+          <article className="surface-panel p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Host shortcuts</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Session tools</h3>
             <p className="mt-2 text-sm text-soft">
@@ -181,21 +183,21 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={AUTH_ROUTES.membersHost}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                className="control-secondary"
               >
                 Open host tools
               </Link>
               {businessWorkspaceActivated ? (
                 <Link
-                  href={BUSINESS_ROUTES.createSession}
-                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                  href={BUSINESS_CREATE_SESSION_ROUTE}
+                  className="control-secondary"
                 >
                   Start business session
                 </Link>
               ) : (
                 <Link
-                  href={BUSINESS_ROUTES.home}
-                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                  href={BUSINESS_HOME_ROUTE}
+                  className="control-secondary"
                 >
                   Explore Business
                 </Link>
