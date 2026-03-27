@@ -2,7 +2,7 @@
 
 ## 1. Executive summary
 
-Wurder Web is being redesigned for B2B/business users. The public site now includes a Business entry point that routes business users into a redesigned `/admin/create-company-game` flow. That flow is simpler, guided, and mode-led.
+Wurder Web is being redesigned for B2B/business users. The public site now includes a Business entry point that routes business users into a redesigned `/business/sessions/new` flow. That flow is simpler, guided, and mode-led.
 
 This redesign is not only a web UX update. It defines a stronger cross-layer product contract that app and backend must support:
 
@@ -27,10 +27,10 @@ Status: Confirmed (with server-enforced members auth on web)
 
 - Public Business page exists on main website.
 - Business is present in top-level navigation.
-- Primary CTA routes to `/admin/create-company-game`.
+- Primary CTA routes to `/business/sessions/new`.
 - Logged-out users are redirected to sign-in and deep-linked back correctly.
 
-### Create-company-game flow
+### Business session creation flow
 
 Status: Confirmed
 
@@ -430,7 +430,7 @@ Status: Web summary (cross-layer context)
 
 - Maintain Business page and navigation entry.
 - Maintain server-enforced members access checks via session cookie (`__session`) and `/api/auth/session` sync.
-- Maintain guided create-company-game flow.
+- Maintain guided Business session creation flow (`/business/sessions/new`).
 - Add org selector + recent session labels (confirmed direction, follow-up work).
 - Maintain mode info panel.
 - Maintain manager role selector.

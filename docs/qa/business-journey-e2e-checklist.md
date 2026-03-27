@@ -2,7 +2,7 @@
 
 ## Scope
 
-Validate the full business path from public discovery (`/business`) to successful session launch (`/admin/create-company-game`), including auth return behavior, error handling, and mobile usability.
+Validate the full business path from public discovery (`/business`) to successful session launch (`/business/sessions/new`), including auth return behavior, error handling, and mobile usability.
 
 ## Environment
 
@@ -17,16 +17,16 @@ Validate the full business path from public discovery (`/business`) to successfu
 
 1. Open `/business` while logged out.
 2. Click `Start session` CTA.
-3. Confirm redirect to `/login?next=%2Fadmin%2Fcreate-company-game`.
+3. Confirm redirect to `/login?next=%2Fbusiness%2Fsessions%2Fnew`.
 4. Sign in with email/password.
-5. Confirm redirect returns to `/admin/create-company-game`.
+5. Confirm redirect returns to `/business/sessions/new`.
 6. Complete Step 1, Step 2, Step 3.
 7. Click `Start session`.
 
 ### Expected
 
 - No dead-end between `/business` and create flow.
-- After sign-in, user lands on `/admin/create-company-game` (not generic members landing).
+- After sign-in, user lands on `/business/sessions/new` (not generic members landing).
 - Session is created and success state appears with:
 - Game code
 - Join QR code
@@ -40,7 +40,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 1. Sign in first.
 2. Open `/business`.
 3. Click `Start session`.
-4. Confirm direct load of `/admin/create-company-game` (no login interruption).
+4. Confirm direct load of `/business/sessions/new` (no login interruption).
 5. Complete flow and submit.
 
 ### Expected
@@ -54,7 +54,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 
 ### Steps
 
-1. Open `/admin/create-company-game`.
+1. Open `/business/sessions/new`.
 2. Fill valid Step 1/2 inputs and proceed to Step 3.
 3. Trigger server failure (for example temporary API failure, invalid token, or test backend failure mode).
 4. Submit `Start session`.
@@ -109,7 +109,7 @@ Validate the full business path from public discovery (`/business`) to successfu
 ## 6. Regression checks
 
 - `/business` header navigation and CTA still function.
-- AuthGate still redirects unauthenticated admin-route access to login with `next`.
+- AuthGate still redirects unauthenticated Business create-route access to login with `next`.
 - Login deep-link behavior respects `next` even when user is already authenticated.
 - Copy actions in success state still work.
 

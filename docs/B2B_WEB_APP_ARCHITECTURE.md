@@ -44,7 +44,7 @@ Define how the B2B manager web product relates to core Wurder game/app data so c
 
 ## Access and Entitlements
 
-### Manager route access (`/manager/[gameCode]`)
+### Business session access (canonical)
 
 Server-side ownership check order:
 
@@ -57,7 +57,7 @@ Implementation:
 - `src/lib/manager/access.ts`
 - `src/app/api/manager/games/[gameCode]/access/route.ts`
 
-### Organisation route access (`/org/[orgId]`)
+### Organisation route access (canonical)
 
 - owner/member checks against canonical and legacy org collections.
 - implementation: `src/lib/org/access.ts`, `src/app/api/orgs/[orgId]/sessions/route.ts`
@@ -69,15 +69,33 @@ Implementation:
 
 ## Route/API Relationship Map
 
-- `/manager/[gameCode]`
+- `/business/sessions/[gameCode]`
+  - canonical runtime route (legacy `/manager/[gameCode]` redirects here)
   - loads access state via `/api/manager/games/[gameCode]/access`
   - loads dashboard payload via `/api/manager/games/[gameCode]/dashboard`
   - export path via `/api/manager/games/[gameCode]/export?format=csv|pdf`
-- `/org/[orgId]`
+- `/business/sessions/[gameCode]/compare`
+  - compare payload via `/api/manager/games/[gameCode]/compare`
+- `/business/sessions/[gameCode]/players/[playerId]`
+  - player drilldown payload via `/api/manager/games/[gameCode]/players/[playerId]`
+- `/business/orgs/[orgId]`
+  - canonical org route (legacy `/org/[orgId]` redirects here)
   - loads org sessions + trend summary via `/api/orgs/[orgId]/sessions`
-- `/admin/create-company-game`
-  - creates game/org linkage via `/api/admin/create-company-game`
+- `/business/sessions/new`
+  - creates business sessions via `POST /api/b2b/sessions`
   - templates via `/api/admin/company-templates`
+- `/join`
+  - creates personal sessions via `POST /api/b2c/games`
+
+## Legacy Compatibility Routes
+
+Legacy routes remain available as redirects for existing bookmarks and old links:
+
+- `/admin/create-company-game` -> `/business/sessions/new`
+- `/manager/[gameCode]` -> `/business/sessions/[gameCode]`
+- `/manager/[gameCode]/compare` -> `/business/sessions/[gameCode]/compare`
+- `/manager/[gameCode]/players/[playerId]` -> `/business/sessions/[gameCode]/players/[playerId]`
+- `/org/[orgId]` -> `/business/orgs/[orgId]`
 
 ## Branding Path
 

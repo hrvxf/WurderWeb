@@ -26,7 +26,7 @@ This keeps existing flows and checks working while moving canonical modeling to 
 
 ## Ownership Path
 
-For manager access to `/manager/[gameCode]`:
+For business session access (canonical `/business/sessions/[gameCode]`, legacy `/manager/[gameCode]`):
 
 1. Read `games/{gameCode}`.
 2. If `createdByAccountId === auth.uid`, allow.
@@ -66,9 +66,13 @@ Company game creation now:
 
 ## Organisation Dashboard Path
 
-The org dashboard route is:
+The canonical org dashboard route is:
 
-- `/org/[orgId]`
+- `/business/orgs/[orgId]`
+
+Legacy compatibility redirect:
+
+- `/org/[orgId]` -> `/business/orgs/[orgId]`
 
 It loads sessions via:
 
