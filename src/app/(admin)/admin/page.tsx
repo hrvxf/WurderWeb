@@ -279,14 +279,14 @@ export default function AdminPage() {
           {activeTab === "Overview" ? (
             <div className="grid gap-2 text-sm">
               <p>Game code: {game.gameCode}</p>
-              <p>Mode: {game.overview.mode ?? "—"}</p>
-              <p>Phase: {game.overview.phase ?? "—"}</p>
-              <p>Host: {game.overview.host ?? "—"}</p>
-              <p>aliveCount: {String(game.overview.aliveCount ?? "—")}</p>
+              <p>Mode: {game.overview.mode ?? "--"}</p>
+              <p>Phase: {game.overview.phase ?? "--"}</p>
+              <p>Host: {game.overview.host ?? "--"}</p>
+              <p>aliveCount: {String(game.overview.aliveCount ?? "--")}</p>
               <p>Active roster count: {game.overview.activeRosterCount}</p>
-              <p>Started: {game.overview.startedAt ?? "—"}</p>
-              <p>Ended: {game.overview.endedAt ?? "—"}</p>
-              <p>Health reason: {game.overview.health.repairReasonCode ?? "—"}</p>
+              <p>Started: {game.overview.startedAt ?? "--"}</p>
+              <p>Ended: {game.overview.endedAt ?? "--"}</p>
+              <p>Health reason: {game.overview.health.repairReasonCode ?? "--"}</p>
             </div>
           ) : null}
 
@@ -296,11 +296,11 @@ export default function AdminPage() {
                 <div key={player.id} className="rounded-xl border border-white/20 p-3 text-sm">
                   <p className="font-semibold">{player.name}</p>
                   <p>alive: {String(player.alive)}</p>
-                  <p>removedAt: {player.removedAt ?? "—"}</p>
-                  <p>lockState: {player.lockState ?? "—"}</p>
-                  <p>activeClaimId: {player.activeClaimId ?? "—"}</p>
-                  <p>guildId: {player.guildId ?? "—"}</p>
-                  <p>classic points: {String(player.classicPoints ?? "—")}</p>
+                  <p>removedAt: {player.removedAt ?? "--"}</p>
+                  <p>lockState: {player.lockState ?? "--"}</p>
+                  <p>activeClaimId: {player.activeClaimId ?? "--"}</p>
+                  <p>guildId: {player.guildId ?? "--"}</p>
+                  <p>classic points: {String(player.classicPoints ?? "--")}</p>
                   <p>warnings: {player.warnings.join(", ") || "none"}</p>
                 </div>
               ))}
@@ -311,13 +311,13 @@ export default function AdminPage() {
             <div className="space-y-2">
               {game.claims.map((claim) => (
                 <div key={claim.id} className="rounded-xl border border-white/20 p-3 text-sm">
-                  <p>{claim.killer ?? "?"} → {claim.victim ?? "?"}</p>
-                  <p>status: {claim.status ?? "—"}</p>
-                  <p>created: {claim.createdAt ?? "—"}</p>
-                  <p>expires: {claim.expiresAt ?? "—"}</p>
-                  <p>resolved: {claim.resolvedAt ?? "—"} by {claim.resolvedBy ?? "—"}</p>
-                  {game.sensitiveFieldsVisible ? <p>claimedWord: {claim.claimedWord ?? "—"}</p> : null}
-                  {game.sensitiveFieldsVisible ? <p>notes: {claim.notes ?? "—"}</p> : null}
+                  <p>{claim.killer ?? "?"} {"->"} {claim.victim ?? "?"}</p>
+                  <p>status: {claim.status ?? "--"}</p>
+                  <p>created: {claim.createdAt ?? "--"}</p>
+                  <p>expires: {claim.expiresAt ?? "--"}</p>
+                  <p>resolved: {claim.resolvedAt ?? "--"} by {claim.resolvedBy ?? "--"}</p>
+                  {game.sensitiveFieldsVisible ? <p>claimedWord: {claim.claimedWord ?? "--"}</p> : null}
+                  {game.sensitiveFieldsVisible ? <p>notes: {claim.notes ?? "--"}</p> : null}
                 </div>
               ))}
             </div>
@@ -327,11 +327,11 @@ export default function AdminPage() {
             <div className="space-y-2">
               {game.timeline.map((event) => (
                 <div key={event.id} className="rounded-xl border border-white/20 p-3 text-sm">
-                  <p>{event.timestamp ?? "—"} · {event.eventType ?? "EVENT"}</p>
-                  <p>actor: {event.actor ?? "—"}</p>
-                  <p>summary: {event.summary ?? "—"}</p>
-                  <p>result: {event.result ?? "—"}</p>
-                  <p>reasonCode: {event.reasonCode ?? "—"}</p>
+                  <p>{event.timestamp ?? "--"} - {event.eventType ?? "EVENT"}</p>
+                  <p>actor: {event.actor ?? "--"}</p>
+                  <p>summary: {event.summary ?? "--"}</p>
+                  <p>result: {event.result ?? "--"}</p>
+                  <p>reasonCode: {event.reasonCode ?? "--"}</p>
                 </div>
               ))}
             </div>
@@ -378,3 +378,4 @@ export default function AdminPage() {
     </section>
   );
 }
+

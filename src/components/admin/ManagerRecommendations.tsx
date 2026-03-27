@@ -86,11 +86,11 @@ export default function ManagerRecommendations({ summary, insights, players }: M
   const recommendations = getManagerRecommendations({ summary, insights, players });
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="surface-light p-4">
       <h2 className="text-lg font-semibold text-slate-900">Manager Recommendations</h2>
       <div className="mt-4 grid gap-3">
         {recommendations.map((recommendation) => (
-          <article key={recommendation.id} className="rounded-md border border-slate-200 bg-slate-50 p-3">
+          <article key={recommendation.id} className="surface-light-muted p-3">
             <h3 className="text-sm font-semibold text-slate-900">{recommendation.title}</h3>
             <p className="mt-1 text-sm text-slate-700">
               <span className="font-medium text-slate-900">Reason:</span> {recommendation.reason}

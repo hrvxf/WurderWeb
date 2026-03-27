@@ -374,7 +374,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
   return (
     <div className="space-y-6 p-4 md:p-6">
       <header
-        className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+        className="surface-light p-4"
         style={
           state.status === "allowed" && state.data.org.branding?.brandAccentColor
             ? { borderTopWidth: "4px", borderTopColor: state.data.org.branding.brandAccentColor }
@@ -403,7 +403,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
       </header>
 
       {state.status === "loading-auth" || state.status === "loading-data" ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+        <section className="surface-light p-6 text-sm text-slate-600">
           Loading organization sessions...
         </section>
       ) : null}
@@ -435,29 +435,29 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
       {state.status === "allowed" ? (
         state.data.sessions.length > 0 ? (
           <div className="space-y-6">
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="surface-light p-4">
               <h2 className="text-lg font-semibold text-slate-900">Multi-Session Summary</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-4">
-                <article className="rounded-md bg-slate-50 p-3">
+                <article className="surface-light-muted p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Total Sessions</p>
                   <p className="mt-1 text-xl font-semibold text-slate-900">{state.data.summary.totalSessions.toLocaleString()}</p>
                 </article>
-                <article className="rounded-md bg-slate-50 p-3">
+                <article className="surface-light-muted p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Avg Success Rate</p>
                   <p className="mt-1 text-xl font-semibold text-slate-900">{formatPercent(state.data.summary.averageSuccessRate)}</p>
                 </article>
-                <article className="rounded-md bg-slate-50 p-3">
+                <article className="surface-light-muted p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Avg Dispute Rate</p>
                   <p className="mt-1 text-xl font-semibold text-slate-900">{formatPercent(state.data.summary.averageDisputeRate)}</p>
                 </article>
-                <article className="rounded-md bg-slate-50 p-3">
+                <article className="surface-light-muted p-3">
                   <p className="text-xs uppercase tracking-wide text-slate-500">Avg Resolution Time</p>
                   <p className="mt-1 text-xl font-semibold text-slate-900">{formatDurationMs(state.data.summary.averageResolutionTimeMs)}</p>
                 </article>
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="surface-light p-4">
               <h2 className="text-lg font-semibold text-slate-900">Session Trend</h2>
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -493,7 +493,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
               </div>
             </section>
 
-            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <section className="surface-light p-4">
               <h2 className="text-lg font-semibold text-slate-900">Recent Sessions</h2>
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200 text-sm">
@@ -550,7 +550,7 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
             </section>
           </div>
         ) : (
-          <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+          <section className="surface-light p-6 text-sm text-slate-600">
             This organization has no sessions yet.
           </section>
         )
@@ -558,3 +558,4 @@ export default function OrganizationDashboardPage({ orgId }: OrganizationDashboa
     </div>
   );
 }
+

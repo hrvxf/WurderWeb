@@ -44,7 +44,7 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
   );
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="surface-light p-4">
       <h2 className="text-lg font-semibold text-slate-900">Player Performance</h2>
       {isClassicMode(mode) ? (
         <p className="mt-1 text-xs text-slate-500">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>

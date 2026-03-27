@@ -571,7 +571,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   return (
     <div className="space-y-6 p-4 md:p-6">
       <header
-        className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+        className="surface-light p-4"
         style={branding?.brandAccentColor ? { borderTopWidth: "4px", borderTopColor: branding.brandAccentColor } : undefined}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -593,7 +593,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       </header>
 
       {guard.status === "allowed" && status === "ready" ? (
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="surface-light p-4">
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-sm font-semibold text-slate-900">Reporting Exports</h2>
             {analyticsAccess?.allowedSections.exports ? (
@@ -624,7 +624,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       ) : null}
 
       {(guard.status === "loading-auth" || guard.status === "checking-access") && (
-        <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+        <section className="surface-light p-6 text-sm text-slate-600">
           Checking manager access...
         </section>
       )}
@@ -648,7 +648,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       )}
 
       {guard.status === "allowed" && status === "loading" && (
-        <section className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
+        <section className="surface-light p-6 text-sm text-slate-600">
           Loading analytics...
         </section>
       )}
@@ -712,7 +712,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
 
       {summaryModal.open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-          <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-xl">
+          <div className="w-full max-w-md surface-light p-4 shadow-xl">
             <h3 className="text-base font-semibold text-slate-900">{summaryModal.title}</h3>
             <p className="mt-2 text-sm text-slate-600">{summaryModal.details}</p>
             <div className="mt-4 flex justify-end">
@@ -730,3 +730,4 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     </div>
   );
 }
+

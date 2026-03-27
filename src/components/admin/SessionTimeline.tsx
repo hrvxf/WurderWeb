@@ -137,7 +137,7 @@ export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
   const hasEvents = useMemo(() => events.length > 0, [events]);
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="surface-light p-4">
       <h2 className="text-lg font-semibold text-slate-900">Session Timeline</h2>
 
       {status === "loading" ? <p className="mt-3 text-sm text-slate-600">Loading timeline...</p> : null}

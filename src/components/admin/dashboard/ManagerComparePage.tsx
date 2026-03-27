@@ -90,31 +90,31 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
 
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 p-3 sm:p-5">
-      <header className="rounded-2xl border border-white/15 bg-[linear-gradient(160deg,rgba(8,10,15,0.95),rgba(17,20,29,0.92))] p-5">
-        <p className="text-xs uppercase tracking-[0.16em] text-white/55">Manager Compare</p>
-        <h1 className="mt-2 text-2xl font-semibold text-white">Users & Aggregate Trends Over Time</h1>
-        <p className="mt-2 text-sm text-white/70">Game context: {gameCode}</p>
+      <header className="surface-light p-5">
+        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Manager Compare</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Users & Aggregate Trends Over Time</h1>
+        <p className="mt-2 text-sm text-slate-600">Game context: {gameCode}</p>
         <div className="mt-3">
-          <Link className="text-sm text-white/80 underline underline-offset-4" href={`/manager/${encodeURIComponent(gameCode)}`}>
+          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}`}>
             Back to dashboard
           </Link>
         </div>
       </header>
 
-      {status === "loading" ? <section className="h-40 animate-pulse rounded-2xl border border-white/15 bg-white/[0.03]" /> : null}
-      {status === "error" ? <section className="rounded-2xl border border-red-300/45 bg-red-500/15 p-4 text-sm text-red-100">{message}</section> : null}
+      {status === "loading" ? <section className="h-40 animate-pulse surface-light" /> : null}
+      {status === "error" ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{message}</section> : null}
 
       {status === "ready" && payload ? (
         <div className="grid gap-5">
-          <section className="rounded-2xl border border-white/15 bg-white/[0.03] p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-white/60">KPI Threshold</p>
-            <p className="mt-1 text-sm text-white/85">
+          <section className="surface-light p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-slate-500">KPI Threshold</p>
+            <p className="mt-1 text-sm text-slate-700">
               Dispute warning: {percent(payload.thresholds.disputeRateWarningRatio)} ({payload.thresholds.disputeRateLabel ?? "expected threshold"})
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
-                className={`rounded-md border px-2 py-1 text-xs ${activePreset === "all" ? "border-[var(--manager-accent,#D96A5A)] bg-[var(--manager-accent,#D96A5A)] text-white" : "border-white/20 text-white/80"}`}
+                className={`rounded-md border px-2 py-1 text-xs ${activePreset === "all" ? "border-[var(--manager-accent,#D96A5A)] bg-[var(--manager-accent,#D96A5A)] text-white" : "border-slate-300 text-slate-700 hover:bg-slate-50"}`}
                 onClick={() => setActivePreset("all")}
               >
                 All
@@ -124,7 +124,7 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
                   key={preset.id}
                   type="button"
                   className={`rounded-md border px-2 py-1 text-xs ${
-                    activePreset === preset.id ? "border-[var(--manager-accent,#D96A5A)] bg-[var(--manager-accent,#D96A5A)] text-white" : "border-white/20 text-white/80"
+                    activePreset === preset.id ? "border-[var(--manager-accent,#D96A5A)] bg-[var(--manager-accent,#D96A5A)] text-white" : "border-slate-300 text-slate-700 hover:bg-slate-50"
                   }`}
                   onClick={() => setActivePreset(preset.id)}
                 >
@@ -134,11 +134,11 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/15 bg-white/[0.03] p-4">
-            <h2 className="text-base font-semibold text-white">Player Cohorts</h2>
+          <section className="surface-light p-4">
+            <h2 className="text-base font-semibold text-slate-900">Player Cohorts</h2>
             <div className="mt-3 overflow-auto">
-              <table className="min-w-full text-sm text-white/85">
-                <thead className="text-left text-xs uppercase tracking-[0.12em] text-white/60">
+              <table className="min-w-full text-sm text-slate-700">
+                <thead className="text-left text-xs uppercase tracking-[0.12em] text-slate-500">
                   <tr>
                     <th className="py-2">Player</th>
                     <th>Games</th>
@@ -151,9 +151,9 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
                 </thead>
                 <tbody>
                   {visiblePlayers.map((player) => (
-                    <tr key={player.playerId} className="border-t border-white/10">
+                    <tr key={player.playerId} className="border-t border-slate-200">
                       <td className="py-2">
-                        <Link className="hover:underline" href={`/manager/${encodeURIComponent(gameCode)}/players/${encodeURIComponent(player.playerId)}`}>
+                        <Link className="hover:underline text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}/players/${encodeURIComponent(player.playerId)}`}>
                           {player.displayName}
                         </Link>
                       </td>
@@ -170,11 +170,11 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-white/15 bg-white/[0.03] p-4">
-            <h2 className="text-base font-semibold text-white">Aggregate Game Trend</h2>
+          <section className="surface-light p-4">
+            <h2 className="text-base font-semibold text-slate-900">Aggregate Game Trend</h2>
             <div className="mt-3 overflow-auto">
-              <table className="min-w-full text-sm text-white/85">
-                <thead className="text-left text-xs uppercase tracking-[0.12em] text-white/60">
+              <table className="min-w-full text-sm text-slate-700">
+                <thead className="text-left text-xs uppercase tracking-[0.12em] text-slate-500">
                   <tr>
                     <th className="py-2">Game</th>
                     <th>Updated</th>
@@ -185,7 +185,7 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
                 </thead>
                 <tbody>
                   {payload.aggregateTrend.map((point) => (
-                    <tr key={`${point.gameCode}-${point.index}`} className="border-t border-white/10">
+                    <tr key={`${point.gameCode}-${point.index}`} className="border-t border-slate-200">
                       <td className="py-2">{point.gameCode}</td>
                       <td>{point.updatedAt ? new Date(point.updatedAt).toLocaleString() : "--"}</td>
                       <td>{point.totalKills}</td>

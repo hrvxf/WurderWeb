@@ -106,7 +106,7 @@ function findMetric(insights: ManagerInsight[], token: string): number | null {
 
 function Finding({ label, headline, interpretation }: { label: string; headline: string; interpretation: string }) {
   return (
-    <article className="rounded-md border border-slate-200 bg-slate-50 p-3">
+    <article className="surface-light-muted p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
       <p className="mt-1 text-sm font-semibold text-slate-900">{headline}</p>
       <p className="mt-1 text-xs text-slate-600">{interpretation}</p>
@@ -142,7 +142,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
     .join(" ");
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="surface-light p-4">
       <h2 className="text-lg font-semibold text-slate-900">Session Summary</h2>
       <div className="mt-4 grid gap-3">
         {availableFindings > 0 ? (
@@ -172,7 +172,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
             ) : null}
           </>
         ) : (
-          <p className="rounded-md border border-slate-100 bg-slate-50 p-3 text-sm text-slate-600">Not enough completed session data yet.</p>
+          <p className="surface-light-muted p-3 text-sm text-slate-600">Not enough completed session data yet.</p>
         )}
 
         <Finding
