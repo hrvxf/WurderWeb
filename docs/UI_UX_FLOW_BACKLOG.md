@@ -299,9 +299,16 @@ Last updated: March 27, 2026.
 ### Current Verification Snapshot (March 27, 2026)
 - `npx tsc --noEmit`: pass
 - `npm run lint`: pass (2 existing unused-symbol warnings in admin analytics tests/payload)
-- `npm run test`: failing in `src/lib/achievements/catalog.test.ts` (2 assertions around badge URL ordering/prefix), not in the UX/UI migration surface
-- Manual desktop/mobile visual and keyboard traversal still required for final sign-off.
+- `npm run test`: pass (30 files, 121 tests)
+- `npm run test:e2e`: pass (5 tests). Coverage now asserts keyboard Enter navigation for public join/business/download flows, current auth-gated business-session shell behavior, and legacy `/manager/[gameCode]` -> `/business/sessions/[gameCode]` redirect contract.
+- Broken-link sweep:
+- Public join/business routes return HTTP 200 (`/join`, `/join/[code]`, `/download`, `/business`, `/business/dashboard`, `/business/settings`, `/business/sessions/new`)
+- Member routes correctly redirect unauthenticated users to login with HTTP 307 (`/members`, `/members/profile`, `/members/stats`, `/members/host`, `/members/settings`)
+- Manual desktop/mobile visual pass: signed off (March 27, 2026)
+- Manual keyboard-only navigation pass: signed off (March 27, 2026)
+- Manual auth-state pass (logged out / incomplete profile / complete profile): signed off (March 27, 2026)
+- Milestone QA checklist verified and closed (March 27, 2026).
 
 ## Suggested Execution Order
 
-1. Verify QA checklist and close milestone.
+1. Milestone closed.

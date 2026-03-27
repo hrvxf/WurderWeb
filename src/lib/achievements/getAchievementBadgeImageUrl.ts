@@ -1,4 +1,4 @@
-import { getAchievementBadge, resolveAvailableAchievementBadgeImageKey } from "@/lib/achievements/catalog";
+import { getAchievementBadge } from "@/lib/achievements/catalog";
 import { ACHIEVEMENT_BADGE_ASSET_BASE_URL } from "@/lib/achievements/config";
 
 function normalizeImageKey(value: unknown): string | null {
@@ -44,12 +44,10 @@ export function getAchievementBadgeImageUrlCandidates(input: { achievementId?: s
   const fromInput = normalizeImageKey(input.imageKey);
   const fromCatalog = normalizedId ? getAchievementBadge(normalizedId)?.imageKey : null;
   const primaryImageKey = fromInput ?? fromCatalog ?? fallbackImageKeyFromId(normalizedId);
-  const resolvedPrimary = resolveAvailableAchievementBadgeImageKey(primaryImageKey);
   const variants = imageKeyVariants(primaryImageKey, normalizedId);
-  const ordered = resolvedPrimary ? [resolvedPrimary, ...variants.filter((variant) => variant !== resolvedPrimary)] : variants;
 
   const base = trimTrailingSlash(ACHIEVEMENT_BADGE_ASSET_BASE_URL);
-  return ordered.map((imageKey) => `${base}/${encodeURIComponent(imageKey)}.png`);
+  return variants.map((imageKey) => `${base}/${encodeURIComponent(imageKey)}.png`);
 }
 
 export function getAchievementBadgeImageUrl(input: { achievementId?: string | null; imageKey?: string | null }): string {
