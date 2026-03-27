@@ -15,7 +15,7 @@ type NavLink = {
   label: string;
   description?: string;
   matchPrefix?: boolean;
-  icon: "home" | "product" | "business" | "download" | "dashboard" | "host" | "profile" | "stats" | "settings" | "help";
+  icon: "home" | "product" | "business" | "download" | "help";
 };
 
 type SiteHeaderInitialAccount = {
@@ -29,14 +29,6 @@ const EXPLORE_LINKS: NavLink[] = [
   { href: "/product", label: "Product", description: "Capabilities and plans", icon: "product" },
   { href: BUSINESS_ROUTES.home, label: "Business", description: "Company sessions and tools", icon: "business" },
   { href: "/download", label: "Download", description: "Get the mobile app", icon: "download" },
-];
-
-const WORKSPACE_LINKS: NavLink[] = [
-  { href: AUTH_ROUTES.members, label: "Dashboard", description: "Overview and quick actions", icon: "dashboard", matchPrefix: true },
-  { href: AUTH_ROUTES.membersHost, label: "Host", description: "Hosted session controls", icon: "host" },
-  { href: AUTH_ROUTES.membersProfile, label: "Profile", description: "Identity and avatar", icon: "profile" },
-  { href: AUTH_ROUTES.membersStats, label: "Stats", description: "Performance and totals", icon: "stats" },
-  { href: AUTH_ROUTES.membersSettings, label: "Settings", description: "Account and preferences", icon: "settings" },
 ];
 
 const HELP_LINKS: NavLink[] = [
@@ -87,16 +79,6 @@ function iconPath(icon: NavLink["icon"]): string {
       return "M4 20V7l8-3v16M4 20h16M13 10h3m-3 4h3m-3 4h3M8 10h1m-1 4h1m-1 4h1";
     case "download":
       return "M12 4v10m0 0 4-4m-4 4-4-4M4 20h16";
-    case "dashboard":
-      return "M4 5h7v7H4zM13 5h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z";
-    case "host":
-      return "M4 19h16M6 19V9l6-4 6 4v10M9 12h6";
-    case "profile":
-      return "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 8a7 7 0 0 1 14 0";
-    case "stats":
-      return "M5 19V9m7 10V5m7 14v-7";
-    case "settings":
-      return "M12 9.5A2.5 2.5 0 1 0 12 14.5A2.5 2.5 0 1 0 12 9.5ZM4 12h2m12 0h2M12 4v2m0 12v2M6.3 6.3l1.4 1.4m8.6 8.6 1.4 1.4m0-11.4-1.4 1.4m-8.6 8.6-1.4 1.4";
     default:
       return "M12 8v5m0 3h.01M4 12a8 8 0 1 0 16 0 8 8 0 0 0-16 0";
   }
@@ -145,7 +127,7 @@ function MenuRow({
             <span className="block truncate text-xs text-white/55">{item.description}</span>
           ) : null}
         </span>
-        <span className="text-white/40 transition group-hover:text-white/75">›</span>
+        <span className="text-white/40 transition group-hover:text-white/75">{">"}</span>
       </div>
     </Link>
   );
@@ -361,7 +343,7 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
               </span>
             ) : null}
             <Button href="/join" variant="glass">
-              Play Wurder
+              Join game
             </Button>
 
             {effectiveAuthenticated ? (
@@ -395,13 +377,19 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                         </div>
                       </div>
                     </div>
-                    <div className="mt-3">
-                      <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-white/45">Workspace</p>
-                      <div className="space-y-1.5">
-                        {WORKSPACE_LINKS.map((item) => (
-                          <MenuRow key={item.href} item={item} pathname={pathname} compact />
-                        ))}
-                      </div>
+                    <div className="mt-3 space-y-1.5">
+                      <Link
+                        href={AUTH_ROUTES.members}
+                        className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                      >
+                        Open Members Area
+                      </Link>
+                      <Link
+                        href={BUSINESS_ROUTES.createSession}
+                        className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                      >
+                        Start session
+                      </Link>
                     </div>
                     <div className="mt-3 border-t border-white/10 pt-3">
                       <button
@@ -492,23 +480,26 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
             </div>
 
             <div className="mt-5 space-y-2">
-              <p className="text-xs uppercase tracking-wide text-white/45">Workspace</p>
+              <p className="text-xs uppercase tracking-wide text-white/45">Account</p>
               <Link
                 href="/join"
                 className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
               >
-                Play Wurder
+                Join game
               </Link>
               {effectiveAuthenticated ? (
                 <>
-                  {WORKSPACE_LINKS.map((item) => (
-                    <MenuRow key={item.href} item={item} pathname={pathname} />
-                  ))}
+                  <Link
+                    href={AUTH_ROUTES.members}
+                    className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
+                  >
+                    Open Members Area
+                  </Link>
                   <Link
                     href={BUSINESS_ROUTES.createSession}
                     className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
                   >
-                    Create Company Game
+                    Start session
                   </Link>
                 </>
               ) : (

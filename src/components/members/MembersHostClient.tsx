@@ -38,17 +38,14 @@ export default function MembersHostClient({ initialSessions = [] }: MembersHostC
           </p>
           <div className="mt-4 grid gap-2.5">
             <Link
-              href="/business/dashboard"
-              className="min-h-10 rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
-            >
-              Open business dashboard
-            </Link>
-            <Link
               href="/admin/create-company-game"
               className="min-h-10 rounded-xl border border-white/15 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
             >
-              Create company game
+              Start session
             </Link>
+            <p className="rounded-xl border border-amber-300/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-amber-100/90">
+              Business dashboard coming soon
+            </p>
           </div>
         </section>
       </div>

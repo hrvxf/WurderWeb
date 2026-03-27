@@ -18,20 +18,25 @@ type ProfileFormInitialProfile = {
   avatarUrl?: string | null;
 };
 
+type ProfileStep = 1 | 2;
+
+type ProfileFormProps = {
+  initialProfile?: ProfileFormInitialProfile;
+};
+
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
 function readDisplayName(name?: string, firstName?: string, lastName?: string): string {
   if (name?.trim()) return name.trim();
   const full = `${firstName ?? ""} ${lastName ?? ""}`.trim();
   return full || "Not set";
 }
 
-type ProfileFormProps = {
-  initialProfile?: ProfileFormInitialProfile;
-};
-
 export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const { user, profile, refreshProfile } = useAuth();
   const activeProfile = profile ?? initialProfile ?? null;
 
+  const [step, setStep] = useState<ProfileStep>(1);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [name, setName] = useState("");
@@ -42,6 +47,7 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [avatarPreviewFailed, setAvatarPreviewFailed] = useState(false);
+  const [acknowledgeHandleLock, setAcknowledgeHandleLock] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasLockedWurderId = Boolean(activeProfile?.wurderId?.trim());
@@ -53,18 +59,37 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
   const profileEmail = activeProfile?.email?.trim() || user?.email?.trim() || "Not available";
   const profileWurderId = activeProfile?.wurderId?.trim() ? `@${activeProfile.wurderId.trim()}` : "Not set";
 
+  const candidateName = name.trim();
+  const candidateFirstName = firstName.trim();
+  const candidateLastName = lastName.trim();
+  const candidateWurderId = wurderId.trim();
+
+  const hasIdentityInput = Boolean(candidateName || (candidateFirstName && candidateLastName));
+  const hasWurderIdInput = Boolean(hasLockedWurderId || candidateWurderId);
+  const wurderIdLooksValid = !candidateWurderId || isValidWurderId(candidateWurderId);
+  const requiresHandleConfirmation = !hasLockedWurderId && Boolean(candidateWurderId);
+  const canContinueIdentity = hasIdentityInput && hasWurderIdInput && wurderIdLooksValid;
+
   useEffect(() => {
+    setStep(1);
     setFirstName(activeProfile?.firstName ?? "");
     setLastName(activeProfile?.lastName ?? "");
     setName(activeProfile?.name ?? "");
     setWurderId(activeProfile?.wurderId ?? "");
     setAvatarUrl(activeProfile?.avatarUrl ?? activeProfile?.avatar ?? "");
     setAvatarPreviewFailed(false);
+    setAcknowledgeHandleLock(false);
   }, [activeProfile]);
 
   useEffect(() => {
     setAvatarPreviewFailed(false);
   }, [avatarUrl]);
+
+  useEffect(() => {
+    if (hasLockedWurderId) {
+      setAcknowledgeHandleLock(false);
+    }
+  }, [hasLockedWurderId]);
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,23 +101,27 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       return;
     }
 
-    const candidateName = name.trim();
-    const candidateFirstName = firstName.trim();
-    const candidateLastName = lastName.trim();
-    const candidateWurderId = wurderId.trim();
-
     if (!candidateName && !(candidateFirstName && candidateLastName)) {
       setError("Add a full name or first and last name.");
+      setStep(1);
       return;
     }
 
     if (!hasLockedWurderId && !candidateWurderId) {
       setError("Wurder ID is required.");
+      setStep(1);
       return;
     }
 
     if (!hasLockedWurderId && candidateWurderId && !isValidWurderId(candidateWurderId)) {
       setError("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
+      setStep(1);
+      return;
+    }
+
+    if (!hasLockedWurderId && candidateWurderId && !acknowledgeHandleLock) {
+      setError("Confirm that your Wurder ID will be locked after this save.");
+      setStep(1);
       return;
     }
 
@@ -108,9 +137,11 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       });
       await refreshProfile();
       setSuccess("Profile saved.");
+      setAcknowledgeHandleLock(false);
     } catch (saveError) {
       if (saveError instanceof UsernameTakenError) {
         setError("That Wurder ID is already taken.");
+        setStep(1);
       } else if (saveError instanceof Error && saveError.message.trim()) {
         setError(saveError.message);
       } else {
@@ -132,6 +163,11 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
 
     if (!file.type.startsWith("image/")) {
       setError("Please choose an image file.");
+      return;
+    }
+
+    if (file.size > MAX_AVATAR_BYTES) {
+      setError("Avatar must be 5MB or less.");
       return;
     }
 
@@ -159,6 +195,22 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
     }
   }
 
+  function continueToStepTwo() {
+    setError("");
+    setSuccess("");
+    if (!canContinueIdentity) {
+      if (!hasIdentityInput) {
+        setError("Add a full name or first and last name.");
+      } else if (!hasWurderIdInput) {
+        setError("Wurder ID is required.");
+      } else {
+        setError("Wurder ID must be 3-20 characters using letters, numbers, or underscores.");
+      }
+      return;
+    }
+    setStep(2);
+  }
+
   return (
     <div className="border-t border-white/10 pt-6">
       <p className="text-xs uppercase tracking-[0.2em] text-muted">Edit Profile</p>
@@ -166,6 +218,38 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
       <p className="mt-2 max-w-2xl text-sm text-soft">
         Keep your public identity consistent across members, join flow, and hosted sessions.
       </p>
+
+      <div className="mt-4 rounded-xl border border-white/12 bg-black/20 p-3">
+        <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-[0.16em] text-muted">
+          <span>Step {step} of 2</span>
+          <span>{step === 1 ? "Identity" : "Avatar + review"}</span>
+        </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setStep(1)}
+            className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold transition ${
+              step === 1
+                ? "border-[#D96A5A]/50 bg-[#D96A5A]/15 text-white"
+                : "border-white/15 bg-black/20 text-soft hover:bg-black/30"
+            }`}
+          >
+            1. Identity
+          </button>
+          <button
+            type="button"
+            onClick={() => setStep(2)}
+            disabled={!canContinueIdentity}
+            className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold transition disabled:opacity-60 ${
+              step === 2
+                ? "border-[#D96A5A]/50 bg-[#D96A5A]/15 text-white"
+                : "border-white/15 bg-black/20 text-soft hover:bg-black/30"
+            }`}
+          >
+            2. Avatar + review
+          </button>
+        </div>
+      </div>
 
       {error ? (
         <p className="mt-4 border-l-2 border-red-400/60 bg-red-950/35 px-4 py-3 text-sm text-red-100">{error}</p>
@@ -209,101 +293,169 @@ export default function ProfileForm({ initialProfile }: ProfileFormProps) {
               <dd className="mt-1 text-white">{profileWurderId}</dd>
             </div>
           </dl>
-          <p className="mt-3 text-xs text-muted">Changes on the right apply after pressing save.</p>
+          <p className="mt-3 text-xs text-muted">Changes apply after pressing save in step 2.</p>
         </aside>
 
         <div className="mt-5 space-y-4 lg:mt-0">
-          <section className="border-y border-white/10 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted">Identity</p>
-            <div className="mt-2.5 grid gap-3 lg:grid-cols-3">
-              <label className="block">
-                <span className="text-sm font-medium text-soft">Display name</span>
-                <input
-                  className={compactInputClass}
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  onBlur={(event) => setName(normalizePersonName(event.target.value))}
-                  placeholder="Optional if first + last are set"
-                  autoCapitalize="words"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-soft">First name</span>
-                <input
-                  className={compactInputClass}
-                  value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
-                  onBlur={(event) => setFirstName(normalizePersonName(event.target.value))}
-                  autoComplete="given-name"
-                  autoCapitalize="words"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-medium text-soft">Last name</span>
-                <input
-                  className={compactInputClass}
-                  value={lastName}
-                  onChange={(event) => setLastName(event.target.value)}
-                  onBlur={(event) => setLastName(normalizePersonName(event.target.value))}
-                  autoComplete="family-name"
-                  autoCapitalize="words"
-                />
-              </label>
-            </div>
-          </section>
+          {step === 1 ? (
+            <>
+              <section className="border-y border-white/10 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Identity</p>
+                <div className="mt-2.5 grid gap-3 lg:grid-cols-3">
+                  <label className="block">
+                    <span className="text-sm font-medium text-soft">Display name</span>
+                    <input
+                      className={compactInputClass}
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      onBlur={(event) => setName(normalizePersonName(event.target.value))}
+                      placeholder="Optional if first + last are set"
+                      autoCapitalize="words"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-soft">First name</span>
+                    <input
+                      className={compactInputClass}
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      onBlur={(event) => setFirstName(normalizePersonName(event.target.value))}
+                      autoComplete="given-name"
+                      autoCapitalize="words"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-sm font-medium text-soft">Last name</span>
+                    <input
+                      className={compactInputClass}
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      onBlur={(event) => setLastName(normalizePersonName(event.target.value))}
+                      autoComplete="family-name"
+                      autoCapitalize="words"
+                    />
+                  </label>
+                </div>
+              </section>
 
-          <section className="border-y border-white/10 py-3">
-            <p className="text-xs uppercase tracking-[0.18em] text-muted">Account handle</p>
-            <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-              <label className="block">
-                <span className="text-sm font-medium text-soft">Wurder ID</span>
-                <input
-                  className={compactInputClass}
-                  value={wurderId}
-                  onChange={(event) => setWurderId(event.target.value)}
-                  disabled={hasLockedWurderId}
-                  placeholder="your_wurder_id"
-                  autoCapitalize="none"
-                />
-                <span className="mt-2 block text-xs text-muted">
-                  {hasLockedWurderId
-                    ? "Wurder ID is locked after it has been claimed."
-                    : "Wurder ID can be claimed once and then becomes locked."}
-                </span>
-              </label>
-              <div className="border border-white/12 bg-black/20 p-3">
-                <p className="text-xs uppercase tracking-[0.16em] text-muted">Avatar image</p>
-                <div className="mt-2 flex items-center gap-3">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={(event) => void handleAvatarFileChange(event)}
-                    className="hidden"
-                  />
-                  <button
-                    type="button"
-                    disabled={uploadingAvatar}
-                    onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex min-h-9 items-center justify-center rounded-lg border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30 disabled:opacity-60"
-                  >
-                    {uploadingAvatar ? "Uploading..." : "Upload avatar"}
-                  </button>
-                  <span className="text-xs text-muted">PNG/JPG up to 5MB</span>
+              <section className="border-y border-white/10 py-3">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted">Account handle</p>
+                <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+                  <label className="block">
+                    <span className="text-sm font-medium text-soft">Wurder ID</span>
+                    <input
+                      className={compactInputClass}
+                      value={wurderId}
+                      onChange={(event) => setWurderId(event.target.value)}
+                      disabled={hasLockedWurderId}
+                      placeholder="your_wurder_id"
+                      autoCapitalize="none"
+                    />
+                    <span className="mt-2 block text-xs text-muted">
+                      {hasLockedWurderId
+                        ? "Wurder ID is locked after it has been claimed."
+                        : "Wurder ID can be claimed once and then becomes locked."}
+                    </span>
+                    {!wurderIdLooksValid ? (
+                      <span className="mt-2 block text-xs text-red-300">
+                        Use 3-20 characters, letters, numbers, or underscores only.
+                      </span>
+                    ) : null}
+                  </label>
+                  <div className="border border-white/12 bg-black/20 p-3">
+                    <p className="text-xs uppercase tracking-[0.16em] text-muted">Step guidance</p>
+                    <p className="mt-2 text-sm text-soft">
+                      Set identity and handle in this step, then continue to upload avatar and save.
+                    </p>
+                    {requiresHandleConfirmation ? (
+                      <label className="mt-3 flex items-start gap-2 text-xs text-amber-100">
+                        <input
+                          type="checkbox"
+                          checked={acknowledgeHandleLock}
+                          onChange={(event) => setAcknowledgeHandleLock(event.target.checked)}
+                          className="mt-0.5"
+                        />
+                        <span>I understand this Wurder ID will be locked after save.</span>
+                      </label>
+                    ) : null}
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            <section className="border-y border-white/10 py-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-muted">Avatar and review</p>
+              <div className="mt-2.5 grid gap-3 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+                <div className="border border-white/12 bg-black/20 p-3">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted">Avatar image</p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleAvatarFileChange(event)}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      disabled={uploadingAvatar}
+                      onClick={() => fileInputRef.current?.click()}
+                      className="inline-flex min-h-9 items-center justify-center rounded-lg border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30 disabled:opacity-60"
+                    >
+                      {uploadingAvatar ? "Uploading..." : "Upload avatar"}
+                    </button>
+                    <span className="text-xs text-muted">PNG/JPG up to 5MB</span>
+                  </div>
+                </div>
+                <div className="border border-white/12 bg-black/20 p-3 text-sm text-soft">
+                  <p className="text-xs uppercase tracking-[0.16em] text-muted">Save checklist</p>
+                  <ul className="mt-2 space-y-1.5">
+                    <li>{hasIdentityInput ? "Identity: ready" : "Identity: add name details"}</li>
+                    <li>{hasWurderIdInput ? "Wurder ID: ready" : "Wurder ID: required"}</li>
+                    <li>
+                      {requiresHandleConfirmation && !acknowledgeHandleLock
+                        ? "Handle lock confirmation: required"
+                        : "Handle lock confirmation: ready"}
+                    </li>
+                  </ul>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
+          )}
 
-          <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
-            <p className="text-xs text-muted">Changes are saved to your member profile immediately.</p>
-            <button
-              type="submit"
-              disabled={saving}
-              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-5 py-2.5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D] disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save profile"}
-            </button>
+          <div className="sticky bottom-3 z-10 rounded-xl border border-white/15 bg-[rgba(12,12,16,0.94)] p-3 backdrop-blur">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-muted">Step {step} of 2</p>
+              <div className="flex flex-wrap items-center gap-2">
+                {step === 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                  >
+                    Back
+                  </button>
+                ) : null}
+
+                {step === 1 ? (
+                  <button
+                    type="button"
+                    onClick={continueToStepTwo}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black/30"
+                  >
+                    Continue
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-5 py-2.5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving ? "Saving..." : "Save profile"}
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </form>

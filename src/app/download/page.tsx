@@ -17,7 +17,7 @@ export default async function DownloadPage({
         Download Wurder
       </h1>
       <p className="mt-3 max-w-2xl text-soft">
-        App store links are being finalized. For now, use this route as the install handoff destination.
+        Use this page to continue your install handoff and return to your session once the app is installed.
       </p>
       {parsedCode.isValid ? (
         <div className="mt-4 border-y border-white/15 py-3 text-sm text-soft">

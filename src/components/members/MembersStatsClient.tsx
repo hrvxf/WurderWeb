@@ -69,7 +69,20 @@ function buildMetricSeries(metric: MetricKey, trend: TrendPoint[]): number[] {
   if (capped.length === 0) return [];
 
   if (metric === "games") {
-    return capped.map((_, index) => index + 1);
+    return capped.map((point, index) => {
+      const currentMs = point.occurredAt ? Date.parse(point.occurredAt) : Number.NaN;
+      if (!Number.isFinite(currentMs)) {
+        const windowStart = Math.max(0, index - 6);
+        return index - windowStart + 1;
+      }
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      const windowStartMs = currentMs - sevenDaysMs;
+      return capped.slice(0, index + 1).filter((candidate) => {
+        const candidateMs = candidate.occurredAt ? Date.parse(candidate.occurredAt) : Number.NaN;
+        if (!Number.isFinite(candidateMs)) return false;
+        return candidateMs >= windowStartMs && candidateMs <= currentMs;
+      }).length;
+    });
   }
 
   if (metric === "winRate") {
@@ -207,7 +220,7 @@ function TrendChart({
         })),
     [trend]
   );
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const delta = useMemo(() => periodDelta(metric, trend), [metric, trend]);
 
   useEffect(() => {
@@ -249,8 +262,12 @@ function TrendChart({
     return max - ratio * range;
   });
 
-  const hoverPoint = hoverIndex != null ? chartPoints[hoverIndex] : null;
-  const hoverMeta = hoverIndex != null ? labels[hoverIndex] : null;
+  const activePoint = activeIndex != null ? chartPoints[activeIndex] : null;
+  const activeMeta = activeIndex != null ? labels[activeIndex] : null;
+
+  function setPointActive(index: number) {
+    setActiveIndex(index);
+  }
 
   return (
     <section className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
@@ -270,7 +287,7 @@ function TrendChart({
           </span>
         ) : null}
       </div>
-      <p className="mt-1 text-xs text-white/55">Hover points for session details. Series is based on your selected KPI.</p>
+      <p className="mt-1 text-xs text-white/55">Hover, tap, or focus points for session details. Series is based on your selected KPI.</p>
       <div className="mt-3 overflow-auto">
         <svg key={animateKey} viewBox={`0 0 ${width} ${height}`} className="h-[260px] min-w-[760px] w-full">
           <defs>
@@ -307,19 +324,47 @@ function TrendChart({
             <path d={overlayKdPath} fill="none" stroke="rgba(147,197,253,0.95)" strokeWidth="1.7" strokeDasharray="3 5" />
           ) : null}
           <path d={linePath} fill="none" stroke="rgba(217,106,90,0.95)" strokeWidth="2.5" className="transition-all duration-300" />
-          {chartPoints.map((point) => (
-            <circle
-              key={`pt-${point.index}`}
-              cx={point.x}
-              cy={point.y}
-              r={hoverIndex === point.index ? 5 : 3}
-              fill={hoverIndex === point.index ? "rgba(255,255,255,0.98)" : "rgba(217,106,90,0.9)"}
-              stroke="rgba(15,17,21,0.95)"
-              strokeWidth="1.5"
-              onMouseEnter={() => setHoverIndex(point.index)}
-              onMouseLeave={() => setHoverIndex((current) => (current === point.index ? null : current))}
-            />
-          ))}
+          {chartPoints.map((point) => {
+            const pointMeta = labels[point.index];
+            const label = pointMeta
+              ? `${pointMeta.gameCode}, ${pointMeta.mode ?? "unknown mode"}, ${pointMeta.occurredAt ?? "unknown time"}, value ${formatMetricValue(metric, point.value)}`
+              : `${chartLabel} point ${point.index + 1}`;
+            const selected = activeIndex === point.index;
+            return (
+              <g
+                key={`pt-${point.index}`}
+                role="button"
+                tabIndex={0}
+                aria-label={label}
+                onClick={() => setPointActive(point.index)}
+                onMouseEnter={() => setPointActive(point.index)}
+                onFocus={() => setPointActive(point.index)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    setPointActive(point.index);
+                  }
+                  if (event.key === "ArrowRight") {
+                    event.preventDefault();
+                    setPointActive(Math.min(point.index + 1, chartPoints.length - 1));
+                  }
+                  if (event.key === "ArrowLeft") {
+                    event.preventDefault();
+                    setPointActive(Math.max(point.index - 1, 0));
+                  }
+                }}
+              >
+                <circle
+                  cx={point.x}
+                  cy={point.y}
+                  r={selected ? 5 : 3}
+                  fill={selected ? "rgba(255,255,255,0.98)" : "rgba(217,106,90,0.9)"}
+                  stroke={selected ? "rgba(255,255,255,0.95)" : "rgba(15,17,21,0.95)"}
+                  strokeWidth={selected ? "2.2" : "1.5"}
+                />
+              </g>
+            );
+          })}
           <text x={padding.left} y={height - 10} fontSize="10" fill="rgba(255,255,255,0.55)">
             Oldest
           </text>
@@ -339,9 +384,9 @@ function TrendChart({
           >
             {chartLabel}
           </text>
-          {hoverPoint && hoverMeta ? (
+          {activePoint && activeMeta ? (
             <g>
-              <line x1={hoverPoint.x} y1={padding.top} x2={hoverPoint.x} y2={padding.top + innerHeight} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" />
+              <line x1={activePoint.x} y1={padding.top} x2={activePoint.x} y2={padding.top + innerHeight} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" />
             </g>
           ) : null}
         </svg>
@@ -359,15 +404,15 @@ function TrendChart({
           </span>
         </div>
       ) : null}
-      {hoverPoint && hoverMeta ? (
+      {activePoint && activeMeta ? (
         <div className="mt-3 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/80">
-          <span className="font-semibold text-white">{hoverMeta.gameCode}</span>
+          <span className="font-semibold text-white">{activeMeta.gameCode}</span>
           <span className="mx-2 text-white/45">|</span>
-          <span>{hoverMeta.mode ?? "unknown mode"}</span>
+          <span>{activeMeta.mode ?? "unknown mode"}</span>
           <span className="mx-2 text-white/45">|</span>
-          <span>{hoverMeta.occurredAt ? new Date(hoverMeta.occurredAt).toLocaleString() : "--"}</span>
+          <span>{activeMeta.occurredAt ? new Date(activeMeta.occurredAt).toLocaleString() : "--"}</span>
           <span className="mx-2 text-white/45">|</span>
-          <span className="font-semibold text-white">{chartLabel}: {formatMetricValue(metric, hoverPoint.value)}</span>
+          <span className="font-semibold text-white">{chartLabel}: {formatMetricValue(metric, activePoint.value)}</span>
         </div>
       ) : null}
     </section>

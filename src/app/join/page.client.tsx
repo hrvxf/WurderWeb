@@ -1,10 +1,13 @@
 "use client";
 
-import { Component, type ErrorInfo, type ReactNode, useMemo, useState } from "react";
+import { Component, type ErrorInfo, type FormEvent, type ReactNode, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { LoaderCircle } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
-import AuthGate from "@/components/auth/AuthGate";
+
 import Button from "@/components/Button";
+import { parseGameCode } from "@/domain/join/code";
 import { buildJoinUniversalLink } from "@/domain/join/joinLink";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
@@ -44,22 +47,33 @@ class QrErrorBoundary extends Component<{ children: ReactNode; onError: () => vo
   }
 }
 
-function JoinGenerator() {
+export default function JoinPageClient() {
+  const router = useRouter();
   const { user } = useAuth();
+  const [enteredCode, setEnteredCode] = useState("");
+  const [joinCodeError, setJoinCodeError] = useState<string | null>(null);
   const [joinState, setJoinState] = useState<JoinState>({ status: "idle" });
   const [qrRenderFailed, setQrRenderFailed] = useState(false);
 
   const gameCode = joinState.status === "success" ? joinState.gameCode : "";
   const joinLink = useMemo(() => (gameCode ? buildJoinUniversalLink(gameCode) : ""), [gameCode]);
 
+  function handleJoinByCode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setJoinCodeError(null);
+    const parsed = parseGameCode(enteredCode);
+    if (!parsed.isValid) {
+      setJoinCodeError("Game code must be 6 letters or numbers.");
+      return;
+    }
+    router.push(`/join/${encodeURIComponent(parsed.value)}`);
+  }
+
   async function handleCreateGame() {
     if (joinState.status === "creating") return;
 
     if (!user) {
-      setJoinState({
-        status: "error",
-        message: "You must be signed in to create a game.",
-      });
+      router.push("/login?next=%2Fjoin");
       return;
     }
 
@@ -103,73 +117,111 @@ function JoinGenerator() {
   }
 
   return (
-    <section
-      className={`mx-auto max-w-2xl rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8 ${
-        joinState.status === "creating" ? "cursor-progress" : ""
-      }`}
-    >
-      <h1 className="text-3xl font-bold tracking-tight">Create Join QR</h1>
-      <p className="mt-3 text-soft">
-        Create a game as your signed-in account, then share the QR so players can join.
-      </p>
-
-      <div className="mt-6">
-        <Button
-          onClick={handleCreateGame}
-          disabled={joinState.status === "creating"}
-          className={joinState.status === "creating" ? "disabled:cursor-progress" : ""}
-        >
-          {joinState.status === "creating" ? (
-            <>
-              <LoaderCircle className="mr-2 size-4 animate-spin" aria-hidden="true" />
-              Creating...
-            </>
-          ) : (
-            "Create Game QR"
-          )}
-        </Button>
+    <section className="mx-auto max-w-5xl space-y-6">
+      <div className="rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8">
+        <p className="text-xs uppercase tracking-[0.16em] text-muted">Join</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Join or host a game</h1>
+        <p className="mt-3 text-soft">Enter a game code to join now, or create a host QR for players.</p>
       </div>
 
-      {joinState.status === "error" ? (
-        <p className="mt-4 rounded-xl border border-rose-300/30 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
-          {joinState.message}
-        </p>
-      ) : null}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <article className="rounded-2xl border border-white/15 bg-white/[0.03] p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted">I have a game code</p>
+          <h2 className="mt-2 text-xl font-semibold">Join a session</h2>
+          <p className="mt-2 text-sm text-soft">Paste or type your 6-character game code.</p>
 
-      {joinState.status === "success" ? (
-        <div className="mt-6 rounded-2xl border border-white/15 bg-black/35 p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-muted">Game Code</p>
-          <p className="mt-2 font-mono text-4xl font-bold tracking-[0.12em]">{gameCode}</p>
-          <p className="mt-2 break-all text-xs text-muted">{joinLink}</p>
-
-          <div className="mt-5 inline-flex rounded-xl border border-white/20 bg-white p-3">
-            <QrErrorBoundary onError={() => setQrRenderFailed(true)}>
-              <QRCodeCanvas
-                value={joinLink}
-                size={220}
-                level="M"
-                fgColor="#111111"
-                bgColor="#FFFFFF"
-                marginSize={4}
+          <form className="mt-4 space-y-3" onSubmit={handleJoinByCode}>
+            <label className="block">
+              <span className="text-xs uppercase tracking-[0.14em] text-muted">Game code</span>
+              <input
+                value={enteredCode}
+                onChange={(event) => setEnteredCode(event.target.value)}
+                className="input-dark mt-2 font-mono uppercase tracking-[0.14em]"
+                placeholder="ABC123"
+                autoCapitalize="characters"
+                autoCorrect="off"
               />
-            </QrErrorBoundary>
+            </label>
+            {joinCodeError ? (
+              <p className="rounded-lg border border-rose-300/35 bg-rose-950/30 px-3 py-2 text-sm text-rose-100">
+                {joinCodeError}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D]"
+            >
+              Continue to join
+            </button>
+          </form>
+        </article>
+
+        <article className="rounded-2xl border border-white/15 bg-white/[0.03] p-5">
+          <p className="text-xs uppercase tracking-[0.16em] text-muted">I am hosting</p>
+          <h2 className="mt-2 text-xl font-semibold">Create a host QR</h2>
+          <p className="mt-2 text-sm text-soft">Create a game and share the QR so players can join quickly.</p>
+
+          <div className="mt-4 flex flex-wrap gap-2.5">
+            <Button
+              onClick={() => void handleCreateGame()}
+              disabled={joinState.status === "creating"}
+              className={joinState.status === "creating" ? "disabled:cursor-progress" : ""}
+            >
+              {joinState.status === "creating" ? (
+                <>
+                  <LoaderCircle className="mr-2 size-4 animate-spin" aria-hidden="true" />
+                  Creating...
+                </>
+              ) : user ? (
+                "Create host QR"
+              ) : (
+                "Sign in to host"
+              )}
+            </Button>
+            {!user ? (
+              <Link
+                href="/login?next=%2Fjoin"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 text-sm font-semibold text-white transition hover:bg-black/30"
+              >
+                Open sign in
+              </Link>
+            ) : null}
           </div>
 
-          {qrRenderFailed ? (
-            <p className="mt-3 text-sm text-rose-200">
-              QR render failure detected. Press &ldquo;Create Game QR&rdquo; again.
+          {joinState.status === "error" ? (
+            <p className="mt-4 rounded-xl border border-rose-300/30 bg-rose-950/30 px-4 py-3 text-sm text-rose-100">
+              {joinState.message}
             </p>
           ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
 
-export default function JoinPageClient() {
-  return (
-    <AuthGate>
-      <JoinGenerator />
-    </AuthGate>
+          {joinState.status === "success" ? (
+            <div className="mt-6 rounded-2xl border border-white/15 bg-black/35 p-5">
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">Game Code</p>
+              <p className="mt-2 font-mono text-4xl font-bold tracking-[0.12em]">{gameCode}</p>
+              <p className="mt-2 break-all text-xs text-muted">{joinLink}</p>
+
+              <div className="mt-5 inline-flex rounded-xl border border-white/20 bg-white p-3">
+                <QrErrorBoundary onError={() => setQrRenderFailed(true)}>
+                  <QRCodeCanvas
+                    value={joinLink}
+                    size={220}
+                    level="M"
+                    fgColor="#111111"
+                    bgColor="#FFFFFF"
+                    marginSize={4}
+                  />
+                </QrErrorBoundary>
+              </div>
+
+              {qrRenderFailed ? (
+                <p className="mt-3 text-sm text-rose-200">
+                  QR render failure detected. Press &ldquo;Create host QR&rdquo; again.
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </article>
+      </div>
+    </section>
   );
 }

@@ -3,7 +3,7 @@ import JoinPageClient from "@/app/join/page.client";
 
 export const metadata: Metadata = {
   title: "Join",
-  description: "Create a Wurder game QR to share with players.",
+  description: "Join with a game code or create a host QR for your session.",
   alternates: { canonical: "/join" },
 };
 
