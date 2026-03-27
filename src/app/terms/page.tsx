@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function TermsPage() {
   return (
-    <article className="mt-2 border-t border-white/10 pt-7 sm:pt-8">
+    <article className="mx-auto mt-2 max-w-4xl border-t border-white/10 pt-7 sm:pt-8">
       <TermsContent />
     </article>
   );

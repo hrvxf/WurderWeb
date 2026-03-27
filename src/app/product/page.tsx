@@ -83,7 +83,7 @@ export default function ProductPage() {
             href="/join"
             className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-5 text-sm font-semibold text-[#160f08] shadow-[0_10px_26px_rgba(0,0,0,0.35)] transition hover:-translate-y-0.5 hover:brightness-105"
           >
-            Start a game
+            Join game
           </Link>
           <Link
             href="#how-wurder-transforms-socialising"
@@ -191,7 +191,7 @@ export default function ProductPage() {
               href="/join"
               className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-5 text-sm font-semibold text-[#160f08] shadow-[0_10px_26px_rgba(0,0,0,0.35)] transition hover:-translate-y-0.5 hover:brightness-105"
             >
-              Start a game
+              Join game
             </Link>
             <Link
               href="/download"
