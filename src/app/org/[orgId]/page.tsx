@@ -1,4 +1,5 @@
-import OrganizationDashboardPage from "@/components/admin/OrganizationDashboardPage";
+import { redirect } from "next/navigation";
+import { businessOrgRoute } from "@/lib/business/routes";
 
 type OrganizationDashboardRouteProps = {
   params: Promise<{
@@ -6,8 +7,9 @@ type OrganizationDashboardRouteProps = {
   }>;
 };
 
-export default async function OrganizationDashboardRoute({ params }: OrganizationDashboardRouteProps) {
+export default async function LegacyOrganizationDashboardRoute({
+  params,
+}: OrganizationDashboardRouteProps) {
   const { orgId } = await params;
-
-  return <OrganizationDashboardPage orgId={orgId} />;
+  redirect(businessOrgRoute(orgId));
 }

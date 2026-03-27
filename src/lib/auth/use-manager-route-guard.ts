@@ -47,7 +47,7 @@ export function useManagerRouteGuard(gameCode: string): ManagerRouteGuardState {
     }
 
     if (!user) {
-      setState({ status: "unauthenticated", message: "Sign in to access manager dashboards." });
+      setState({ status: "unauthenticated", message: "Sign in to access Business session dashboards." });
       return;
     }
     // Skip preflight access API call. Dashboard API is the source of truth and

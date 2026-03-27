@@ -147,6 +147,85 @@ a {
   animation: subtle-enter 220ms ease-out both;
 }
 
+.workspace-frame {
+  position: relative;
+  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.workspace-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.workspace-frame--personal {
+  background:
+    radial-gradient(44rem 24rem at 12% 0%, rgba(199, 53, 93, 0.18), transparent 65%),
+    radial-gradient(34rem 22rem at 92% 4%, rgba(217, 106, 90, 0.14), transparent 64%),
+    linear-gradient(158deg, rgba(15, 10, 19, 0.96), rgba(13, 9, 18, 0.95));
+}
+
+.workspace-frame--business {
+  background:
+    radial-gradient(50rem 24rem at 8% -2%, rgba(86, 122, 182, 0.2), transparent 68%),
+    radial-gradient(42rem 22rem at 92% 0%, rgba(110, 146, 170, 0.16), transparent 64%),
+    linear-gradient(160deg, rgba(10, 14, 22, 0.96), rgba(9, 12, 20, 0.95));
+}
+
+.workspace-frame__header {
+  position: relative;
+  z-index: 1;
+  padding: 1.15rem 1.15rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0));
+}
+
+.workspace-frame__label {
+  margin: 0;
+  font-size: 0.66rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.74);
+  font-weight: 700;
+}
+
+.workspace-frame__title {
+  margin: 0.45rem 0 0;
+  font-size: 1.25rem;
+  line-height: 1.15;
+  font-weight: 700;
+}
+
+.workspace-frame__description {
+  margin: 0.45rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.workspace-frame__content {
+  position: relative;
+  z-index: 1;
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .workspace-frame__header {
+    padding: 1.35rem 1.5rem 1.15rem;
+  }
+
+  .workspace-frame__title {
+    font-size: 1.5rem;
+  }
+
+  .workspace-frame__content {
+    padding: 1.25rem;
+  }
+}
+
 .scroll-chrome {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.28) rgba(255, 255, 255, 0.04);

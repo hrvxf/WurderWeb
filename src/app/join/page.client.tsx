@@ -10,6 +10,7 @@ import Button from "@/components/Button";
 import { parseGameCode } from "@/domain/join/code";
 import { buildJoinUniversalLink } from "@/domain/join/joinLink";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { persistLastCreatedSession } from "@/lib/game/last-created-session";
 
 type JoinState =
   | { status: "idle" }
@@ -82,7 +83,7 @@ export default function JoinPageClient() {
 
     try {
       const idToken = await user.getIdToken(false);
-      const response = await fetch("/api/join/create-game", {
+      const response = await fetch("/api/b2c/games", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${idToken}`,
@@ -108,6 +109,12 @@ export default function JoinPageClient() {
       }
 
       setJoinState({ status: "success", gameCode: payload.gameCode });
+      persistLastCreatedSession({
+        gameCode: payload.gameCode,
+        gameType: "personal",
+        createdAtIso: new Date().toISOString(),
+        joinLink: buildJoinUniversalLink(payload.gameCode),
+      });
     } catch (error) {
       setJoinState({
         status: "error",
@@ -119,9 +126,9 @@ export default function JoinPageClient() {
   return (
     <section className="mx-auto max-w-5xl space-y-6">
       <div className="rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8">
-        <p className="text-xs uppercase tracking-[0.16em] text-muted">Join</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Join or host a game</h1>
-        <p className="mt-3 text-soft">Enter a game code to join now, or create a host QR for players.</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-muted">Personal</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Join or host a personal game</h1>
+        <p className="mt-3 text-soft">Enter a game code to join now, or create a personal host QR for players.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -158,8 +165,8 @@ export default function JoinPageClient() {
 
         <article className="rounded-2xl border border-white/15 bg-white/[0.03] p-5">
           <p className="text-xs uppercase tracking-[0.16em] text-muted">I am hosting</p>
-          <h2 className="mt-2 text-xl font-semibold">Create a host QR</h2>
-          <p className="mt-2 text-sm text-soft">Create a game and share the QR so players can join quickly.</p>
+          <h2 className="mt-2 text-xl font-semibold">Create a personal host QR</h2>
+          <p className="mt-2 text-sm text-soft">This creates a standard game code for personal/social sessions.</p>
 
           <div className="mt-4 flex flex-wrap gap-2.5">
             <Button
@@ -196,7 +203,9 @@ export default function JoinPageClient() {
 
           {joinState.status === "success" ? (
             <div className="mt-6 rounded-2xl border border-white/15 bg-black/35 p-5">
-              <p className="text-xs uppercase tracking-[0.16em] text-muted">Game Code</p>
+              <p className="text-xs uppercase tracking-[0.16em] text-muted">
+                Personal Game Created
+              </p>
               <p className="mt-2 font-mono text-4xl font-bold tracking-[0.12em]">{gameCode}</p>
               <p className="mt-2 break-all text-xs text-muted">{joinLink}</p>
 

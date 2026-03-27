@@ -13,9 +13,9 @@ export async function POST(request: Request) {
   try {
     const hostUid = await verifyFirebaseAuthHeader(request.headers.get("authorization"));
     const result = await createGameForHostUid(hostUid);
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json({ ...result, gameType: "personal" as const }, { status: 201 });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown create-game error.";
+    const errorMessage = error instanceof Error ? error.message : "Unknown b2c create-game error.";
 
     if (error instanceof UnauthenticatedCreateGameError) {
       return NextResponse.json(
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof CreateGameAuthInfrastructureError) {
-      console.error("[join:create-game] Server auth verification misconfigured", error);
+      console.error("[b2c:games] Server auth verification misconfigured", error);
       return NextResponse.json(
         {
           code: "AUTH_VERIFICATION_FAILED",
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       );
     }
 
-    console.error("[join:create-game] Failed to create game document", error);
+    console.error("[b2c:games] Failed to create game document", error);
     const lowerMessage = errorMessage.toLowerCase();
     if (
       lowerMessage.includes("could not load the default credentials") ||

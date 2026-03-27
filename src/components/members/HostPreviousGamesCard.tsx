@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { businessSessionRoute } from "@/lib/business/routes";
 
 type SessionRow = {
   id: string;
@@ -143,7 +144,14 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
           {topSessions.map((session) => (
             <li key={session.id} className="px-0 py-2.5">
               {isValidGameCode(session.id) ? (
-                <Link href={`/manager/${encodeURIComponent(session.id)}`} className="block">
+                <Link
+                  href={
+                    session.orgId
+                      ? businessSessionRoute(session.id)
+                      : `/join/${encodeURIComponent(session.id)}`
+                  }
+                  className="block"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-semibold text-white">{session.title}</p>
                     <span className="rounded-full border border-white/20 bg-white/[0.04] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white/80">

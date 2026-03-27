@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { businessSessionPlayerRoute, businessSessionRoute } from "@/lib/business/routes";
 
 type ComparePreset = { id: "highRisk" | "highDispute" | "lowAccuracy"; label: string };
 type ComparePlayer = {
@@ -91,11 +92,11 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
   return (
     <div className="mx-auto w-full max-w-[1200px] space-y-5 p-3 sm:p-5">
       <header className="surface-light p-5">
-        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Manager Compare</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Users & Aggregate Trends Over Time</h1>
-        <p className="mt-2 text-sm text-slate-600">Game context: {gameCode}</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-slate-500">Business Session Compare</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900">Players and Aggregate Trends</h1>
+        <p className="mt-2 text-sm text-slate-600">Session code: {gameCode}</p>
         <div className="mt-3">
-          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}`}>
+          <Link className="text-sm text-slate-700 underline underline-offset-4 hover:text-slate-900" href={businessSessionRoute(gameCode)}>
             Back to dashboard
           </Link>
         </div>
@@ -153,7 +154,7 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
                   {visiblePlayers.map((player) => (
                     <tr key={player.playerId} className="border-t border-slate-200">
                       <td className="py-2">
-                        <Link className="hover:underline text-slate-900" href={`/manager/${encodeURIComponent(gameCode)}/players/${encodeURIComponent(player.playerId)}`}>
+                        <Link className="hover:underline text-slate-900" href={businessSessionPlayerRoute(gameCode, player.playerId)}>
                           {player.displayName}
                         </Link>
                       </td>
