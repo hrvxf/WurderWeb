@@ -31,7 +31,7 @@ export default async function JoinGameCodePage({ params }: JoinGameCodePageProps
   return (
     <section className="glass-surface rounded-3xl px-6 py-10 sm:px-10">
       <p className="text-xs uppercase tracking-[0.2em] text-amber-200/80">Join</p>
-      <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Open Wurder</h1>
+      <h1 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">Join game in app</h1>
       <p className="mt-4 max-w-2xl text-soft">
         Continue into the app to join game <span className="font-mono">{parsedCode.value}</span>.
       </p>
@@ -52,7 +52,7 @@ export default async function JoinGameCodePage({ params }: JoinGameCodePageProps
           href={`/download?gameCode=${encodeURIComponent(parsedCode.value)}`}
           className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 bg-white/5 px-6 font-semibold text-white transition hover:bg-white/10"
         >
-          Need the app?
+          Download app
         </Link>
       </div>
     </section>

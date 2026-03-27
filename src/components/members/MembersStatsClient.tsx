@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 
 import AchievementsCard from "@/components/achievements/AchievementsCard";
 import StatsPanel from "@/components/members/StatsPanel";
@@ -220,12 +220,23 @@ function TrendChart({
         })),
     [trend]
   );
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(points.length > 0 ? points.length - 1 : null);
   const delta = useMemo(() => periodDelta(metric, trend), [metric, trend]);
 
   useEffect(() => {
     setAnimateKey((current) => current + 1);
   }, [metric, trend]);
+
+  useEffect(() => {
+    if (points.length === 0) {
+      setActiveIndex(null);
+      return;
+    }
+    setActiveIndex((current) => {
+      if (current == null) return points.length - 1;
+      return Math.min(Math.max(current, 0), points.length - 1);
+    });
+  }, [points.length]);
 
   const chartLabel = metric === "games" ? "Games" : metric === "winRate" ? "Win Rate" : metric === "kd" ? "K/D" : "Points";
   if (points.length < 2) {
@@ -269,6 +280,31 @@ function TrendChart({
     setActiveIndex(index);
   }
 
+  function handleChartKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if (points.length === 0) return;
+    const current = activeIndex ?? points.length - 1;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      event.preventDefault();
+      setPointActive(Math.min(current + 1, points.length - 1));
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setPointActive(Math.max(current - 1, 0));
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setPointActive(0);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      setPointActive(points.length - 1);
+      return;
+    }
+  }
+
   return (
     <section className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -288,7 +324,17 @@ function TrendChart({
         ) : null}
       </div>
       <p className="mt-1 text-xs text-white/55">Hover, tap, or focus points for session details. Series is based on your selected KPI.</p>
-      <div className="mt-3 overflow-auto">
+      <div
+        className="mt-3 overflow-auto rounded-lg focus-within:ring-2 focus-within:ring-[#D96A5A]/60"
+        role="group"
+        aria-label={`${chartLabel} trend chart`}
+      >
+        <div
+          tabIndex={0}
+          onKeyDown={handleChartKeyDown}
+          className="outline-none"
+          aria-label={`${chartLabel} chart. Use arrow keys to move between session points, Home for first, End for latest.`}
+        >
         <svg key={animateKey} viewBox={`0 0 ${width} ${height}`} className="h-[260px] min-w-[760px] w-full">
           <defs>
             <linearGradient id="memberTrendFill" x1="0" y1="0" x2="0" y2="1">
@@ -334,26 +380,13 @@ function TrendChart({
               <g
                 key={`pt-${point.index}`}
                 role="button"
-                tabIndex={0}
+                tabIndex={-1}
                 aria-label={label}
                 onClick={() => setPointActive(point.index)}
+                onPointerDown={() => setPointActive(point.index)}
                 onMouseEnter={() => setPointActive(point.index)}
-                onFocus={() => setPointActive(point.index)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    setPointActive(point.index);
-                  }
-                  if (event.key === "ArrowRight") {
-                    event.preventDefault();
-                    setPointActive(Math.min(point.index + 1, chartPoints.length - 1));
-                  }
-                  if (event.key === "ArrowLeft") {
-                    event.preventDefault();
-                    setPointActive(Math.max(point.index - 1, 0));
-                  }
-                }}
               >
+                <circle cx={point.x} cy={point.y} r={10} fill="transparent" />
                 <circle
                   cx={point.x}
                   cy={point.y}
@@ -390,6 +423,7 @@ function TrendChart({
             </g>
           ) : null}
         </svg>
+        </div>
       </div>
       {showOverlays ? (
         <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-white/70">
@@ -405,7 +439,7 @@ function TrendChart({
         </div>
       ) : null}
       {activePoint && activeMeta ? (
-        <div className="mt-3 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/80">
+        <div className="mt-3 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-xs text-white/80" aria-live="polite">
           <span className="font-semibold text-white">{activeMeta.gameCode}</span>
           <span className="mx-2 text-white/45">|</span>
           <span>{activeMeta.mode ?? "unknown mode"}</span>

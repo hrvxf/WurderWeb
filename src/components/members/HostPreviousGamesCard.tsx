@@ -70,7 +70,7 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
       });
       const payload = (await response.json().catch(() => ({}))) as SessionsApiPayload;
       if (!response.ok || !Array.isArray(payload.sessions)) {
-        setLoadError("Could not refresh session history right now.");
+        setLoadError("Could not refresh session history right now. Showing your last available sessions.");
         return;
       }
 
@@ -89,7 +89,7 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
 
       setSessions(normalized);
     } catch {
-      setLoadError("Could not refresh session history right now.");
+      setLoadError("Could not refresh session history right now. Showing your last available sessions.");
     } finally {
       setLoading(false);
     }
@@ -133,7 +133,7 @@ export default function HostPreviousGamesCard({ initialSessions = [] }: HostPrev
         </div>
       ) : null}
 
-      {!loading && topSessions.length === 0 ? (
+      {!loading && !loadError && topSessions.length === 0 ? (
         <div className="mt-4 border-y border-white/10 py-3">
           <p className="text-sm text-white/70">No previous games yet.</p>
         </div>

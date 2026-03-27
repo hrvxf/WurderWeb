@@ -7,8 +7,8 @@ export default function JoinLayout({ children }: { children: ReactNode }) {
     <WorkspaceFrame
       tone="personal"
       label="Personal Workspace"
-      title="Join and host personal games"
-      description="Fast, social session setup for friends and community play."
+      title="Join and start personal sessions"
+      description="Fast personal play with clear join and start-session actions."
     >
       {children}
     </WorkspaceFrame>

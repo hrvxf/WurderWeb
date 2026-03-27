@@ -37,6 +37,14 @@ const HELP_LINKS: NavLink[] = [
   { href: "/terms", label: "Terms", icon: "help" },
 ];
 
+const MEMBER_ACCOUNT_LINKS = [
+  { href: AUTH_ROUTES.members, label: "Dashboard" },
+  { href: AUTH_ROUTES.membersProfile, label: "Profile" },
+  { href: AUTH_ROUTES.membersStats, label: "Stats" },
+  { href: AUTH_ROUTES.membersHost, label: "Host" },
+  { href: AUTH_ROUTES.membersSettings, label: "Settings" },
+] as const;
+
 const MENU_ANIMATION_MS = 180;
 const AVATAR_CACHE_KEY = "wurder:member:avatar-url";
 
@@ -172,6 +180,11 @@ function handleMenuKeyNav(container: HTMLElement, event: KeyboardEvent) {
   }
 }
 
+function memberSectionLabel(pathname: string): string | null {
+  const match = MEMBER_ACCOUNT_LINKS.find((item) => item.href === pathname);
+  return match?.label ?? null;
+}
+
 export default function SiteHeader({ initialAccount = null }: { initialAccount?: SiteHeaderInitialAccount | null }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -209,8 +222,10 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
   const avatarUrl = liveAvatarUrl || cachedAvatarUrl;
 
   const activeAreaLabel = useMemo(() => {
-    if (pathname.startsWith("/members/host")) return "Host";
-    if (pathname.startsWith("/members")) return "Members";
+    if (pathname.startsWith("/members")) {
+      const section = memberSectionLabel(pathname);
+      return section ? `Members / ${section}` : "Members";
+    }
     if (pathname.startsWith("/manager/")) return "Business";
     if (pathname.startsWith("/business")) return "Business";
     return null;
@@ -430,18 +445,26 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                       </div>
                     </div>
                     <div className="mt-3 space-y-1.5">
-                      <Link
-                        href={AUTH_ROUTES.members}
-                        className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-                      >
-                        Open personal dashboard
-                      </Link>
+                      {MEMBER_ACCOUNT_LINKS.map((item) => (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          aria-current={pathname === item.href ? "page" : undefined}
+                          className={`block rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                            pathname === item.href
+                              ? "border-[#D96A5A]/45 bg-[#D96A5A]/15 text-white"
+                              : "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      ))}
                       {businessWorkspaceActivated ? (
                         <Link
                           href={BUSINESS_ROUTES.dashboard}
                           className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
                         >
-                          Open Business workspace
+                          Open Business dashboard
                         </Link>
                       ) : null}
                     </div>
@@ -543,18 +566,26 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
               </Link>
               {effectiveAuthenticated ? (
                 <>
-                  <Link
-                    href={AUTH_ROUTES.members}
-                    className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
-                  >
-                    Open personal dashboard
-                  </Link>
+                  {MEMBER_ACCOUNT_LINKS.map((item) => (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={pathname === item.href ? "page" : undefined}
+                      className={`block rounded-lg border px-3 py-2.5 text-sm font-semibold transition ${
+                        pathname === item.href
+                          ? "border-[#D96A5A]/45 bg-[#D96A5A]/15 text-white"
+                          : "border-white/10 bg-white/[0.03] text-white hover:bg-white/[0.08]"
+                      }`}
+                    >
+                      {item.label}
+                    </Link>
+                  ))}
                   {businessWorkspaceActivated ? (
                     <Link
                       href={BUSINESS_ROUTES.dashboard}
                       className="block rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm font-semibold text-white hover:bg-white/[0.08]"
                     >
-                      Open Business workspace
+                      Open Business dashboard
                     </Link>
                   ) : null}
                 </>

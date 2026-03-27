@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 import { getProfileCompletionStatus } from "@/lib/auth/profile-completion";
+import { BUSINESS_ROUTES } from "@/lib/business/routes";
 
 function readActiveGameCode(activeGame: unknown): string | null {
   if (typeof activeGame === "string" && activeGame.trim()) {
@@ -24,11 +26,41 @@ type MembersDashboardClientProps = {
 };
 
 export default function MembersDashboardClient({ initialActiveGameCode = null }: MembersDashboardClientProps) {
-  const { profile, stats } = useAuth();
+  const { profile, stats, user, isAuthenticated } = useAuth();
   const activeGameCode = readActiveGameCode(profile?.activeGame) ?? initialActiveGameCode;
   const hasActiveGame = Boolean(activeGameCode);
   const completion = getProfileCompletionStatus(profile ?? null);
   const winRate = stats.gamesPlayed > 0 ? Math.round((stats.wins / stats.gamesPlayed) * 100) : 0;
+  const lifetimePoints = stats.lifetimePoints ?? stats.points ?? 0;
+  const [businessWorkspaceActivated, setBusinessWorkspaceActivated] = useState(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      setBusinessWorkspaceActivated(false);
+      return;
+    }
+
+    let cancelled = false;
+    const resolveAccess = async () => {
+      try {
+        const token = await user.getIdToken();
+        const response = await fetch("/api/business/workspace-access", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const payload = (await response.json().catch(() => ({}))) as { activated?: unknown };
+        if (cancelled) return;
+        setBusinessWorkspaceActivated(response.ok && payload.activated === true);
+      } catch {
+        if (cancelled) return;
+        setBusinessWorkspaceActivated(false);
+      }
+    };
+
+    void resolveAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, user]);
 
   return (
     <div className="space-y-7 sm:space-y-8">
@@ -39,6 +71,27 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
           <p className="mt-3 text-sm text-soft sm:text-[0.96rem]">
             Jump into your most common actions from one screen.
           </p>
+        </div>
+
+        <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+          <Link
+            href={hasActiveGame ? `/join/${activeGameCode}` : "/join"}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-4 py-2 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D]"
+          >
+            {hasActiveGame ? "Resume game" : "Join game"}
+          </Link>
+          <Link
+            href={AUTH_ROUTES.membersProfile}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+          >
+            Edit profile
+          </Link>
+          <Link
+            href="/join"
+            className="inline-flex min-h-11 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+          >
+            Start session
+          </Link>
         </div>
 
         <div className="mt-5 grid gap-3 lg:grid-cols-2">
@@ -53,12 +106,18 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
             ) : (
               <p className="mt-2 text-sm text-soft">No active game right now.</p>
             )}
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-3 flex flex-wrap gap-2.5">
               <Link
                 href={hasActiveGame ? `/join/${activeGameCode}` : "/join"}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-4 py-2 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D]"
               >
                 {hasActiveGame ? "Resume game" : "Join game"}
+              </Link>
+              <Link
+                href="/join"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+              >
+                Enter code
               </Link>
             </div>
           </article>
@@ -89,7 +148,7 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
           <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Performance snapshot</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Recent totals</h3>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+            <div className="mt-2 grid grid-cols-3 gap-2 text-sm">
               <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
                 Games
                 <span className="mt-1 block text-lg font-semibold text-white">{stats.gamesPlayed}</span>
@@ -97,6 +156,10 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
               <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
                 Win rate
                 <span className="mt-1 block text-lg font-semibold text-white">{winRate}%</span>
+              </p>
+              <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-soft">
+                Points
+                <span className="mt-1 block text-lg font-semibold text-white">{lifetimePoints}</span>
               </p>
             </div>
             <div className="mt-3">
@@ -112,14 +175,31 @@ export default function MembersDashboardClient({ initialActiveGameCode = null }:
           <article className="rounded-xl border border-white/15 bg-white/[0.03] p-4">
             <p className="text-xs uppercase tracking-[0.16em] text-muted">Host shortcuts</p>
             <h3 className="mt-1.5 text-lg font-semibold text-white">Session tools</h3>
-            <p className="mt-2 text-sm text-soft">Review your hosted sessions.</p>
+            <p className="mt-2 text-sm text-soft">
+              Review hosted sessions and launch Business workflows.
+            </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={AUTH_ROUTES.membersHost}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
               >
-                Open host area
+                Open host tools
               </Link>
+              {businessWorkspaceActivated ? (
+                <Link
+                  href={BUSINESS_ROUTES.createSession}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                >
+                  Start business session
+                </Link>
+              ) : (
+                <Link
+                  href={BUSINESS_ROUTES.home}
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/20 bg-black/20 px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/30"
+                >
+                  Explore Business
+                </Link>
+              )}
             </div>
           </article>
         </div>

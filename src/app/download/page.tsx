@@ -17,7 +17,7 @@ export default async function DownloadPage({
         Download Wurder
       </h1>
       <p className="mt-3 max-w-2xl text-soft">
-        Use this page to continue your install handoff and return to your session once the app is installed.
+        Install the app, then return to join your game.
       </p>
       {parsedCode.isValid ? (
         <div className="mt-4 border-y border-white/15 py-3 text-sm text-soft">
@@ -35,10 +35,10 @@ export default async function DownloadPage({
           </a>
         ) : null}
         <Link
-          href="/"
+          href={parsedCode.isValid ? `/join/${encodeURIComponent(parsedCode.value)}` : "/join"}
           className="inline-flex min-h-10 items-center justify-center rounded-xl border border-white/30 bg-white/5 px-5 font-semibold text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0b0e]"
         >
-          Back to Home
+          Back to join
         </Link>
       </div>
     </section>

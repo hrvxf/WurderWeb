@@ -127,8 +127,8 @@ export default function JoinPageClient() {
     <section className="mx-auto max-w-5xl space-y-6">
       <div className="rounded-3xl border border-white/15 bg-black/25 p-6 sm:p-8">
         <p className="text-xs uppercase tracking-[0.16em] text-muted">Personal</p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">Join or host a personal game</h1>
-        <p className="mt-3 text-soft">Enter a game code to join now, or create a personal host QR for players.</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight">Join or start a personal session</h1>
+        <p className="mt-3 text-soft">Enter a game code to join now, or start a personal session and share the join QR with players.</p>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -158,15 +158,15 @@ export default function JoinPageClient() {
               type="submit"
               className="inline-flex min-h-10 items-center justify-center rounded-xl bg-gradient-to-r from-[#C7355D] to-[#8E1F45] px-5 text-sm font-semibold text-white transition hover:from-[#D96A5A] hover:to-[#C7355D]"
             >
-              Continue to join
+              Join game
             </button>
           </form>
         </article>
 
         <article className="rounded-2xl border border-white/15 bg-white/[0.03] p-5">
-          <p className="text-xs uppercase tracking-[0.16em] text-muted">I am hosting</p>
-          <h2 className="mt-2 text-xl font-semibold">Create a personal host QR</h2>
-          <p className="mt-2 text-sm text-soft">This creates a standard game code for personal/social sessions.</p>
+          <p className="text-xs uppercase tracking-[0.16em] text-muted">I am starting a session</p>
+          <h2 className="mt-2 text-xl font-semibold">Start a personal session</h2>
+          <p className="mt-2 text-sm text-soft">This creates a standard game code and host QR for personal/social sessions.</p>
 
           <div className="mt-4 flex flex-wrap gap-2.5">
             <Button
@@ -180,9 +180,9 @@ export default function JoinPageClient() {
                   Creating...
                 </>
               ) : user ? (
-                "Create host QR"
+                "Start session"
               ) : (
-                "Sign in to host"
+                "Sign in to start session"
               )}
             </Button>
             {!user ? (
@@ -224,7 +224,7 @@ export default function JoinPageClient() {
 
               {qrRenderFailed ? (
                 <p className="mt-3 text-sm text-rose-200">
-                  QR render failure detected. Press &ldquo;Create host QR&rdquo; again.
+                  QR render failure detected. Press &ldquo;Start session&rdquo; again.
                 </p>
               ) : null}
             </div>

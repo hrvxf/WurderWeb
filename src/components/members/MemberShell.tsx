@@ -130,29 +130,12 @@ export default function MemberShell({
           </div>
         </div>
 
-        <nav className="mt-5 border-t border-white/10 pt-4" aria-label="Members navigation">
-          <div className="grid border-y border-white/10 sm:grid-cols-2 sm:divide-x sm:divide-white/10 lg:grid-cols-5">
-            {memberNav.map((item) => {
-              const active = pathname === item.href;
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`border-b border-white/10 px-3 py-3 transition sm:border-b-0 ${
-                    active ? "bg-[#D96A5A]/12 text-white" : "text-soft hover:bg-white/[0.03] hover:text-white"
-                  }`}
-                >
-                  <span className="block text-sm font-semibold">{item.label}</span>
-                  <span className={`mt-0.5 block text-xs ${active ? "text-white/80" : "text-muted"}`}>
-                    {item.description}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-        <p className="mt-3 text-xs uppercase tracking-[0.18em] text-muted">Current section: {activeNavLabel}</p>
+        <div className="mt-5 border-t border-white/10 pt-3">
+          <p className="text-xs uppercase tracking-[0.18em] text-muted">Members / {activeNavLabel}</p>
+          <p className="mt-1 text-xs text-soft">
+            Use the account menu in the header to switch member sections.
+          </p>
+        </div>
       </div>
 
       {children}
