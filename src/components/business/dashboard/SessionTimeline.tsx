@@ -137,19 +137,19 @@ export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
   const hasEvents = useMemo(() => events.length > 0, [events]);
 
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Session Timeline</h2>
+    <section className="p-4 sm:p-5">
+      <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Session Timeline</h2>
 
-      {status === "loading" ? <p className="mt-3 text-sm text-slate-600">Loading timeline...</p> : null}
-      {status === "error" ? <p className="mt-3 text-sm text-red-700">Unable to load timeline right now.</p> : null}
-      {status === "ready" && !hasEvents ? <p className="mt-3 text-sm text-slate-600">No timeline events yet.</p> : null}
+      {status === "loading" ? <p className="mt-3 text-sm text-[var(--mc-text-soft)]">Loading timeline...</p> : null}
+      {status === "error" ? <p className="mt-3 text-sm text-[var(--mc-alert)]">Unable to load timeline right now.</p> : null}
+      {status === "ready" && !hasEvents ? <p className="mt-3 text-sm text-[var(--mc-text-soft)]">No timeline events yet.</p> : null}
 
       {hasEvents ? (
         <ol className="mt-4 space-y-3">
           {events.map((event) => (
-            <li key={event.id} className="grid grid-cols-[72px_1fr] gap-3 text-sm text-slate-700">
-              <span className="font-medium tabular-nums text-slate-500">{formatTime(event.timestamp)}</span>
-              <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800">{event.message}</p>
+            <li key={event.id} className="grid grid-cols-[72px_1fr] gap-3 text-sm text-[var(--mc-text-soft)]">
+              <span className="font-medium tabular-nums text-[var(--mc-text-muted)]">{formatTime(event.timestamp)}</span>
+              <p className="mission-control__panel-alt px-3 py-2 text-[var(--mc-text)]">{event.message}</p>
             </li>
           ))}
         </ol>

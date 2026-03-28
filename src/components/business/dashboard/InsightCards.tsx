@@ -4,6 +4,12 @@ type InsightCardsProps = {
   insights: ManagerInsight[];
 };
 
+function severityTone(severity: ManagerInsight["severity"]): string {
+  if (severity === "critical") return "var(--mc-alert)";
+  if (severity === "warning") return "var(--mc-warning)";
+  return "var(--mc-primary)";
+}
+
 function formatMetricValue(metric: string, value: number): string {
   return metric.toLowerCase().includes("rate") ? `${(value * 100).toFixed(1)}%` : value.toLocaleString();
 }
@@ -28,25 +34,34 @@ function formatInsightValue(insight: ManagerInsight): string {
 
 export default function InsightCards({ insights }: InsightCardsProps) {
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Activity Summary</h2>
+    <section className="mission-control__panel p-4 sm:p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">KPI Radar</h2>
+        <p className="mission-control__label">Signal Feed</p>
+      </div>
       {insights.length > 0 ? (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mission-control__kpi-grid mt-4">
           {insights.map((insight) => {
             const subtext = formatInsightSubtext(insight);
+            const tone = severityTone(insight.severity);
             return (
-              <article key={insight.id} className="surface-light-muted p-3">
-                <p className="text-xs uppercase tracking-wide text-slate-500">{insight.label}</p>
-                <p className="mt-1 text-sm font-medium text-slate-800">
-                  {insight.message ?? `${insight.label}: ${formatInsightValue(insight)}`}
+              <article
+                key={insight.id}
+                className="mission-control__panel-alt p-3"
+                style={{ boxShadow: `inset 2px 0 0 ${tone}` }}
+              >
+                <p className="mission-control__label">{insight.label}</p>
+                <p className="mission-control__display mt-2 text-2xl font-semibold text-[var(--mc-text)]">{formatInsightValue(insight)}</p>
+                <p className="mt-1 text-sm font-medium text-[var(--mc-text-soft)]">
+                  {insight.message || `${insight.label} signal captured`}
                 </p>
-                {subtext ? <p className="mt-1 text-xs text-slate-500">{subtext}</p> : null}
+                {subtext ? <p className="mt-2 text-xs text-[var(--mc-text-muted)]">{subtext}</p> : null}
               </article>
             );
           })}
         </div>
       ) : (
-        <p className="mt-4 surface-light-muted p-3 text-sm text-slate-600">
+        <p className="mission-control__panel-alt mt-4 p-3 text-sm text-[var(--mc-text-soft)]">
           No insight metrics available yet for this session.
         </p>
       )}

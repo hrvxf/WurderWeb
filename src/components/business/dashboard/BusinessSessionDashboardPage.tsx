@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import GameOverviewPanel from "@/components/business/dashboard/GameOverviewPanel";
 import InsightCards from "@/components/business/dashboard/InsightCards";
@@ -21,7 +22,7 @@ import type {
 } from "@/components/business/dashboard/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
-import { businessSessionDashboardApiRoute, businessSessionExportApiRoute, businessSessionRoute } from "@/lib/business/routes";
+import { BUSINESS_ROUTES, businessSessionDashboardApiRoute, businessSessionExportApiRoute, businessSessionRoute } from "@/lib/business/routes";
 
 type ManagerDashboardPageProps = {
   gameCode: string;
@@ -329,6 +330,29 @@ function formatUpdatedAt(value: string | null): string {
   }).format(asDate);
 }
 
+function formatLifecycleLabel(status: ManagerOverview["lifecycleStatus"] | null | undefined): string {
+  if (status === "completed") return "Completed";
+  if (status === "in_progress") return "Live";
+  return "Not Started";
+}
+
+function formatElapsed(overview: ManagerOverview | null): string {
+  if (!overview?.startedAt) return "--";
+
+  const startedAtMs = new Date(overview.startedAt).getTime();
+  const endedAtMs = overview.endedAt ? new Date(overview.endedAt).getTime() : Date.now();
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(endedAtMs)) return "--";
+
+  const durationMs = computeDurationMs({ startedAtMs, endedAtMs });
+  if (durationMs == null || durationMs < 0) return "--";
+
+  const totalMinutes = Math.floor(durationMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  return `${hours}h ${minutes}m`;
+}
+
 export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageProps) {
   const router = useRouter();
   const [analytics, setAnalytics] = useState<ManagerAnalyticsDocument | null>(null);
@@ -569,63 +593,98 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     }
   };
 
+  const lifecycleLabel = formatLifecycleLabel(analytics?.overview.lifecycleStatus);
+  const lifecycleTone =
+    analytics?.overview.lifecycleStatus === "completed"
+      ? "var(--mc-success)"
+      : analytics?.overview.lifecycleStatus === "in_progress"
+        ? "var(--mc-primary)"
+        : "var(--mc-warning)";
+  const durationLabel = formatElapsed(analytics?.overview ?? null);
+
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="mission-control space-y-6 p-4 md:p-6">
       <header
-        className="surface-light p-4"
+        className="mission-control__hero p-5 sm:p-6"
         style={branding?.brandAccentColor ? { borderTopWidth: "4px", borderTopColor: branding.brandAccentColor } : undefined}
       >
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            {branding?.companyLogoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={branding.companyLogoUrl} alt={`${branding.companyName ?? "Company"} logo`} className="h-10 w-10 rounded object-contain" />
-            ) : null}
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">
-                {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
-              </h1>
-              {branding?.brandThemeLabel ? <p className="text-xs uppercase tracking-wide text-slate-500">Theme: {branding.brandThemeLabel}</p> : null}
-              <p className="text-sm text-slate-600">Game code: {gameCode || "--"}</p>
+        <div className="relative z-10 grid gap-5 xl:grid-cols-[1.6fr_1fr] xl:items-start">
+          <div className="space-y-4">
+            <p className="mission-control__label">Mission Control</p>
+            <div className="flex items-start gap-3">
+              {branding?.companyLogoUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={branding.companyLogoUrl} alt={`${branding.companyName ?? "Company"} logo`} className="h-12 w-12 rounded object-contain" />
+              ) : null}
+              <div className="space-y-2">
+                <h1 className="mission-control__display text-2xl font-semibold sm:text-3xl">
+                  {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
+                </h1>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="mission-control__badge">
+                    {analytics?.overview.lifecycleStatus === "in_progress" ? <span className="mission-control__pulse" /> : null}
+                    {lifecycleLabel}
+                  </span>
+                  <span className="mission-control__badge">Game {gameCode || "--"}</span>
+                  {branding?.brandThemeLabel ? <span className="mission-control__badge">{branding.brandThemeLabel}</span> : null}
+                </div>
+              </div>
             </div>
           </div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Updated: {updatedAtLabel}</p>
+          <div className="mission-control__panel p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="mission-control__label">Updated</p>
+                <p className="mt-1 text-sm text-[var(--mc-text-soft)]">{updatedAtLabel}</p>
+              </div>
+              <div>
+                <p className="mission-control__label">Elapsed</p>
+                <p className="mission-control__display mt-1 text-sm text-[var(--mc-text-soft)]">{durationLabel}</p>
+              </div>
+              <div>
+                <p className="mission-control__label">Status</p>
+                <p className="mt-1 text-sm font-semibold" style={{ color: lifecycleTone }}>
+                  {lifecycleLabel}
+                </p>
+              </div>
+              <div>
+                <p className="mission-control__label">Exports</p>
+                <p className="mt-1 text-sm text-[var(--mc-text-soft)]">
+                  {analyticsAccess?.allowedSections.exports ? "Ready" : "Locked"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link className="mission-control__button mission-control__button--primary" href={BUSINESS_ROUTES.createSession}>
+                Start Session
+              </Link>
+              <button
+                className="mission-control__button"
+                disabled={exportStatus === "downloading" || !analyticsAccess?.allowedSections.exports}
+                onClick={() => void callReportingExport("csv")}
+                type="button"
+              >
+                {exportStatus === "downloading" ? "Exporting..." : "Export CSV"}
+              </button>
+              <button
+                className="mission-control__button"
+                disabled={exportStatus === "downloading" || !analyticsAccess?.allowedSections.exports}
+                onClick={() => void callReportingExport("summary")}
+                type="button"
+              >
+                {exportStatus === "downloading" ? "Exporting..." : "Download Summary"}
+              </button>
+            </div>
+            {exportMessage ? <p className="mt-3 text-sm text-[var(--mc-alert)]">{exportMessage}</p> : null}
+            {!analyticsAccess?.allowedSections.exports && guard.status === "allowed" && status === "ready" ? (
+              <p className="mt-2 text-xs text-[var(--mc-text-muted)]">Exports unlock after the live session ends.</p>
+            ) : null}
+          </div>
         </div>
       </header>
 
-      {guard.status === "allowed" && status === "ready" ? (
-        <section className="surface-light p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-sm font-semibold text-slate-900">Reporting Exports</h2>
-            {analyticsAccess?.allowedSections.exports ? (
-              <>
-                <button
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={exportStatus === "downloading"}
-                  onClick={() => void callReportingExport("csv")}
-                  type="button"
-                >
-                  {exportStatus === "downloading" ? "Exporting..." : "Export CSV"}
-                </button>
-                <button
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={exportStatus === "downloading"}
-                  onClick={() => void callReportingExport("summary")}
-                  type="button"
-                >
-                  {exportStatus === "downloading" ? "Exporting..." : "Download Summary"}
-                </button>
-              </>
-            ) : (
-              <p className="text-sm text-amber-900">Exports unlock after the live session ends.</p>
-            )}
-          </div>
-          {exportMessage ? <p className="mt-2 text-sm text-red-700">{exportMessage}</p> : null}
-        </section>
-      ) : null}
-
       {(guard.status === "loading-auth" || guard.status === "checking-access") && (
-        <section className="surface-light p-6 text-sm text-slate-600">
+        <section className="mission-control__panel p-6 text-sm text-[var(--mc-text-soft)]">
           Checking Business session access...
         </section>
       )}
@@ -649,7 +708,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       )}
 
       {guard.status === "allowed" && status === "loading" && (
-        <section className="surface-light p-6 text-sm text-slate-600">
+        <section className="mission-control__panel p-6 text-sm text-[var(--mc-text-soft)]">
           Loading analytics...
         </section>
       )}
@@ -669,45 +728,59 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       {guard.status === "allowed" && status === "ready" && analytics ? (
         <div className="grid gap-6">
           {isLiveLimited ? (
-            <section className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 shadow-sm">
+            <section className="mission-control__panel border-amber-300/40 bg-amber-900/20 p-4 text-sm text-amber-100">
               {analyticsAccess?.message ?? "Live analytics are enabled. Exports and final recommendations unlock after the session ends."}
             </section>
           ) : null}
-          {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
-          {canShowInsights ? (
-            <InsightCards insights={analytics.insights} />
-          ) : (
-            <LockedSection title="Activity Summary" message="Live analytics will populate as gameplay events occur." />
-          )}
-          <div className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-            {canShowPlayerPerformance ? (
-              <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
-            ) : (
-              <LockedSection title="Player Performance" message="No activity yet." />
-            )}
-            {canShowSessionSummary ? (
-              <div className="grid gap-4">
-                <SessionSummary
-                  summary={analytics.sessionSummary}
-                  overview={analytics.overview}
-                  insights={analytics.insights}
-                  players={analytics.playerPerformance}
-                />
-                {canShowFinalRecommendations ? (
-                  <ManagerRecommendations
+          <div className="grid gap-6 xl:grid-cols-12">
+            {analyticsAccess?.allowedSections.overview ? (
+              <div className="xl:col-span-5">
+                <GameOverviewPanel overview={analytics.overview} />
+              </div>
+            ) : null}
+            <div className={analyticsAccess?.allowedSections.overview ? "xl:col-span-7" : "xl:col-span-12"}>
+              {canShowInsights ? (
+                <InsightCards insights={analytics.insights} />
+              ) : (
+                <LockedSection title="Activity Summary" message="Live analytics will populate as gameplay events occur." />
+              )}
+            </div>
+          </div>
+          <div className="grid gap-6 xl:grid-cols-12">
+            <div className="xl:col-span-8">
+              {canShowPlayerPerformance ? (
+                <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
+              ) : (
+                <LockedSection title="Player Performance" message="No activity yet." />
+              )}
+            </div>
+            <div className="grid gap-4 xl:col-span-4">
+              {canShowSessionSummary ? (
+                <>
+                  <SessionSummary
                     summary={analytics.sessionSummary}
+                    overview={analytics.overview}
                     insights={analytics.insights}
                     players={analytics.playerPerformance}
                   />
-                ) : (
-                  <LockedSection title="Final Recommendations" message="Final recommendations unlock after the live session ends." />
-                )}
-              </div>
-            ) : (
-              <LockedSection title="Session Summary" message="Live analytics will populate as gameplay events occur." />
-            )}
+                  {canShowFinalRecommendations ? (
+                    <ManagerRecommendations
+                      summary={analytics.sessionSummary}
+                      insights={analytics.insights}
+                      players={analytics.playerPerformance}
+                    />
+                  ) : (
+                    <LockedSection title="Final Recommendations" message="Final recommendations unlock after the live session ends." />
+                  )}
+                </>
+              ) : (
+                <LockedSection title="Session Summary" message="Live analytics will populate as gameplay events occur." />
+              )}
+            </div>
           </div>
-          <SessionTimeline gameCode={gameCode} />
+          <div className="mission-control__panel p-2">
+            <SessionTimeline gameCode={gameCode} />
+          </div>
         </div>
       ) : null}
 

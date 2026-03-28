@@ -106,10 +106,10 @@ function findMetric(insights: ManagerInsight[], token: string): number | null {
 
 function Finding({ label, headline, interpretation }: { label: string; headline: string; interpretation: string }) {
   return (
-    <article className="surface-light-muted p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-semibold text-slate-900">{headline}</p>
-      <p className="mt-1 text-xs text-slate-600">{interpretation}</p>
+    <article className="mission-control__panel-alt p-3">
+      <p className="mission-control__label">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-[var(--mc-text)]">{headline}</p>
+      <p className="mt-1 text-xs text-[var(--mc-text-soft)]">{interpretation}</p>
     </article>
   );
 }
@@ -142,8 +142,8 @@ export default function SessionSummary({ summary, overview, insights, players }:
     .join(" ");
 
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Session Summary</h2>
+    <section className="mission-control__panel p-4 sm:p-5">
+      <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Session Summary</h2>
       <div className="mt-4 grid gap-3">
         {availableFindings > 0 ? (
           <>
@@ -172,7 +172,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
             ) : null}
           </>
         ) : (
-          <p className="surface-light-muted p-3 text-sm text-slate-600">Not enough completed session data yet.</p>
+          <p className="mission-control__panel-alt p-3 text-sm text-[var(--mc-text-soft)]">Not enough completed session data yet.</p>
         )}
 
         <Finding

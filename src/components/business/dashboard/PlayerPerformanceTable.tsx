@@ -44,14 +44,14 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
   );
 
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Player Performance</h2>
+    <section className="mission-control__panel p-4 sm:p-5">
+      <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Player Performance</h2>
       {isClassicMode(mode) ? (
-        <p className="mt-1 text-xs text-slate-500">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>
+        <p className="mt-1 text-xs text-[var(--mc-text-muted)]">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>
       ) : null}
       <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200 text-sm">
-          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+        <table className="min-w-full divide-y divide-[var(--mc-border)] text-sm">
+          <thead className="bg-white/4 text-left text-xs uppercase tracking-wide text-[var(--mc-text-muted)]">
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
@@ -61,11 +61,11 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
               <th className="px-3 py-2">Dispute Rate</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-[var(--mc-border)]">
             {sortedPlayers.length > 0 ? (
               sortedPlayers.map((player, index) => (
-                <tr key={player.playerId ?? player.userId ?? `player-row-${index}`} className="text-slate-700">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-900">{player.playerName}</td>
+                <tr key={player.playerId ?? player.userId ?? `player-row-${index}`} className="text-[var(--mc-text-soft)]">
+                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[var(--mc-text)]">{player.playerName}</td>
                   <td className="px-3 py-2">{formatCount(player.kills ?? player.confirmedKills)}</td>
                   <td className="px-3 py-2">{formatCount(player.deaths)}</td>
                   <td className="px-3 py-2">{formatRatio(player.kd)}</td>
@@ -74,7 +74,7 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
                 </tr>
               ))
             ) : (
-              <tr className="text-slate-500">
+              <tr className="text-[var(--mc-text-muted)]">
                 <td className="px-3 py-3" colSpan={6}>
                   No player performance data has been aggregated for this game yet.
                 </td>

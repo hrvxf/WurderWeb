@@ -36,37 +36,37 @@ export default function GameOverviewPanel({ overview }: GameOverviewPanelProps) 
   const sessionState = sessionStatus === "ended" ? "Ended session" : sessionStatus === "live" ? "Active session" : "Session not started";
 
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Game Overview</h2>
+    <section className="mission-control__panel p-4 sm:p-5">
+      <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Game Overview</h2>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="surface-light-muted p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Game</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">{overview.gameName || overview.gameCode}</p>
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Game</p>
+          <p className="mt-1 text-sm font-medium text-[var(--mc-text)]">{overview.gameName || overview.gameCode}</p>
         </div>
-        <div className="surface-light-muted p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Status</p>
-          <p className="mt-1 text-sm font-medium capitalize text-slate-900">{overview.status ?? sessionStatus}</p>
-          <p className="mt-1 text-xs text-slate-600">{sessionState}</p>
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Status</p>
+          <p className="mt-1 text-sm font-medium capitalize text-[var(--mc-text)]">{overview.status ?? sessionStatus}</p>
+          <p className="mt-1 text-xs text-[var(--mc-text-muted)]">{sessionState}</p>
         </div>
-        <div className="surface-light-muted p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Players</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Players</p>
+          <p className="mt-1 text-sm font-medium text-[var(--mc-text)]">
             {overview.activePlayers.toLocaleString()} active / {overview.totalPlayers.toLocaleString()} total
           </p>
         </div>
-        <div className="surface-light-muted p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Sessions</p>
-          <p className="mt-1 text-sm font-medium text-slate-900">{overview.totalSessions.toLocaleString()}</p>
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Sessions</p>
+          <p className="mt-1 text-sm font-medium text-[var(--mc-text)]">{overview.totalSessions.toLocaleString()}</p>
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-md border border-slate-100 p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Started</p>
-          <p className="mt-1 text-sm text-slate-900">{formatDate(overview.startedAt)}</p>
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Started</p>
+          <p className="mt-1 text-sm text-[var(--mc-text)]">{formatDate(overview.startedAt)}</p>
         </div>
-        <div className="rounded-md border border-slate-100 p-3">
-          <p className="text-xs uppercase tracking-wide text-slate-500">Ended</p>
-          <p className="mt-1 text-sm text-slate-900">{formatDate(overview.endedAt)}</p>
+        <div className="mission-control__panel-alt p-3">
+          <p className="mission-control__label">Ended</p>
+          <p className="mt-1 text-sm text-[var(--mc-text)]">{formatDate(overview.endedAt)}</p>
         </div>
       </div>
     </section>

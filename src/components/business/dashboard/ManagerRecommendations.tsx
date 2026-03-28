@@ -86,17 +86,17 @@ export default function ManagerRecommendations({ summary, insights, players }: M
   const recommendations = getManagerRecommendations({ summary, insights, players });
 
   return (
-    <section className="surface-light p-4">
-      <h2 className="text-lg font-semibold text-slate-900">Manager Recommendations</h2>
+    <section className="mission-control__panel p-4 sm:p-5">
+      <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Manager Recommendations</h2>
       <div className="mt-4 grid gap-3">
         {recommendations.map((recommendation) => (
-          <article key={recommendation.id} className="surface-light-muted p-3">
-            <h3 className="text-sm font-semibold text-slate-900">{recommendation.title}</h3>
-            <p className="mt-1 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">Reason:</span> {recommendation.reason}
+          <article key={recommendation.id} className="mission-control__panel-alt p-3">
+            <h3 className="text-sm font-semibold text-[var(--mc-text)]">{recommendation.title}</h3>
+            <p className="mt-1 text-sm text-[var(--mc-text-soft)]">
+              <span className="font-medium text-[var(--mc-text)]">Reason:</span> {recommendation.reason}
             </p>
-            <p className="mt-1 text-sm text-slate-700">
-              <span className="font-medium text-slate-900">Action:</span> {recommendation.action}
+            <p className="mt-1 text-sm text-[var(--mc-text-soft)]">
+              <span className="font-medium text-[var(--mc-text)]">Action:</span> {recommendation.action}
             </p>
           </article>
         ))}
