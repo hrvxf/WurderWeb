@@ -14,6 +14,7 @@ import {
   createGameForHostUid,
   GameCodeCollisionError,
 } from "@/lib/game/create-game";
+import { isCanonicalGameMode, parseCanonicalGameMode } from "@/lib/game/mode";
 import {
   FirebaseAuthInfrastructureError,
   FirebaseAuthUnauthenticatedError,
@@ -73,7 +74,8 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
       : managerParticipationRaw === "host_only"
         ? "host_only"
         : "host_only";
-  const mode = typeof body.mode === "string" ? body.mode.trim() : "";
+  const modeInput = typeof body.mode === "string" ? body.mode.trim() : "";
+  const mode = parseCanonicalGameMode(modeInput);
   const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
   const durationMinutes = Number(body.durationMinutes);
   const teamsEnabled = Boolean(body.teamsEnabled);
@@ -88,6 +90,10 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
 
   if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Missing or invalid b2b session fields.");
+  }
+
+  if (!isCanonicalGameMode(mode)) {
+    throw new Error("Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds.");
   }
 
   if (!templateId && saveTemplate && !templateName) {

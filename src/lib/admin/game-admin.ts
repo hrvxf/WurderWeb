@@ -3,6 +3,7 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { readEnv } from "@/lib/env";
+import { parseCanonicalGameMode } from "@/lib/game/mode";
 import { adminDb } from "@/lib/firebase/admin";
 
 export type AdminHealthStatus = "healthy" | "warning" | "blocking";
@@ -202,8 +203,9 @@ function buildDiagnosticsChecks(game: Record<string, unknown>, players: Record<s
   }
   const multiClaims = [...nonTerminalByKiller.entries()].filter(([, count]) => count > 1);
 
-  const contractModeOk = mode ? ["classic", "ring", "guild"].includes(mode) : false;
-  const contractPresenceOk = mode !== "classic" || players.every((player) => asString(player.contractId) || asString(player.targetId));
+  const canonicalMode = parseCanonicalGameMode(mode);
+  const contractModeOk = canonicalMode != null;
+  const contractPresenceOk = canonicalMode !== "classic" || players.every((player) => asString(player.contractId) || asString(player.targetId));
 
   const checks: AdminDiagnosticCheck[] = [
     {
@@ -469,7 +471,7 @@ export async function performRepairAction(input: {
 
   if (input.action === "reissueContract") {
     const mode = asString(gameDoc.data()?.mode);
-    if (!mode || !["classic", "ring", "guild"].includes(mode)) {
+    if (!mode || !parseCanonicalGameMode(mode)) {
       return {
         ok: false as const,
         code: "UNSUPPORTED_MODE",

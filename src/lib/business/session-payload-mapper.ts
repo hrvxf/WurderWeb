@@ -53,7 +53,7 @@ export function buildBusinessSessionManagerConfig(setup: SetupState): BusinessSe
     }
   > = {
     guilds: {
-      mode: "guild",
+      mode: "guilds",
       teamsEnabled: true,
       wordDifficulty: "medium",
       minSecondsBeforeClaim: 5,
@@ -69,7 +69,7 @@ export function buildBusinessSessionManagerConfig(setup: SetupState): BusinessSe
       freeRefreshCooldownSeconds: 12,
     },
     elimination: {
-      mode: "ring",
+      mode: "elimination",
       teamsEnabled: false,
       wordDifficulty: "hard",
       minSecondsBeforeClaim: 0,

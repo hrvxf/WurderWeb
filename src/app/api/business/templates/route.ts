@@ -8,6 +8,7 @@ import {
   listOrganizationTemplates,
 } from "@/lib/game/company-config";
 import { entitlementsForTier, hasFeature } from "@/lib/product/entitlements";
+import { isCanonicalGameMode, parseCanonicalGameMode } from "@/lib/game/mode";
 import {
   FirebaseAuthInfrastructureError,
   FirebaseAuthUnauthenticatedError,
@@ -117,7 +118,8 @@ export async function POST(request: Request) {
 
     const orgName = typeof body.orgName === "string" ? body.orgName.trim() : "";
     const templateName = typeof body.templateName === "string" ? body.templateName.trim() : "";
-    const mode = typeof body.mode === "string" ? body.mode.trim() : "";
+    const modeInput = typeof body.mode === "string" ? body.mode.trim() : "";
+    const mode = parseCanonicalGameMode(modeInput);
     const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
     const durationMinutes = Number(body.durationMinutes);
     const teamsEnabled = Boolean(body.teamsEnabled);
@@ -127,6 +129,10 @@ export async function POST(request: Request) {
 
     if (!orgName || !templateName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
       return NextResponse.json({ code: "INVALID_REQUEST", message: "Missing or invalid template fields." }, { status: 400 });
+    }
+
+    if (!isCanonicalGameMode(mode)) {
+      return NextResponse.json({ code: "INVALID_REQUEST", message: "Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds." }, { status: 400 });
     }
 
     const requestedOrgId = typeof body.orgId === "string" ? body.orgId.trim() : "";

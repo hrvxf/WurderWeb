@@ -5,6 +5,7 @@ import { getCurrentUser, CurrentUserInfrastructureError, CurrentUserUnauthentica
 import { adminDb } from "@/lib/firebase/admin";
 import { normalizeSessionGameType } from "@/lib/game/session-type";
 import { parseMemberGameTypeFilter, type SessionGameTypeFilter } from "@/lib/game/game-type-filter";
+import { parseCanonicalGameMode } from "@/lib/game/mode";
 
 export const runtime = "nodejs";
 
@@ -80,8 +81,8 @@ function timestampToIso(value: unknown): string | null {
 }
 
 function normalizeMode(value: unknown): string | null {
-  const mode = asNonEmptyString(value);
-  return mode ? mode.toLowerCase() : null;
+  if (typeof value === "string" && value.trim().toLowerCase() === "all") return "all";
+  return parseCanonicalGameMode(value);
 }
 
 function readGameCode(data: UserGameDoc, docId: string): string | null {

@@ -26,7 +26,7 @@ const sharedAnalyticsNote = "Different modes surface different behaviours and in
 export const gameModeOptions: GameModeOption[] = [
   {
     value: "guilds",
-    label: "Guilds",
+    label: "Guild",
     practicalDescription: "Team-based play that highlights collaboration, coordination, and group dynamics.",
     interactionDescription: "People work in teams, communicate continuously, and adjust together throughout the session.",
     businessUseCases: [
