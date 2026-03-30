@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { getFunctions, httpsCallable } from "firebase/functions";
 
-import { app } from "@/lib/firebase/client";
 import { useAuth } from "@/lib/auth/AuthProvider";
+import { businessSessionDashboardApiRoute } from "@/lib/business/routes";
 
 type SessionTimelineProps = {
   gameCode: string;
@@ -104,14 +103,24 @@ export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
     const load = async () => {
       try {
         setStatus("loading");
-        const functions = getFunctions(app);
-        const fetchTimeline = httpsCallable(functions, "managerGetSessionTimeline");
-        const response = await fetchTimeline({ gameCode: normalizedCode });
+        const token = await user.getIdToken();
+        const response = await fetch(businessSessionDashboardApiRoute(normalizedCode), {
+          headers: {
+            authorization: `Bearer ${token}`,
+          },
+        });
 
         if (cancelled) return;
 
-        const payload = response.data && typeof response.data === "object" ? (response.data as Record<string, unknown>) : {};
-        const timeline = parseTimeline(payload.timeline);
+        if (!response.ok) {
+          setEvents([]);
+          setStatus("error");
+          return;
+        }
+
+        const payload = (await response.json().catch(() => ({}))) as { analytics?: unknown };
+        const analytics = payload.analytics && typeof payload.analytics === "object" ? (payload.analytics as Record<string, unknown>) : {};
+        const timeline = parseTimeline(analytics.timeline);
         setEvents(timeline);
         setStatus("ready");
       } catch (error) {
@@ -137,7 +146,7 @@ export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
   const hasEvents = useMemo(() => events.length > 0, [events]);
 
   return (
-    <section className="p-4 sm:p-5">
+    <section className="p-3.5 sm:p-4">
       <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Session Timeline</h2>
 
       {status === "loading" ? <p className="mt-3 text-sm text-[var(--mc-text-soft)]">Loading timeline...</p> : null}
@@ -145,11 +154,11 @@ export default function SessionTimeline({ gameCode }: SessionTimelineProps) {
       {status === "ready" && !hasEvents ? <p className="mt-3 text-sm text-[var(--mc-text-soft)]">No timeline events yet.</p> : null}
 
       {hasEvents ? (
-        <ol className="mt-4 space-y-3">
+        <ol className="mt-3 border-t border-[var(--mc-border)]">
           {events.map((event) => (
-            <li key={event.id} className="grid grid-cols-[72px_1fr] gap-3 text-sm text-[var(--mc-text-soft)]">
+            <li key={event.id} className="grid grid-cols-[68px_1fr] gap-2 border-b border-[var(--mc-border)] py-2 text-sm text-[var(--mc-text-soft)]">
               <span className="font-medium tabular-nums text-[var(--mc-text-muted)]">{formatTime(event.timestamp)}</span>
-              <p className="mission-control__panel-alt px-3 py-2 text-[var(--mc-text)]">{event.message}</p>
+              <p className="text-[var(--mc-text)]">{event.message}</p>
             </li>
           ))}
         </ol>

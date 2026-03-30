@@ -12,6 +12,7 @@ import {
 } from "@/lib/analytics/manager-dashboard";
 import { entitlementsForTier, type ProductTier } from "@/lib/product/entitlements";
 import { resolveOrganizationTier } from "@/lib/product/org-tier";
+import { enrichPlayerAnalyticsWithAvatars } from "@/lib/manager/player-avatar-enrichment";
 import {
   assertManagerAccessForGame,
   ManagerAccessInfrastructureError,
@@ -375,10 +376,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       gameRef.collection("claims").get(),
       adminDb.collection("gameEvents").doc(normalizedCode).collection("events").orderBy("createdAt", "desc").limit(500).get(),
     ]);
-    const hasPlayerAnalytics = playerAnalyticsDocs.length > 0;
+    const enrichedPlayerAnalyticsDocs = await enrichPlayerAnalyticsWithAvatars(
+      playerAnalyticsDocs.map((doc) => ({
+        id: doc.id,
+        data: (doc.data() ?? {}) as Record<string, unknown>,
+      }))
+    );
+    const hasPlayerAnalytics = enrichedPlayerAnalyticsDocs.length > 0;
     const perEventTotals = new Map<string, number>();
-    const playerPerformance = playerAnalyticsDocs.map((doc) => {
-      const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
+    const playerPerformance = enrichedPlayerAnalyticsDocs.map((doc) => {
+      const data = (doc.data ?? {}) as PlayerAnalyticsDoc;
       const eventCounts =
         data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
       for (const [eventType, rawCount] of Object.entries(eventCounts)) {
@@ -484,8 +491,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
         (visibility === "limited_live" ? "Full analytics unlock after the session ends." : null),
     };
     const updatedAt = toIso(
-      playerAnalyticsDocs
-        .map((doc) => ((doc.data() ?? {}) as PlayerAnalyticsDoc).updatedAt)
+      enrichedPlayerAnalyticsDocs
+        .map((doc) => ((doc.data ?? {}) as PlayerAnalyticsDoc).updatedAt)
         .find((value) => value != null) ?? null
     );
     const aggregatedUpdatedAtMs = updatedAt ? new Date(updatedAt).getTime() : null;
@@ -501,8 +508,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ game
       totalEventsFromPlayers > 0 && !useLiveFallback
         ? totalEventsFromPlayers
         : Math.max(totalEventsFromCounts, liveTotalEventsFromCounts, totalEventsFromPlayers);
-    const effectiveTotalPlayers = Math.max(playerAnalyticsDocs.length, liveAnalytics.totalPlayers);
-    const effectiveTotalSessions = Math.max(playerAnalyticsDocs.length > 0 ? 1 : 0, liveAnalytics.totalSessions);
+    const effectiveTotalPlayers = Math.max(enrichedPlayerAnalyticsDocs.length, liveAnalytics.totalPlayers);
+    const effectiveTotalSessions = Math.max(enrichedPlayerAnalyticsDocs.length > 0 ? 1 : 0, liveAnalytics.totalSessions);
     const insights: DashboardInsight[] = [...mergedEventTotals.entries()]
       .map(([eventType, value]) => ({ label: eventLabel(eventType), value, message: `${eventLabel(eventType)} occurred ${value} times.` }))
       .sort((a, b) => b.value - a.value);

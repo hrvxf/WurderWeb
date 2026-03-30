@@ -22,7 +22,14 @@ import type {
 } from "@/components/business/dashboard/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { useManagerRouteGuard } from "@/lib/auth/use-manager-route-guard";
-import { BUSINESS_ROUTES, businessSessionDashboardApiRoute, businessSessionExportApiRoute, businessSessionRoute } from "@/lib/business/routes";
+import {
+  BUSINESS_ROUTES,
+  businessSessionDashboardApiRoute,
+  businessSessionEndApiRoute,
+  businessSessionExportApiRoute,
+  businessSessionRoute,
+} from "@/lib/business/routes";
+import { readClientCache, writeClientCache } from "@/lib/business/client-response-cache";
 
 type ManagerDashboardPageProps = {
   gameCode: string;
@@ -58,6 +65,16 @@ type SummaryModalState = {
   title: string;
   details: string;
 };
+
+type DashboardApiPayload = {
+  analytics?: unknown;
+  analyticsAccess?: unknown;
+  branding?: unknown;
+  code?: unknown;
+  message?: unknown;
+};
+
+const GAME_DASHBOARD_CACHE_TTL_MS = 45_000;
 
 function parseNumber(value: unknown): number {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -101,6 +118,21 @@ function formatInsightLabel(value: string): string {
     .join(" ");
 }
 
+function deriveLifecycleStatusFromOverview(overview: Record<string, unknown>): "completed" | "in_progress" | "not_started" {
+  const lifecycleRaw = parseString(overview.lifecycleStatus).trim().toLowerCase();
+  if (lifecycleRaw === "completed") return "completed";
+  if (lifecycleRaw === "in_progress") return "in_progress";
+  if (lifecycleRaw === "not_started") return "not_started";
+
+  const statusRaw = parseString(overview.status).trim().toLowerCase();
+  const startedAt = parseNullableString(overview.startedAt);
+  const endedAt = parseNullableString(overview.endedAt);
+
+  if (endedAt || ["ended", "completed", "complete"].includes(statusRaw)) return "completed";
+  if (startedAt || ["active", "in_progress", "live", "started"].includes(statusRaw)) return "in_progress";
+  return "not_started";
+}
+
 function normalizeOverview(value: unknown, gameCode: string): ManagerOverview {
   const overview = value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 
@@ -108,12 +140,7 @@ function normalizeOverview(value: unknown, gameCode: string): ManagerOverview {
     gameCode,
     gameName: parseString(overview.gameName),
     status: parseString(overview.status) || "unknown",
-    lifecycleStatus:
-      parseString(overview.lifecycleStatus) === "completed"
-        ? "completed"
-        : parseString(overview.lifecycleStatus) === "in_progress"
-          ? "in_progress"
-          : "not_started",
+    lifecycleStatus: deriveLifecycleStatusFromOverview(overview),
     mode: parseNullableString(overview.mode),
     startedAt: parseNullableString(overview.startedAt),
     endedAt: parseNullableString(overview.endedAt),
@@ -221,8 +248,8 @@ function normalizePlayers(value: unknown): ManagerAnalyticsDocument["playerPerfo
       (disputes != null && claims != null ? computeDisputeRate(disputes, claims) : null);
 
     return {
-      playerId: parseString(player.playerId) || `row-${index}`,
-      playerName: parseString(player.playerName) || displayName,
+      playerId: parseString(player.playerId) || parseString(player.userId) || `row-${index}`,
+      playerName: displayName || parseString(player.playerName) || "Unknown",
       displayName,
       avatarUrl: parseNullableString(player.avatarUrl),
       userId: parseNullableString(player.userId),
@@ -361,11 +388,15 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const [analyticsAccess, setAnalyticsAccess] = useState<AnalyticsAccessState | null>(null);
   const [exportStatus, setExportStatus] = useState<"idle" | "downloading">("idle");
   const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [endStatus, setEndStatus] = useState<"idle" | "ending">("idle");
+  const [endMessage, setEndMessage] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [summaryModal, setSummaryModal] = useState<SummaryModalState>({
     open: false,
     title: "Summary download",
     details: "",
   });
+  const [showLoadingHint, setShowLoadingHint] = useState(false);
   const [branding, setBranding] = useState<ManagerBranding | null>(null);
   const { user } = useAuth();
   const guard = useManagerRouteGuard(gameCode);
@@ -383,6 +414,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       setStatusMessage(null);
       setAnalyticsAccess(null);
       setExportMessage(null);
+      setEndMessage(null);
       setBranding(null);
       setAnalytics(null);
       return;
@@ -396,7 +428,50 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     }
 
     let isCancelled = false;
-    setStatus("loading");
+    const cacheKey = `business.game.dashboard.v1.${normalizedCode.toUpperCase()}`;
+    const cached = readClientCache<DashboardApiPayload>(cacheKey, GAME_DASHBOARD_CACHE_TTL_MS);
+    const hasCachedPayload = Boolean(cached?.analytics && typeof cached.analytics === "object");
+
+    const applyPayload = (payload: DashboardApiPayload) => {
+      setAnalytics(normalizeAnalytics(payload.analytics, normalizedCode));
+      const normalizedAccess =
+        payload.analyticsAccess && typeof payload.analyticsAccess === "object"
+          ? (payload.analyticsAccess as Record<string, unknown>)
+          : {};
+      const normalizedAllowedSections =
+        normalizedAccess.allowedSections && typeof normalizedAccess.allowedSections === "object"
+          ? (normalizedAccess.allowedSections as Record<string, unknown>)
+          : {};
+      setAnalyticsAccess({
+        visibility: parseString(normalizedAccess.visibility) === "full_post_session" ? "full_post_session" : "limited_live",
+        allowedSections: {
+          overview: Boolean(normalizedAllowedSections.overview),
+          insights: Boolean(normalizedAllowedSections.insights),
+          playerComparison: Boolean(normalizedAllowedSections.playerComparison),
+          sessionSummary: Boolean(normalizedAllowedSections.sessionSummary),
+          exports: Boolean(normalizedAllowedSections.exports),
+        },
+        message: parseNullableString(normalizedAccess.message),
+      });
+      const normalizedBranding =
+        payload.branding && typeof payload.branding === "object"
+          ? (payload.branding as Record<string, unknown>)
+          : {};
+      setBranding({
+        companyName: parseNullableString(normalizedBranding.companyName),
+        companyLogoUrl: parseNullableString(normalizedBranding.companyLogoUrl),
+        brandAccentColor: parseNullableString(normalizedBranding.brandAccentColor),
+        brandThemeLabel: parseNullableString(normalizedBranding.brandThemeLabel),
+      });
+      setStatusMessage(null);
+      setStatus("ready");
+    };
+
+    if (hasCachedPayload) {
+      applyPayload(cached as DashboardApiPayload);
+    } else {
+      setStatus("loading");
+    }
 
     const load = async () => {
       try {
@@ -413,13 +488,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
             authorization: `Bearer ${token}`,
           },
         });
-        const payload = (await response.json().catch(() => ({}))) as {
-          analytics?: unknown;
-          analyticsAccess?: unknown;
-          branding?: unknown;
-          code?: unknown;
-          message?: unknown;
-        };
+        const payload = (await response.json().catch(() => ({}))) as DashboardApiPayload;
 
         if (isCancelled) return;
 
@@ -432,38 +501,8 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               });
             }
           }
-          setAnalytics(normalizeAnalytics(payload.analytics, normalizedCode));
-          const normalizedAccess =
-            payload.analyticsAccess && typeof payload.analyticsAccess === "object"
-              ? (payload.analyticsAccess as Record<string, unknown>)
-              : {};
-          const normalizedAllowedSections =
-            normalizedAccess.allowedSections && typeof normalizedAccess.allowedSections === "object"
-              ? (normalizedAccess.allowedSections as Record<string, unknown>)
-              : {};
-          setAnalyticsAccess({
-            visibility: parseString(normalizedAccess.visibility) === "full_post_session" ? "full_post_session" : "limited_live",
-            allowedSections: {
-              overview: Boolean(normalizedAllowedSections.overview),
-              insights: Boolean(normalizedAllowedSections.insights),
-              playerComparison: Boolean(normalizedAllowedSections.playerComparison),
-              sessionSummary: Boolean(normalizedAllowedSections.sessionSummary),
-              exports: Boolean(normalizedAllowedSections.exports),
-            },
-            message: parseNullableString(normalizedAccess.message),
-          });
-          const normalizedBranding =
-            payload.branding && typeof payload.branding === "object"
-              ? (payload.branding as Record<string, unknown>)
-              : {};
-          setBranding({
-            companyName: parseNullableString(normalizedBranding.companyName),
-            companyLogoUrl: parseNullableString(normalizedBranding.companyLogoUrl),
-            brandAccentColor: parseNullableString(normalizedBranding.brandAccentColor),
-            brandThemeLabel: parseNullableString(normalizedBranding.brandThemeLabel),
-          });
-          setStatusMessage(null);
-          setStatus("ready");
+          writeClientCache(cacheKey, payload);
+          applyPayload(payload);
           return;
         }
 
@@ -474,13 +513,13 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
               ? "Game exists, but aggregated analytics are not generated yet."
               : "Game analytics were not found."
           );
-          setAnalytics(null);
+          if (!hasCachedPayload) setAnalytics(null);
           return;
         }
 
         setStatus("error");
         setStatusMessage(parseString(payload.message) || "Unable to load dashboard analytics.");
-        setAnalytics(null);
+        if (!hasCachedPayload) setAnalytics(null);
       } catch (error) {
         if (isCancelled) return;
         if (process.env.NODE_ENV !== "production") {
@@ -491,7 +530,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         }
         setStatus("error");
         setStatusMessage("Unable to load dashboard analytics right now.");
-        setAnalytics(null);
+        if (!hasCachedPayload) setAnalytics(null);
       }
     };
 
@@ -500,7 +539,18 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     return () => {
       isCancelled = true;
     };
-  }, [gameCode, guard.status, user]);
+  }, [gameCode, guard.status, user, refreshNonce]);
+
+  useEffect(() => {
+    const loadingVisible =
+      guard.status === "loading-auth" || guard.status === "checking-access" || (guard.status === "allowed" && status === "loading");
+    if (!loadingVisible) {
+      setShowLoadingHint(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowLoadingHint(true), 350);
+    return () => window.clearTimeout(timer);
+  }, [guard.status, status]);
 
   const updatedAtLabel = useMemo(() => formatUpdatedAt(analytics?.updatedAt ?? null), [analytics?.updatedAt]);
   const isLiveLimited = analyticsAccess?.visibility === "limited_live";
@@ -593,6 +643,49 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
     }
   };
 
+  const callManualEndSession = async () => {
+    if (!user) {
+      setEndMessage("Sign in before ending this session.");
+      return;
+    }
+
+    const normalizedCode = gameCode.trim();
+    if (!normalizedCode) {
+      setEndMessage("Missing game code.");
+      return;
+    }
+
+    setEndStatus("ending");
+    setEndMessage(null);
+
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(businessSessionEndApiRoute(normalizedCode), {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+        },
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as { message?: unknown; alreadyEnded?: unknown };
+      if (!response.ok) {
+        const fallback = parseString(payload.message) || "Unable to end this session right now.";
+        setEndMessage(fallback);
+        return;
+      }
+
+      setEndMessage(payload.alreadyEnded === true ? "Session is already ended." : "Session ended successfully.");
+      setRefreshNonce((current) => current + 1);
+    } catch (error) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[manager] Manual end failed", { gameCode: normalizedCode, error });
+      }
+      setEndMessage("Unable to end this session right now.");
+    } finally {
+      setEndStatus("idle");
+    }
+  };
+
   const lifecycleLabel = formatLifecycleLabel(analytics?.overview.lifecycleStatus);
   const lifecycleTone =
     analytics?.overview.lifecycleStatus === "completed"
@@ -603,61 +696,44 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
   const durationLabel = formatElapsed(analytics?.overview ?? null);
 
   return (
-    <div className="mission-control space-y-6 p-4 md:p-6">
+    <div className="mission-control mc-rhythm-16 mx-auto w-full max-w-[1360px] p-3 md:p-4">
       <header
-        className="mission-control__hero p-5 sm:p-6"
-        style={branding?.brandAccentColor ? { borderTopWidth: "4px", borderTopColor: branding.brandAccentColor } : undefined}
+        className="mission-control__hero p-4"
+        style={branding?.brandAccentColor ? { borderTopWidth: "3px", borderTopColor: branding.brandAccentColor } : undefined}
       >
-        <div className="relative z-10 grid gap-5 xl:grid-cols-[1.6fr_1fr] xl:items-start">
-          <div className="space-y-4">
+        <div className="relative z-10 mc-rhythm-12">
+          <div className="flex flex-wrap items-center gap-3">
             <p className="mission-control__label">Mission Control</p>
-            <div className="flex items-start gap-3">
+            <span className="mission-control__badge">
+              {analytics?.overview.lifecycleStatus === "in_progress" ? <span className="mission-control__pulse" /> : null}
+              {lifecycleLabel}
+            </span>
+            <span className="mission-control__badge">Game {gameCode || "--"}</span>
+            {branding?.brandThemeLabel ? <span className="mission-control__badge">{branding.brandThemeLabel}</span> : null}
+          </div>
+
+          <div className="grid gap-3 xl:grid-cols-[1fr_auto] xl:items-center">
+            <div className="flex min-w-0 items-center gap-3">
               {branding?.companyLogoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={branding.companyLogoUrl} alt={`${branding.companyName ?? "Company"} logo`} className="h-12 w-12 rounded object-contain" />
+                <img src={branding.companyLogoUrl} alt={`${branding.companyName ?? "Company"} logo`} className="h-10 w-10 rounded object-contain" />
               ) : null}
-              <div className="space-y-2">
-                <h1 className="mission-control__display text-2xl font-semibold sm:text-3xl">
-                  {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
-                </h1>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="mission-control__badge">
-                    {analytics?.overview.lifecycleStatus === "in_progress" ? <span className="mission-control__pulse" /> : null}
-                    {lifecycleLabel}
-                  </span>
-                  <span className="mission-control__badge">Game {gameCode || "--"}</span>
-                  {branding?.brandThemeLabel ? <span className="mission-control__badge">{branding.brandThemeLabel}</span> : null}
-                </div>
-              </div>
+              <h1 className="mission-control__display truncate text-xl font-semibold sm:text-2xl">
+                {branding?.companyName ? `${branding.companyName} Session Dashboard` : "Business Session Dashboard"}
+              </h1>
             </div>
-          </div>
-          <div className="mission-control__panel p-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="mission-control__label">Updated</p>
-                <p className="mt-1 text-sm text-[var(--mc-text-soft)]">{updatedAtLabel}</p>
-              </div>
-              <div>
-                <p className="mission-control__label">Elapsed</p>
-                <p className="mission-control__display mt-1 text-sm text-[var(--mc-text-soft)]">{durationLabel}</p>
-              </div>
-              <div>
-                <p className="mission-control__label">Status</p>
-                <p className="mt-1 text-sm font-semibold" style={{ color: lifecycleTone }}>
-                  {lifecycleLabel}
-                </p>
-              </div>
-              <div>
-                <p className="mission-control__label">Exports</p>
-                <p className="mt-1 text-sm text-[var(--mc-text-soft)]">
-                  {analyticsAccess?.allowedSections.exports ? "Ready" : "Locked"}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Link className="mission-control__button mission-control__button--primary" href={BUSINESS_ROUTES.createSession}>
                 Start Session
               </Link>
+              <button
+                className="mission-control__button"
+                disabled={endStatus === "ending" || analytics?.overview.lifecycleStatus === "completed" || guard.status !== "allowed"}
+                onClick={() => void callManualEndSession()}
+                type="button"
+              >
+                {endStatus === "ending" ? "Ending..." : analytics?.overview.lifecycleStatus === "completed" ? "Session Ended" : "End Session"}
+              </button>
               <button
                 className="mission-control__button"
                 disabled={exportStatus === "downloading" || !analyticsAccess?.allowedSections.exports}
@@ -675,15 +751,50 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 {exportStatus === "downloading" ? "Exporting..." : "Download Summary"}
               </button>
             </div>
-            {exportMessage ? <p className="mt-3 text-sm text-[var(--mc-alert)]">{exportMessage}</p> : null}
-            {!analyticsAccess?.allowedSections.exports && guard.status === "allowed" && status === "ready" ? (
-              <p className="mt-2 text-xs text-[var(--mc-text-muted)]">Exports unlock after the live session ends.</p>
-            ) : null}
           </div>
+
+          <div className="border-t border-[var(--mc-border)] pt-2.5">
+            <dl className="grid gap-x-4 gap-y-2 sm:grid-cols-2 xl:grid-cols-6">
+              <div>
+                <dt className="mission-control__label">Status</dt>
+                <dd className="mt-1 text-sm font-semibold" style={{ color: lifecycleTone }}>
+                  {lifecycleLabel}
+                </dd>
+              </div>
+              <div>
+                <dt className="mission-control__label">Updated</dt>
+                <dd className="mt-1 text-sm text-[var(--mc-text-soft)]">{updatedAtLabel}</dd>
+              </div>
+              <div>
+                <dt className="mission-control__label">Elapsed</dt>
+                <dd className="mt-1 text-sm text-[var(--mc-text-soft)]">{durationLabel}</dd>
+              </div>
+              <div>
+                <dt className="mission-control__label">Players</dt>
+                <dd className="mt-1 text-sm text-[var(--mc-text-soft)]">
+                  {analytics?.overview.activePlayers ?? 0} / {analytics?.overview.totalPlayers ?? 0}
+                </dd>
+              </div>
+              <div>
+                <dt className="mission-control__label">Started</dt>
+                <dd className="mt-1 text-sm text-[var(--mc-text-soft)]">{formatUpdatedAt(analytics?.overview.startedAt ?? null)}</dd>
+              </div>
+              <div>
+                <dt className="mission-control__label">Ended</dt>
+                <dd className="mt-1 text-sm text-[var(--mc-text-soft)]">{formatUpdatedAt(analytics?.overview.endedAt ?? null)}</dd>
+              </div>
+            </dl>
+          </div>
+
+          {endMessage ? <p className="text-sm text-[var(--mc-alert)]">{endMessage}</p> : null}
+          {exportMessage ? <p className="text-sm text-[var(--mc-alert)]">{exportMessage}</p> : null}
+          {!analyticsAccess?.allowedSections.exports && guard.status === "allowed" && status === "ready" ? (
+            <p className="text-xs text-[var(--mc-text-muted)]">Exports unlock after the live session ends.</p>
+          ) : null}
         </div>
       </header>
 
-      {(guard.status === "loading-auth" || guard.status === "checking-access") && (
+      {(guard.status === "loading-auth" || guard.status === "checking-access") && showLoadingHint && (
         <section className="mission-control__panel p-6 text-sm text-[var(--mc-text-soft)]">
           Checking Business session access...
         </section>
@@ -707,7 +818,7 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
         </section>
       )}
 
-      {guard.status === "allowed" && status === "loading" && (
+      {guard.status === "allowed" && status === "loading" && showLoadingHint && (
         <section className="mission-control__panel p-6 text-sm text-[var(--mc-text-soft)]">
           Loading analytics...
         </section>
@@ -726,35 +837,31 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
       )}
 
       {guard.status === "allowed" && status === "ready" && analytics ? (
-        <div className="grid gap-6">
+        <div className="grid gap-4">
           {isLiveLimited ? (
-            <section className="mission-control__panel border-amber-300/40 bg-amber-900/20 p-4 text-sm text-amber-100">
+            <section className="mission-control__panel border-amber-300/40 bg-amber-900/20 p-3 text-sm text-amber-100">
               {analyticsAccess?.message ?? "Live analytics are enabled. Exports and final recommendations unlock after the session ends."}
             </section>
           ) : null}
-          <div className="grid gap-6 xl:grid-cols-12">
-            {analyticsAccess?.allowedSections.overview ? (
-              <div className="xl:col-span-5">
-                <GameOverviewPanel overview={analytics.overview} />
-              </div>
-            ) : null}
-            <div className={analyticsAccess?.allowedSections.overview ? "xl:col-span-7" : "xl:col-span-12"}>
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(320px,1fr)]">
+            <div className="mc-rhythm-16">
               {canShowInsights ? (
                 <InsightCards insights={analytics.insights} />
               ) : (
                 <LockedSection title="Activity Summary" message="Live analytics will populate as gameplay events occur." />
               )}
-            </div>
-          </div>
-          <div className="grid gap-6 xl:grid-cols-12">
-            <div className="xl:col-span-8">
+
               {canShowPlayerPerformance ? (
-                <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} />
+                <PlayerPerformanceTable players={analytics.playerPerformance} mode={analytics.overview.mode} gameCode={gameCode} />
               ) : (
                 <LockedSection title="Player Performance" message="No activity yet." />
               )}
+              <div className="mission-control__panel p-2">
+                <SessionTimeline gameCode={gameCode} />
+              </div>
             </div>
-            <div className="grid gap-4 xl:col-span-4">
+            <div className="mc-rhythm-16 content-start">
+              {analyticsAccess?.allowedSections.overview ? <GameOverviewPanel overview={analytics.overview} /> : null}
               {canShowSessionSummary ? (
                 <>
                   <SessionSummary
@@ -777,9 +884,6 @@ export default function ManagerDashboardPage({ gameCode }: ManagerDashboardPageP
                 <LockedSection title="Session Summary" message="Live analytics will populate as gameplay events occur." />
               )}
             </div>
-          </div>
-          <div className="mission-control__panel p-2">
-            <SessionTimeline gameCode={gameCode} />
           </div>
         </div>
       ) : null}

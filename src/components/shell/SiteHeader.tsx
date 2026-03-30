@@ -8,7 +8,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Button from "@/components/Button";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
-import { BUSINESS_ROUTES } from "@/lib/business/routes";
+import { BUSINESS_ROUTES, businessSessionsRoute } from "@/lib/business/routes";
 
 type NavLink = {
   href: string;
@@ -474,10 +474,10 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Workspace</div>
                         <div className="border-t border-white/10 pt-2">
                           <Link
-                            href={BUSINESS_ROUTES.dashboard}
+                            href={businessSessionsRoute()}
                             className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                           >
-                            Open Business dashboard
+                            Open Sessions
                           </Link>
                         </div>
                       </div>
@@ -596,10 +596,10 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                   ))}
                   {businessWorkspaceActivated ? (
                     <Link
-                      href={BUSINESS_ROUTES.dashboard}
+                      href={businessSessionsRoute()}
                       className="mt-2 block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
                     >
-                      Open Business dashboard
+                      Open Sessions
                     </Link>
                   ) : null}
                 </>

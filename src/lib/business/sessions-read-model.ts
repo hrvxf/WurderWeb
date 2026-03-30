@@ -1,0 +1,524 @@
+import type { Timestamp } from "firebase-admin/firestore";
+
+import { adminDb } from "@/lib/firebase/admin";
+import {
+  makeBusinessSessionGroupId,
+  makeSessionIdentityMetadata,
+  type BusinessSessionGroupType,
+  type SessionIdentitySource,
+} from "@/lib/business/session-groups";
+
+type MembershipDoc = {
+  uid?: unknown;
+  status?: unknown;
+};
+
+type OrgDoc = {
+  name?: unknown;
+};
+
+type OrgSessionDoc = {
+  sessionId?: unknown;
+  gameCode?: unknown;
+  gameCodes?: unknown;
+  games?: unknown;
+  createdAt?: unknown;
+  startedAt?: unknown;
+  endedAt?: unknown;
+  title?: unknown;
+  name?: unknown;
+};
+
+type OrgGameLinkDoc = {
+  gameCode?: unknown;
+  createdAt?: unknown;
+  sessionId?: unknown;
+  archivedAt?: unknown;
+  deletedAt?: unknown;
+  hiddenFromOrgDashboard?: unknown;
+};
+
+type GameDoc = {
+  createdAt?: unknown;
+  started?: unknown;
+  ended?: unknown;
+  startedAt?: unknown;
+  endedAt?: unknown;
+  archivedAt?: unknown;
+  deletedAt?: unknown;
+  hiddenFromOrgDashboard?: unknown;
+};
+
+export type SessionGameRow = {
+  gameCode: string;
+  createdAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  isArchived: boolean;
+  isDeleted: boolean;
+};
+
+type PendingSession = {
+  sessionType: BusinessSessionGroupType;
+  sourceSessionId: string | null;
+  identitySource: SessionIdentitySource;
+  createdAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  title: string | null;
+  gameCodes: Set<string>;
+};
+
+export type BusinessSessionReadModel = {
+  sessionGroupId: string;
+  sessionId: string;
+  sessionType: "real" | "virtual";
+  sourceSessionId: string | null;
+  title: string | null;
+  derivedName: string;
+  status: "not_started" | "in_progress" | "ended";
+  createdAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  gameCodes: string[];
+  games: SessionGameRow[];
+  gameCount: number;
+  identityKey: string;
+  identitySource: SessionIdentitySource;
+  identityConfidence: "high" | "medium" | "low";
+  identityNeedsReview: boolean;
+};
+
+export type BusinessSessionsOrgReadModel = {
+  org: {
+    orgId: string;
+    name: string | null;
+    ownershipSource: "owner" | "manager";
+  };
+  summary: {
+    sessionCount: number;
+    openSessionCount: number;
+  };
+  sessions: BusinessSessionReadModel[];
+};
+
+const SESSIONS_CACHE_TTL_MS = 20_000;
+const sessionsCache = new Map<string, { expiresAt: number; data: BusinessSessionsOrgReadModel[] }>();
+
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => asNonEmptyString(entry))
+    .filter((entry): entry is string => entry != null);
+}
+
+function asBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes";
+  }
+  return false;
+}
+
+function timestampToIso(value: unknown): string | null {
+  if (!value) return null;
+  try {
+    if (value instanceof Date) return value.toISOString();
+    if (typeof value === "string") {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+    }
+    if (typeof value === "object" && value !== null && "toDate" in value) {
+      const ts = value as Timestamp & { toDate?: unknown };
+      if (typeof ts.toDate !== "function") return null;
+      const date = ts.toDate();
+      return date instanceof Date && !Number.isNaN(date.getTime()) ? date.toISOString() : null;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function hasActiveMembership(data: MembershipDoc, uid: string, membershipDocId?: string): boolean {
+  const memberUid = asNonEmptyString(data.uid) ?? asNonEmptyString(membershipDocId);
+  const status = (asNonEmptyString(data.status) ?? "active").toLowerCase();
+  return memberUid === uid && status !== "disabled";
+}
+
+function toTimeMs(value: string | null): number {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function compareIsoDescending(left: string | null, right: string | null): number {
+  return toTimeMs(right) - toTimeMs(left);
+}
+
+function mergeEarliest(left: string | null, right: string | null): string | null {
+  if (!left) return right;
+  if (!right) return left;
+  return toTimeMs(left) <= toTimeMs(right) ? left : right;
+}
+
+function mergeLatest(left: string | null, right: string | null): string | null {
+  if (!left) return right;
+  if (!right) return left;
+  return toTimeMs(left) >= toTimeMs(right) ? left : right;
+}
+
+function normalizeGameDoc(game: GameDoc, gameCode: string): SessionGameRow {
+  const startedAt = timestampToIso(game.startedAt) ?? timestampToIso(game.started);
+  const endedAt = timestampToIso(game.endedAt) ?? timestampToIso(game.ended);
+  const isArchived = asBoolean(game.hiddenFromOrgDashboard) || timestampToIso(game.archivedAt) != null;
+  const isDeleted = timestampToIso(game.deletedAt) != null;
+  return {
+    gameCode,
+    createdAt: timestampToIso(game.createdAt),
+    startedAt,
+    endedAt,
+    isArchived,
+    isDeleted,
+  };
+}
+
+function deriveGroupStatus(input: {
+  startedAt: string | null;
+  endedAt: string | null;
+  games: SessionGameRow[];
+}): "not_started" | "in_progress" | "ended" {
+  if (input.endedAt) return "ended";
+  if (input.startedAt) return "in_progress";
+  if (input.games.length === 0) return "not_started";
+
+  const everyEnded = input.games.every((game) => Boolean(game.endedAt));
+  if (everyEnded) return "ended";
+  const anyStarted = input.games.some((game) => Boolean(game.startedAt));
+  return anyStarted ? "in_progress" : "not_started";
+}
+
+function makeGroupKey(input: {
+  type: BusinessSessionGroupType;
+  sourceSessionId: string | null;
+  fallbackGameCode?: string;
+}): string {
+  if (input.type === "real") return `real:${input.sourceSessionId ?? "missing"}`;
+  return `virtual:${input.fallbackGameCode ?? "missing"}`;
+}
+
+function collectOrgSessionGameCodes(data: OrgSessionDoc): string[] {
+  const fromGameCodes = asStringArray(data.gameCodes);
+  const fromGameCode = asNonEmptyString(data.gameCode);
+  const fromGamesArray = Array.isArray(data.games)
+    ? data.games
+        .map((entry) =>
+          entry && typeof entry === "object" ? asNonEmptyString((entry as Record<string, unknown>).gameCode) : null
+        )
+        .filter((entry): entry is string => entry != null)
+    : [];
+  return [...new Set([...fromGameCodes, ...fromGamesArray, ...(fromGameCode ? [fromGameCode] : [])])];
+}
+
+function deriveSessionName(input: {
+  title: string | null;
+  sourceSessionId: string | null;
+  sessionType: "real" | "virtual";
+  gameCodes: string[];
+}): string {
+  if (input.title) return input.title;
+  if (input.sourceSessionId) return `Session ${input.sourceSessionId}`;
+  if (input.sessionType === "virtual") {
+    return input.gameCodes.length > 1
+      ? `Virtual Session (${input.gameCodes[0]})`
+      : `Virtual Session ${input.gameCodes[0] ?? ""}`.trim();
+  }
+  return `Session ${input.gameCodes[0] ?? "Unknown"}`;
+}
+
+export async function resolveBusinessOrgAccessForUser(uid: string): Promise<Map<string, "owner" | "manager">> {
+  const [ownedCanonicalSnap, ownedLegacySnap] = await Promise.all([
+    adminDb.collection("orgs").where("ownerAccountId", "==", uid).get(),
+    adminDb.collection("organizations").where("ownerAccountId", "==", uid).get(),
+  ]);
+
+  const orgSources = new Map<string, "owner" | "manager">();
+  for (const doc of ownedCanonicalSnap.docs) orgSources.set(doc.id, "owner");
+  for (const doc of ownedLegacySnap.docs) orgSources.set(doc.id, "owner");
+
+  let membershipDocs: Array<{ id: string; ref: { parent: { parent: { id: string } | null } }; data: () => MembershipDoc }> = [];
+  try {
+    const indexed = await adminDb.collectionGroup("managers").where("uid", "==", uid).limit(250).get();
+    membershipDocs = indexed.docs as typeof membershipDocs;
+  } catch (error) {
+    console.warn("[business:sessions-read-model] Indexed manager membership query failed, falling back", error);
+    const fallback = await adminDb.collectionGroup("managers").limit(1000).get();
+    membershipDocs = fallback.docs as typeof membershipDocs;
+  }
+
+  for (const doc of membershipDocs) {
+    const data = (doc.data() ?? {}) as MembershipDoc;
+    if (!hasActiveMembership(data, uid, doc.id)) continue;
+    const orgId = doc.ref.parent.parent?.id;
+    if (!orgId) continue;
+    if (!orgSources.has(orgId)) orgSources.set(orgId, "manager");
+  }
+  return orgSources;
+}
+
+export async function buildBusinessSessionsIndexReadModel(uid: string): Promise<BusinessSessionsOrgReadModel[]> {
+  const now = Date.now();
+  const cached = sessionsCache.get(uid);
+  if (cached && cached.expiresAt > now) {
+    return cached.data;
+  }
+
+  const orgSources = await resolveBusinessOrgAccessForUser(uid);
+
+  const orgEntries = [...orgSources.entries()];
+  const orgRows = await Promise.all(
+    orgEntries.map(async ([orgId, ownershipSource]) => {
+      try {
+      const [canonicalOrgDoc, legacyOrgDoc] = await Promise.all([
+        adminDb.collection("orgs").doc(orgId).get(),
+        adminDb.collection("organizations").doc(orgId).get(),
+      ]);
+      const orgData = (canonicalOrgDoc.exists ? canonicalOrgDoc.data() : legacyOrgDoc.data() ?? {}) as OrgDoc;
+
+      const [canonicalSessionsSnap, legacySessionsSnap, canonicalGameLinksSnap, legacyGameLinksSnap] = await Promise.all([
+        adminDb.collection("orgs").doc(orgId).collection("sessions").get(),
+        adminDb.collection("organizations").doc(orgId).collection("sessions").get(),
+        adminDb.collection("orgs").doc(orgId).collection("games").get(),
+        adminDb.collection("organizations").doc(orgId).collection("games").get(),
+      ]);
+
+      const pending = new Map<string, PendingSession>();
+      const attachedGameCodes = new Set<string>();
+
+      const upsertPendingSession = (input: {
+        key: string;
+        sessionType: BusinessSessionGroupType;
+        sourceSessionId: string | null;
+        identitySource: SessionIdentitySource;
+        createdAt: string | null;
+        startedAt: string | null;
+        endedAt: string | null;
+        title: string | null;
+        gameCodes: string[];
+      }) => {
+        const existing = pending.get(input.key);
+        if (!existing) {
+          pending.set(input.key, {
+            sessionType: input.sessionType,
+            sourceSessionId: input.sourceSessionId,
+            identitySource: input.identitySource,
+            createdAt: input.createdAt,
+            startedAt: input.startedAt,
+            endedAt: input.endedAt,
+            title: input.title,
+            gameCodes: new Set(input.gameCodes),
+          });
+          for (const gameCode of input.gameCodes) attachedGameCodes.add(gameCode);
+          return;
+        }
+
+        existing.createdAt = mergeLatest(existing.createdAt, input.createdAt);
+        existing.startedAt = mergeEarliest(existing.startedAt, input.startedAt);
+        existing.endedAt = mergeLatest(existing.endedAt, input.endedAt);
+        existing.title = existing.title ?? input.title;
+        for (const gameCode of input.gameCodes) {
+          existing.gameCodes.add(gameCode);
+          attachedGameCodes.add(gameCode);
+        }
+      };
+
+      const applySessionDocs = (docs: Array<{ id: string; data: () => OrgSessionDoc }>) => {
+        for (const doc of docs) {
+          const data = (doc.data() ?? {}) as OrgSessionDoc;
+          const sourceSessionId = asNonEmptyString(data.sessionId) ?? asNonEmptyString(doc.id);
+          if (!sourceSessionId) continue;
+          upsertPendingSession({
+            key: makeGroupKey({ type: "real", sourceSessionId }),
+            sessionType: "real",
+            sourceSessionId,
+            identitySource: "org_session_doc",
+            createdAt: timestampToIso(data.createdAt),
+            startedAt: timestampToIso(data.startedAt),
+            endedAt: timestampToIso(data.endedAt),
+            title: asNonEmptyString(data.title) ?? asNonEmptyString(data.name),
+            gameCodes: collectOrgSessionGameCodes(data),
+          });
+        }
+      };
+
+      applySessionDocs(canonicalSessionsSnap.docs);
+      applySessionDocs(legacySessionsSnap.docs);
+
+      const applyGameLinks = (docs: Array<{ id: string; data: () => OrgGameLinkDoc }>) => {
+        for (const doc of docs) {
+          const data = (doc.data() ?? {}) as OrgGameLinkDoc;
+          const gameCode = asNonEmptyString(data.gameCode) ?? asNonEmptyString(doc.id);
+          if (!gameCode || attachedGameCodes.has(gameCode)) continue;
+          const linkArchived = asBoolean(data.hiddenFromOrgDashboard) || timestampToIso(data.archivedAt) != null;
+          const linkDeleted = timestampToIso(data.deletedAt) != null;
+          if (linkArchived || linkDeleted) continue;
+
+          const sourceSessionId = asNonEmptyString(data.sessionId);
+          if (sourceSessionId) {
+            upsertPendingSession({
+              key: makeGroupKey({ type: "real", sourceSessionId }),
+              sessionType: "real",
+              sourceSessionId,
+              identitySource: "org_game_link_session_ref",
+              createdAt: timestampToIso(data.createdAt),
+              startedAt: null,
+              endedAt: null,
+              title: null,
+              gameCodes: [gameCode],
+            });
+            continue;
+          }
+
+          upsertPendingSession({
+            key: makeGroupKey({ type: "virtual", sourceSessionId: null, fallbackGameCode: gameCode }),
+            sessionType: "virtual",
+            sourceSessionId: null,
+            identitySource: "org_game_link_game_code",
+            createdAt: timestampToIso(data.createdAt),
+            startedAt: null,
+            endedAt: null,
+            title: null,
+            gameCodes: [gameCode],
+          });
+        }
+      };
+
+      applyGameLinks(canonicalGameLinksSnap.docs);
+      applyGameLinks(legacyGameLinksSnap.docs);
+
+      // Fallback scan is expensive on orgs with many historic games.
+      // Only run when no session/group records were found in org-scoped collections.
+      if (pending.size === 0) {
+        const fallbackGamesSnap = await adminDb.collection("games").where("orgId", "==", orgId).limit(250).get();
+        for (const gameDoc of fallbackGamesSnap.docs) {
+          const gameCode = gameDoc.id;
+          if (attachedGameCodes.has(gameCode)) continue;
+          const game = (gameDoc.data() ?? {}) as GameDoc;
+          const hidden = asBoolean(game.hiddenFromOrgDashboard) || timestampToIso(game.archivedAt) != null || timestampToIso(game.deletedAt) != null;
+          if (hidden) continue;
+          upsertPendingSession({
+            key: makeGroupKey({ type: "virtual", sourceSessionId: null, fallbackGameCode: gameCode }),
+            sessionType: "virtual",
+            sourceSessionId: null,
+            identitySource: "games_org_fallback",
+            createdAt: timestampToIso(game.createdAt),
+            startedAt: null,
+            endedAt: null,
+            title: null,
+            gameCodes: [gameCode],
+          });
+        }
+      }
+
+      const allGameCodes = [...new Set([...pending.values()].flatMap((entry) => [...entry.gameCodes]))];
+      const gameRefs = allGameCodes.map((gameCode) => adminDb.collection("games").doc(gameCode));
+      const gameDocs = gameRefs.length > 0 ? await adminDb.getAll(...gameRefs) : [];
+      const gameRowEntries = allGameCodes.map((gameCode, index) => {
+        const doc = gameDocs[index];
+        return [gameCode, normalizeGameDoc((doc?.data() ?? {}) as GameDoc, gameCode)] as const;
+      });
+      const gameMap = new Map<string, SessionGameRow>(gameRowEntries);
+
+      const sessions: BusinessSessionReadModel[] = [...pending.values()]
+        .map((entry) => {
+          const gameCodes = [...entry.gameCodes]
+            .filter((code) => {
+              const game = gameMap.get(code);
+              if (!game) return true;
+              return !game.isArchived && !game.isDeleted;
+            })
+            .sort();
+          const games = gameCodes.map(
+            (code) => gameMap.get(code) ?? { gameCode: code, createdAt: null, startedAt: null, endedAt: null, isArchived: false, isDeleted: false }
+          );
+          if (gameCodes.length === 0) return null;
+          const createdAtFromGames = games.reduce<string | null>((latest, game) => mergeLatest(latest, game.createdAt), null);
+          const startedAtFromGames = games.reduce<string | null>((earliest, game) => mergeEarliest(earliest, game.startedAt), null);
+          const endedAtFromGames = games.reduce<string | null>((latest, game) => mergeLatest(latest, game.endedAt), null);
+          const createdAt = entry.createdAt ?? createdAtFromGames;
+          const startedAt = entry.startedAt ?? startedAtFromGames;
+          const endedAt = entry.endedAt ?? endedAtFromGames;
+          const sessionKey = entry.sessionType === "real" ? `session:${entry.sourceSessionId ?? "missing"}` : `game:${gameCodes[0] ?? "missing"}`;
+          const sessionGroupId = makeBusinessSessionGroupId({
+            type: entry.sessionType,
+            orgId,
+            sessionKey,
+          });
+          const identity = makeSessionIdentityMetadata({
+            orgId,
+            identitySource: entry.identitySource,
+            sourceSessionId: entry.sourceSessionId,
+            gameCodes,
+          });
+
+          return {
+            sessionGroupId,
+            sessionId: sessionGroupId,
+            sessionType: entry.sessionType,
+            sourceSessionId: entry.sourceSessionId,
+            title: entry.title,
+            derivedName: deriveSessionName({
+              title: entry.title,
+              sourceSessionId: entry.sourceSessionId,
+              sessionType: entry.sessionType,
+              gameCodes,
+            }),
+            status: deriveGroupStatus({ startedAt, endedAt, games }),
+            createdAt,
+            startedAt,
+            endedAt,
+            gameCodes,
+            games,
+            gameCount: games.length,
+            ...identity,
+          };
+        })
+        .filter((session): session is BusinessSessionReadModel => session != null)
+        .sort((left, right) => compareIsoDescending(left.createdAt, right.createdAt));
+
+      return {
+        org: {
+          orgId,
+          name: asNonEmptyString(orgData.name),
+          ownershipSource,
+        },
+        summary: {
+          sessionCount: sessions.length,
+          openSessionCount: sessions.filter((session) => session.status !== "ended").length,
+        },
+        sessions,
+      };
+      } catch (error) {
+        console.error("[business:sessions-read-model] Failed org aggregation", {
+          orgId,
+          ownershipSource,
+          error,
+        });
+        return null;
+      }
+    })
+  );
+
+  const healthyRows = orgRows.filter((row): row is BusinessSessionsOrgReadModel => row != null);
+  healthyRows.sort((left, right) => right.summary.sessionCount - left.summary.sessionCount);
+  sessionsCache.set(uid, { expiresAt: now + SESSIONS_CACHE_TTL_MS, data: healthyRows });
+  return healthyRows;
+}

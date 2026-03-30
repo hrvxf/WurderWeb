@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
+import BusinessStatePanel from "@/components/business/BusinessStatePanel";
 import type { ManagerPlayerPerformance, ManagerTimelineEntry } from "@/components/business/dashboard/types";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { businessSessionCompareRoute, businessSessionPlayerApiRoute, businessSessionRoute } from "@/lib/business/routes";
@@ -88,8 +89,12 @@ export default function PlayerDrilldownPage({ gameCode, playerId }: { gameCode: 
         </div>
       </header>
 
-      {status === "loading" ? <section className="h-32 animate-pulse surface-light" /> : null}
-      {status === "error" ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{message}</section> : null}
+      {status === "loading" ? (
+        <BusinessStatePanel tone="loading" title="Loading Player Drilldown" message="Fetching player history and timeline..." />
+      ) : null}
+      {status === "error" ? (
+        <BusinessStatePanel tone="error" title="Unable To Load Player Drilldown" message={message ?? "Unable to load player drill-down."} />
+      ) : null}
 
       {status === "ready" && payload ? (
         <div className="grid gap-5">

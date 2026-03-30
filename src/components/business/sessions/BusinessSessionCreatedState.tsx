@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { QRCodeCanvas } from "qrcode.react";
 
-import { BUSINESS_ROUTES, businessSessionRoute, joinRoute } from "@/lib/business/routes";
+import { businessSessionRoute, businessSessionsRoute, joinRoute } from "@/lib/business/routes";
 
 type CreatedBusinessSessionResult = {
   gameCode: string;
@@ -104,10 +104,10 @@ export default function BusinessSessionCreatedState({
           Open session dashboard
         </Link>
         <Link
-          href={BUSINESS_ROUTES.dashboard}
+          href={businessSessionsRoute()}
           className="inline-flex items-center justify-center rounded-xl border border-white/25 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10 sm:col-span-2"
         >
-          Go to Business dashboard
+          Go to Sessions
         </Link>
         {!isHostOnly ? (
           <Link

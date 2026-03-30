@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import AuthGate from "@/components/auth/AuthGate";
-import { BUSINESS_ROUTES } from "@/lib/business/routes";
+import { BUSINESS_ROUTES, businessSessionsRoute } from "@/lib/business/routes";
 
 export const metadata: Metadata = {
   title: "Business Settings",
@@ -30,10 +30,10 @@ export default function BusinessSettingsPage() {
               Start session
             </Link>
             <Link
-              href={BUSINESS_ROUTES.dashboard}
+              href={businessSessionsRoute()}
               className="control-secondary"
             >
-              Back to dashboard
+              Back to sessions
             </Link>
           </div>
         </div>

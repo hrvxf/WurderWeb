@@ -7,7 +7,7 @@ import HostPreviousGamesCard from "@/components/members/HostPreviousGamesCard";
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 const BUSINESS_HOME_ROUTE = "/business";
-const BUSINESS_DASHBOARD_ROUTE = "/business/dashboard";
+const BUSINESS_SESSIONS_ROUTE = "/business/sessions";
 const BUSINESS_CREATE_SESSION_ROUTE = "/business/sessions/new";
 
 type MembersHostInitialSession = {
@@ -84,10 +84,10 @@ export default function MembersHostClient({ initialSessions = [] }: MembersHostC
                   Start business session
                 </Link>
                 <Link
-                  href={BUSINESS_DASHBOARD_ROUTE}
+                  href={BUSINESS_SESSIONS_ROUTE}
                   className="control-secondary"
                 >
-                  Open Business dashboard
+                  Open Sessions
                 </Link>
               </>
             ) : (

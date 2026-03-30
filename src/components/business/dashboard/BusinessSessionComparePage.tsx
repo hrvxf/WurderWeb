@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+import BusinessStatePanel from "@/components/business/BusinessStatePanel";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { businessSessionCompareApiRoute, businessSessionPlayerRoute, businessSessionRoute } from "@/lib/business/routes";
 
@@ -102,8 +103,12 @@ export default function ManagerComparePage({ gameCode }: { gameCode: string }) {
         </div>
       </header>
 
-      {status === "loading" ? <section className="h-40 animate-pulse surface-light" /> : null}
-      {status === "error" ? <section className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{message}</section> : null}
+      {status === "loading" ? (
+        <BusinessStatePanel tone="loading" title="Loading Compare Data" message="Fetching player cohorts and trend metrics..." />
+      ) : null}
+      {status === "error" ? (
+        <BusinessStatePanel tone="error" title="Unable To Load Compare Data" message={message ?? "Unable to load compare data."} />
+      ) : null}
 
       {status === "ready" && payload ? (
         <div className="grid gap-5">

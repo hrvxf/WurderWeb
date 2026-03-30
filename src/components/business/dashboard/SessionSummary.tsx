@@ -106,7 +106,7 @@ function findMetric(insights: ManagerInsight[], token: string): number | null {
 
 function Finding({ label, headline, interpretation }: { label: string; headline: string; interpretation: string }) {
   return (
-    <article className="mission-control__panel-alt p-3">
+    <article className="border-l-2 border-[var(--mc-border)] py-1.5 pl-3">
       <p className="mission-control__label">{label}</p>
       <p className="mt-1 text-sm font-semibold text-[var(--mc-text)]">{headline}</p>
       <p className="mt-1 text-xs text-[var(--mc-text-soft)]">{interpretation}</p>
@@ -142,9 +142,9 @@ export default function SessionSummary({ summary, overview, insights, players }:
     .join(" ");
 
   return (
-    <section className="mission-control__panel p-4 sm:p-5">
+    <section className="mission-control__panel p-3.5 sm:p-4">
       <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Session Summary</h2>
-      <div className="mt-4 grid gap-3">
+      <div className="mt-3 grid gap-3 border-t border-[var(--mc-border)] pt-2.5">
         {availableFindings > 0 ? (
           <>
             {topPerformer ? (
@@ -172,7 +172,7 @@ export default function SessionSummary({ summary, overview, insights, players }:
             ) : null}
           </>
         ) : (
-          <p className="mission-control__panel-alt p-3 text-sm text-[var(--mc-text-soft)]">Not enough completed session data yet.</p>
+          <p className="text-sm text-[var(--mc-text-soft)]">Not enough completed session data yet.</p>
         )}
 
         <Finding

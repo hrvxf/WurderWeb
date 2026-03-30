@@ -20,8 +20,8 @@ function asNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-function isActiveMembership(data: ManagerMembershipDoc, uid: string): boolean {
-  const memberUid = asNonEmptyString(data.uid);
+function isActiveMembership(data: ManagerMembershipDoc, uid: string, membershipDocId?: string): boolean {
+  const memberUid = asNonEmptyString(data.uid) ?? asNonEmptyString(membershipDocId);
   const status = (asNonEmptyString(data.status) ?? "active").toLowerCase();
   return memberUid === uid && status !== "disabled";
 }
@@ -39,14 +39,22 @@ export async function GET(request: Request) {
       return NextResponse.json({ activated: true, source: "owner" });
     }
 
-    const managerMembershipSnap = await adminDb
-      .collectionGroup("managers")
-      .where("uid", "==", uid)
-      .limit(25)
-      .get();
+    let managerMembershipDocs: Array<{ id: string; data: () => ManagerMembershipDoc }> = [];
+    try {
+      const indexed = await adminDb
+        .collectionGroup("managers")
+        .where("uid", "==", uid)
+        .limit(25)
+        .get();
+      managerMembershipDocs = indexed.docs as typeof managerMembershipDocs;
+    } catch (error) {
+      console.warn("[business:workspace-access] Indexed manager query failed, using fallback", error);
+      const fallback = await adminDb.collectionGroup("managers").limit(1000).get();
+      managerMembershipDocs = fallback.docs as typeof managerMembershipDocs;
+    }
 
-    const hasActiveMembership = managerMembershipSnap.docs.some((doc) =>
-      isActiveMembership((doc.data() ?? {}) as ManagerMembershipDoc, uid)
+    const hasActiveMembership = managerMembershipDocs.some((doc) =>
+      isActiveMembership((doc.data() ?? {}) as ManagerMembershipDoc, uid, doc.id)
     );
 
     return NextResponse.json({

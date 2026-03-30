@@ -3,6 +3,7 @@ import type { Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { deriveLifecycleStatus, type AnalyticsAccess } from "@/lib/analytics/manager-dashboard";
+import { makeBusinessSessionGroupId, makeSessionIdentityMetadata, type SessionIdentitySource } from "@/lib/business/session-groups";
 import { entitlementsForTier, hasFeature } from "@/lib/product/entitlements";
 import {
   assertOrgAccess,
@@ -17,6 +18,10 @@ export const runtime = "nodejs";
 type OrgGameLinkDoc = {
   gameCode?: unknown;
   createdAt?: unknown;
+  sessionId?: unknown;
+  archivedAt?: unknown;
+  deletedAt?: unknown;
+  hiddenFromOrgDashboard?: unknown;
 };
 
 type OrgDoc = {
@@ -34,7 +39,12 @@ type OrgBranding = {
 type GameDoc = {
   started?: unknown;
   ended?: unknown;
+  startedAt?: unknown;
+  endedAt?: unknown;
   createdAt?: unknown;
+  archivedAt?: unknown;
+  deletedAt?: unknown;
+  hiddenFromOrgDashboard?: unknown;
 };
 
 type AnalyticsOverview = {
@@ -42,15 +52,39 @@ type AnalyticsOverview = {
   startedAt?: unknown;
   endedAt?: unknown;
   totalPlayers?: unknown;
+  successRate?: unknown;
+  disputeRate?: unknown;
+  averageResolutionTimeMs?: unknown;
 };
 
-type PlayerAnalyticsDoc = {
-  eventsTotal?: unknown;
-  eventCounts?: unknown;
+type ManagerDashboardPlayerRow = {
+  claimsSubmitted?: unknown;
+  claimsConfirmed?: unknown;
+  claimsDenied?: unknown;
+  disputeRateRatio?: unknown;
+  accuracyRatio?: unknown;
+};
+
+type ManagerDashboardAnalytics = {
+  overview?: unknown;
+  playerPerformance?: unknown;
+  averageResolutionTimeMs?: unknown;
+};
+
+type ManagerDashboardDoc = {
+  analytics?: unknown;
 };
 
 type SessionAggregate = {
+  sessionId: string;
+  sessionType: "real" | "virtual";
+  sourceSessionId: string | null;
+  identityKey: string;
+  identitySource: SessionIdentitySource;
+  identityConfidence: "high" | "medium" | "low";
+  identityNeedsReview: boolean;
   gameCode: string;
+  gameCodes: string[];
   status: string;
   createdAt: string | null;
   startedAt: string | null;
@@ -62,6 +96,22 @@ type SessionAggregate = {
   disputeRate: number | null;
   avgResolutionTimeMs: number | null;
   analyticsAccess: AnalyticsAccess;
+  isArchived: boolean;
+  isDeleted: boolean;
+  isEmptyCandidate: boolean;
+  isAbandoned: boolean;
+};
+
+type BulkCleanupBody = {
+  action?: unknown;
+  gameCodes?: unknown;
+};
+
+type CleanupSkipReason = "not_found" | "not_empty_or_active";
+
+type CleanupSkipDetail = {
+  gameCode: string;
+  reason: CleanupSkipReason;
 };
 
 function asNonEmptyString(value: unknown): string | null {
@@ -111,28 +161,36 @@ function timestampToIso(value: unknown): string | null {
 
 function deriveStatus(game: GameDoc, overview: AnalyticsOverview): string {
   const explicit = asNonEmptyString(overview.status);
-  if (explicit) return explicit;
-  const startedAtIso = timestampToIso(overview.startedAt);
-  const endedAtIso = timestampToIso(overview.endedAt);
+  if (explicit) {
+    const normalized = explicit.trim().toLowerCase();
+    if (normalized === "active") return "in_progress";
+    if (normalized === "in_progress") return "in_progress";
+    if (normalized === "ended" || normalized === "completed") return "ended";
+    if (normalized === "not_started") return "not_started";
+  }
+  const startedAtIso = timestampToIso(overview.startedAt) ?? timestampToIso(game.startedAt) ?? timestampToIso(game.started);
+  const endedAtIso = timestampToIso(overview.endedAt) ?? timestampToIso(game.endedAt) ?? timestampToIso(game.ended);
 
   const derived = deriveLifecycleStatus({
-    started: Boolean(game.started),
-    ended: Boolean(game.ended),
+    started: Boolean(startedAtIso),
+    ended: Boolean(endedAtIso),
     startedAtMs: startedAtIso ? new Date(startedAtIso).getTime() : null,
     endedAtMs: endedAtIso ? new Date(endedAtIso).getTime() : null,
   });
   if (derived === "completed") return "ended";
-  if (derived === "in_progress") return "active";
+  if (derived === "in_progress") return "in_progress";
   return "not_started";
 }
 
-function sumEventCounts(value: unknown): number {
-  if (!value || typeof value !== "object") return 0;
-  return Object.values(value as Record<string, unknown>).reduce<number>((sum, entry) => sum + (asNumber(entry) ?? 0), 0);
-}
-
-function buildSessionAnalyticsAccess(game: GameDoc): SessionAggregate["analyticsAccess"] {
-  const ended = Boolean(game.ended);
+function buildSessionAnalyticsAccess(input: {
+  game: GameDoc;
+  overview: AnalyticsOverview;
+  playerCount: number;
+}): SessionAggregate["analyticsAccess"] {
+  const endedAtIso = timestampToIso(input.overview.endedAt) ?? timestampToIso(input.game.endedAt);
+  const startedAtIso = timestampToIso(input.overview.startedAt) ?? timestampToIso(input.game.startedAt);
+  const ended = Boolean(endedAtIso) || asBoolean(input.game.ended);
+  const started = Boolean(startedAtIso) || asBoolean(input.game.started);
   if (ended) {
     return {
       visibility: "full_post_session",
@@ -147,6 +205,20 @@ function buildSessionAnalyticsAccess(game: GameDoc): SessionAggregate["analytics
     };
   }
 
+  if (started || input.playerCount > 0) {
+    return {
+      visibility: "limited_live",
+      allowedSections: {
+        overview: true,
+        insights: true,
+        playerComparison: true,
+        sessionSummary: false,
+        exports: false,
+      },
+      message: "Live metrics are available. Full analytics and exports unlock after the session ends.",
+    };
+  }
+
   return {
     visibility: "limited_live",
     allowedSections: {
@@ -158,6 +230,50 @@ function buildSessionAnalyticsAccess(game: GameDoc): SessionAggregate["analytics
     },
     message: "Full analytics unlock after the session ends.",
   };
+}
+
+function asBoolean(value: unknown): boolean {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "1" || normalized === "true" || normalized === "yes";
+  }
+  return false;
+}
+
+function asAnalyticsOverview(value: unknown): AnalyticsOverview {
+  if (!value || typeof value !== "object") return {};
+  return value as AnalyticsOverview;
+}
+
+function asPlayerRows(value: unknown): ManagerDashboardPlayerRow[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row) => row && typeof row === "object") as ManagerDashboardPlayerRow[];
+}
+
+function isEmptySessionCandidate(input: {
+  game: GameDoc;
+  overview: AnalyticsOverview;
+  playerRows: ManagerDashboardPlayerRow[];
+}): boolean {
+  const startedAt = timestampToIso(input.overview.startedAt) ?? timestampToIso(input.game.startedAt) ?? timestampToIso(input.game.started);
+  const endedAt = timestampToIso(input.overview.endedAt) ?? timestampToIso(input.game.endedAt) ?? timestampToIso(input.game.ended);
+  const started = asBoolean(input.game.started);
+  const ended = asBoolean(input.game.ended);
+  const playerCount = Math.max(
+    0,
+    asNumber(input.overview.totalPlayers) ?? asNumber((input.overview as Record<string, unknown>).totalPlayers) ?? input.playerRows.length
+  );
+  return !startedAt && !endedAt && !started && !ended && playerCount === 0;
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    groups.push(items.slice(index, index + size));
+  }
+  return groups;
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
@@ -202,7 +318,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
     const canonicalOrgGamesSnap = await adminDb.collection("orgs").doc(access.orgId).collection("games").get();
     const legacyOrgGamesSnap = await adminDb.collection("organizations").doc(access.orgId).collection("games").get();
 
-    const linkMap = new Map<string, { createdAt: string | null }>();
+    const linkMap = new Map<
+      string,
+      {
+        createdAt: string | null;
+        sourceSessionId: string | null;
+        linkSource: SessionIdentitySource;
+        isArchived: boolean;
+        isDeleted: boolean;
+      }
+    >();
 
     const collectLinks = (docs: Array<{ id: string; data: () => OrgGameLinkDoc }>) => {
       for (const doc of docs) {
@@ -212,8 +337,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
 
         const createdAt = timestampToIso(data.createdAt);
         const existing = linkMap.get(gameCode);
-        if (!existing || (!existing.createdAt && createdAt)) {
-          linkMap.set(gameCode, { createdAt });
+        const sourceSessionId = asNonEmptyString(data.sessionId);
+        const linkArchived = asBoolean(data.hiddenFromOrgDashboard) || timestampToIso(data.archivedAt) != null;
+        const linkDeleted = timestampToIso(data.deletedAt) != null;
+        if (!existing || (!existing.createdAt && createdAt) || (!existing.sourceSessionId && sourceSessionId)) {
+          linkMap.set(gameCode, {
+            createdAt: createdAt ?? existing?.createdAt ?? null,
+            sourceSessionId: sourceSessionId ?? existing?.sourceSessionId ?? null,
+            linkSource: sourceSessionId ? "org_game_link_session_ref" : "org_game_link_game_code",
+            isArchived: linkArchived || existing?.isArchived === true,
+            isDeleted: linkDeleted || existing?.isDeleted === true,
+          });
         }
       }
     };
@@ -225,71 +359,105 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
       const fallbackGames = await adminDb.collection("games").where("orgId", "==", access.orgId).limit(100).get();
       for (const gameDoc of fallbackGames.docs) {
         if (!linkMap.has(gameDoc.id)) {
-          linkMap.set(gameDoc.id, { createdAt: timestampToIso((gameDoc.data() ?? {}).createdAt) });
+          linkMap.set(gameDoc.id, {
+            createdAt: timestampToIso((gameDoc.data() ?? {}).createdAt),
+            sourceSessionId: null,
+            linkSource: "games_org_fallback",
+            isArchived: false,
+            isDeleted: false,
+          });
         }
       }
     }
 
     const gameCodes = [...linkMap.keys()];
+    const url = new URL(request.url);
+    const includeEmpty = ["1", "true", "yes"].includes((url.searchParams.get("includeEmpty") ?? "").trim().toLowerCase());
+    const nowMs = Date.now();
+    const ABANDONED_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-    const orgUserAnalyticsSnap = await adminDb.collection("orgAnalytics").doc(access.orgId).collection("users").get();
-    const orgUserMetrics = orgUserAnalyticsSnap.docs.map((doc) => (doc.data() ?? {}) as Record<string, unknown>);
-    const orgSuccessRates = orgUserMetrics
-      .map((row) => asNumber(row.successRate) ?? asNumber(row.averageSuccessRate))
-      .filter((value): value is number => value != null && Number.isFinite(value));
-    const orgDisputeRates = orgUserMetrics
-      .map((row) => asNumber(row.disputeRate) ?? asNumber(row.averageDisputeRate))
-      .filter((value): value is number => value != null && Number.isFinite(value));
-    const orgResolutionTimes = orgUserMetrics
-      .map((row) => asNumber(row.avgResolutionTimeMs) ?? asNumber(row.averageResolutionTimeMs))
-      .filter((value): value is number => value != null && Number.isFinite(value));
+    const gameRefs = gameCodes.map((gameCode) => adminDb.collection("games").doc(gameCode));
+    const dashboardRefs = gameCodes.map((gameCode) => adminDb.collection("managerDashboard").doc(gameCode));
+    const [gameDocs, dashboardDocs] = await Promise.all([
+      gameRefs.length > 0 ? adminDb.getAll(...gameRefs) : Promise.resolve([]),
+      dashboardRefs.length > 0 ? adminDb.getAll(...dashboardRefs) : Promise.resolve([]),
+    ]);
 
-    const sessions = await Promise.all(
-      gameCodes.map(async (gameCode) => {
-        const [gameDoc, playerAnalyticsSnap] = await Promise.all([
-          adminDb.collection("games").doc(gameCode).get(),
-          adminDb.collection("playerAnalytics").where("gameCode", "==", gameCode).get(),
-        ]);
+    const sessions = gameCodes.map((gameCode, index) => {
+      const gameDoc = gameDocs[index];
+      const dashboardDoc = dashboardDocs[index];
+      const game = (gameDoc?.data() ?? {}) as GameDoc;
+      const dashboard = (dashboardDoc?.data() ?? {}) as ManagerDashboardDoc;
+      const analytics = (dashboard.analytics && typeof dashboard.analytics === "object"
+        ? (dashboard.analytics as ManagerDashboardAnalytics)
+        : {}) as ManagerDashboardAnalytics;
+      const overview = asAnalyticsOverview(analytics.overview);
+      const playerRows = asPlayerRows(analytics.playerPerformance);
 
-        const game = (gameDoc.data() ?? {}) as GameDoc;
-        const claims = playerAnalyticsSnap.docs.reduce((sum, doc) => {
-          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
-          const eventCounts =
-            data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
-          return sum + (asNumber(eventCounts.admin_confirm_kill_claim) ?? asNumber(eventCounts.kill_claim) ?? 0);
-        }, 0);
-        const disputes = playerAnalyticsSnap.docs.reduce((sum, doc) => {
-          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
-          const eventCounts =
-            data.eventCounts && typeof data.eventCounts === "object" ? (data.eventCounts as Record<string, unknown>) : {};
-          return sum + (asNumber(eventCounts.admin_deny_kill_claim) ?? asNumber(eventCounts.kill_claim_denied) ?? 0);
-        }, 0);
-        const totalEvents = playerAnalyticsSnap.docs.reduce((sum, doc) => {
-          const data = (doc.data() ?? {}) as PlayerAnalyticsDoc;
-          return sum + (asNumber(data.eventsTotal) ?? sumEventCounts(data.eventCounts));
-        }, 0);
-        const successRate = claims > 0 ? ((claims - disputes) / claims) * 100 : null;
-        const disputeRate = claims > 0 ? (disputes / claims) * 100 : null;
-        const avgResolutionTimeMs = null;
+      const claimsSubmitted = playerRows.reduce((sum, row) => sum + Math.max(0, asNumber(row.claimsSubmitted) ?? 0), 0);
+      const claimsConfirmed = playerRows.reduce((sum, row) => sum + Math.max(0, asNumber(row.claimsConfirmed) ?? 0), 0);
+      const claimsDenied = playerRows.reduce((sum, row) => sum + Math.max(0, asNumber(row.claimsDenied) ?? 0), 0);
 
-        const session: SessionAggregate = {
-          gameCode,
-          status: deriveStatus(game, {}),
-          createdAt: linkMap.get(gameCode)?.createdAt ?? timestampToIso(game.createdAt),
-          startedAt: timestampToIso(game.started),
-          endedAt: timestampToIso(game.ended),
-          playerCount: playerAnalyticsSnap.size,
-          claims: claims > 0 ? claims : totalEvents > 0 ? 0 : null,
-          disputes: disputes > 0 ? disputes : claims > 0 ? 0 : null,
-          successRate,
-          disputeRate,
-          avgResolutionTimeMs,
-          analyticsAccess: buildSessionAnalyticsAccess(game),
-        };
+      const claims = claimsSubmitted > 0 ? claimsSubmitted : claimsConfirmed + claimsDenied > 0 ? claimsConfirmed + claimsDenied : null;
+      const disputes = claimsDenied > 0 ? claimsDenied : claims ? 0 : null;
+      const successRate = asNumber(overview.successRate) ?? (claims != null && claims > 0 ? (claimsConfirmed / claims) * 100 : null);
+      const disputeRate = asNumber(overview.disputeRate) ?? (claims != null && claims > 0 && disputes != null ? (disputes / claims) * 100 : null);
+      const avgResolutionTimeMs = asNumber(overview.averageResolutionTimeMs) ?? asNumber(analytics.averageResolutionTimeMs);
+      const playerCount = Math.max(
+        0,
+        asNumber(overview.totalPlayers) ?? asNumber((analytics as Record<string, unknown>).totalPlayers) ?? playerRows.length
+      );
+      const linkMeta = linkMap.get(gameCode);
+      const isArchived = (linkMeta?.isArchived ?? false) || asBoolean(game.hiddenFromOrgDashboard) || timestampToIso(game.archivedAt) != null;
+      const isDeleted = (linkMeta?.isDeleted ?? false) || timestampToIso(game.deletedAt) != null;
+      const isEmptyCandidate = isEmptySessionCandidate({ game, overview, playerRows });
+      const createdAt = linkMap.get(gameCode)?.createdAt ?? timestampToIso(game.createdAt);
+      const createdAtMs = createdAt ? new Date(createdAt).getTime() : Number.NaN;
+      const isAbandoned = isEmptyCandidate && Number.isFinite(createdAtMs) && nowMs - createdAtMs >= ABANDONED_AGE_MS;
 
-        return session;
-      })
-    );
+      const sourceSessionId = linkMap.get(gameCode)?.sourceSessionId ?? null;
+      const identitySource = linkMap.get(gameCode)?.linkSource ?? "games_org_fallback";
+      const sessionType: "real" | "virtual" = sourceSessionId ? "real" : "virtual";
+      const identity = makeSessionIdentityMetadata({
+        orgId: access.orgId,
+        identitySource,
+        sourceSessionId,
+        gameCodes: [gameCode],
+      });
+      const session: SessionAggregate = {
+        sessionId: makeBusinessSessionGroupId({
+          type: sessionType,
+          orgId: access.orgId,
+          sessionKey: sessionType === "real" ? `session:${sourceSessionId ?? "missing"}` : `game:${gameCode}`,
+        }),
+        sessionType,
+        sourceSessionId,
+        ...identity,
+        gameCode,
+        gameCodes: [gameCode],
+        status: deriveStatus(game, overview),
+        createdAt,
+        startedAt: timestampToIso(overview.startedAt) ?? timestampToIso(game.startedAt) ?? timestampToIso(game.started),
+        endedAt: timestampToIso(overview.endedAt) ?? timestampToIso(game.endedAt) ?? timestampToIso(game.ended),
+        playerCount,
+        claims,
+        disputes,
+        successRate,
+        disputeRate,
+        avgResolutionTimeMs,
+        analyticsAccess: buildSessionAnalyticsAccess({
+          game,
+          overview,
+          playerCount,
+        }),
+        isArchived,
+        isDeleted,
+        isEmptyCandidate,
+        isAbandoned,
+      };
+
+      return session;
+    });
 
     sessions.sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -297,14 +465,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
       return bTime - aTime;
     });
 
+    const visibleSessions = includeEmpty
+      ? sessions.filter((session) => !session.isArchived && !session.isDeleted)
+      : sessions.filter((session) => !session.isArchived && !session.isDeleted && !session.isAbandoned);
+
     const average = (values: number[]) => (values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null);
-    const successRates = sessions
+    const successRates = visibleSessions
       .map((session) => session.successRate)
       .filter((value): value is number => value != null && Number.isFinite(value));
-    const disputeRates = sessions
+    const disputeRates = visibleSessions
       .map((session) => session.disputeRate)
       .filter((value): value is number => value != null && Number.isFinite(value));
-    const resolutionTimes = sessions
+    const resolutionTimes = visibleSessions
       .map((session) => session.avgResolutionTimeMs)
       .filter((value): value is number => value != null && Number.isFinite(value));
 
@@ -318,12 +490,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
       },
       entitlements,
       summary: {
-        totalSessions: sessions.length,
-        averageSuccessRate: orgSuccessRates.length > 0 ? average(orgSuccessRates) : average(successRates),
-        averageDisputeRate: orgDisputeRates.length > 0 ? average(orgDisputeRates) : average(disputeRates),
-        averageResolutionTimeMs: orgResolutionTimes.length > 0 ? average(orgResolutionTimes) : average(resolutionTimes),
+        totalSessions: visibleSessions.length,
+        hiddenStaleSessionCount: sessions.filter((session) => session.isAbandoned && !session.isArchived && !session.isDeleted).length,
+        averageSuccessRate: average(successRates),
+        averageDisputeRate: average(disputeRates),
+        averageResolutionTimeMs: average(resolutionTimes),
       },
-      trends: sessions.slice(0, 12).map((session, index) => ({
+      trends: visibleSessions.slice(0, 12).map((session, index) => ({
         index: index + 1,
         gameCode: session.gameCode,
         createdAt: session.createdAt,
@@ -332,7 +505,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
         avgResolutionTimeMs: session.avgResolutionTimeMs,
         analyticsAccess: session.analyticsAccess,
       })),
-      sessions,
+      sessions: visibleSessions,
     });
   } catch (error) {
     if (error instanceof OrgUnauthenticatedError) {
@@ -353,5 +526,149 @@ export async function GET(request: Request, { params }: { params: Promise<{ orgI
 
     console.error("[org:sessions] Failed", error);
     return NextResponse.json({ code: "INTERNAL", message: "Unable to load organization sessions." }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ orgId: string }> }) {
+  try {
+    const { orgId } = await params;
+    const access = await assertOrgAccess(request.headers.get("authorization"), orgId);
+    const body = (await request.json().catch(() => ({}))) as BulkCleanupBody;
+    const action = asNonEmptyString(body.action)?.toLowerCase();
+    if (action !== "archive_selected_empty" && action !== "delete_selected_empty") {
+      return NextResponse.json({ code: "BAD_REQUEST", message: "Unsupported cleanup action." }, { status: 400 });
+    }
+
+    const selected = Array.isArray(body.gameCodes)
+      ? body.gameCodes
+          .map((value) => asNonEmptyString(value))
+          .filter((value): value is string => value != null)
+          .map((value) => value.trim().toUpperCase())
+      : [];
+    if (selected.length === 0) {
+      return NextResponse.json({ code: "BAD_REQUEST", message: "At least one game code is required." }, { status: 400 });
+    }
+
+    const uniqueCodes = [...new Set(selected)];
+    const gameRefs = uniqueCodes.map((gameCode) => adminDb.collection("games").doc(gameCode));
+    const canonicalLinkRefs = uniqueCodes.map((gameCode) => adminDb.collection("orgs").doc(access.orgId).collection("games").doc(gameCode));
+    const legacyLinkRefs = uniqueCodes.map((gameCode) => adminDb.collection("organizations").doc(access.orgId).collection("games").doc(gameCode));
+    const dashboardRefs = uniqueCodes.map((gameCode) => adminDb.collection("managerDashboard").doc(gameCode));
+    const [gameDocs, canonicalLinkDocs, legacyLinkDocs, dashboardDocs] = await Promise.all([
+      gameRefs.length > 0 ? adminDb.getAll(...gameRefs) : Promise.resolve([]),
+      canonicalLinkRefs.length > 0 ? adminDb.getAll(...canonicalLinkRefs) : Promise.resolve([]),
+      legacyLinkRefs.length > 0 ? adminDb.getAll(...legacyLinkRefs) : Promise.resolve([]),
+      dashboardRefs.length > 0 ? adminDb.getAll(...dashboardRefs) : Promise.resolve([]),
+    ]);
+
+    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
+    const eligibleCodes: string[] = [];
+    const skippedDetails: CleanupSkipDetail[] = [];
+    const existingGameCodes = new Set<string>();
+    const canonicalLinkCodes = new Set<string>();
+    const legacyLinkCodes = new Set<string>();
+
+    for (let index = 0; index < uniqueCodes.length; index += 1) {
+      const gameCode = uniqueCodes[index] ?? "";
+      const gameDoc = gameDocs[index];
+      const canonicalLinkDoc = canonicalLinkDocs[index];
+      const legacyLinkDoc = legacyLinkDocs[index];
+      const hasGameDoc = Boolean(gameDoc?.exists);
+      const hasCanonicalLink = Boolean(canonicalLinkDoc?.exists);
+      const hasLegacyLink = Boolean(legacyLinkDoc?.exists);
+      if (!hasGameDoc && !hasCanonicalLink && !hasLegacyLink) {
+        skippedDetails.push({ gameCode, reason: "not_found" });
+        continue;
+      }
+      if (hasGameDoc) existingGameCodes.add(gameCode);
+      if (hasCanonicalLink) canonicalLinkCodes.add(gameCode);
+      if (hasLegacyLink) legacyLinkCodes.add(gameCode);
+      const game = (gameDoc.data() ?? {}) as GameDoc;
+      const dashboard = (dashboardDocs[index]?.data() ?? {}) as ManagerDashboardDoc;
+      const analytics = dashboard.analytics && typeof dashboard.analytics === "object" ? (dashboard.analytics as ManagerDashboardAnalytics) : {};
+      const overview = asAnalyticsOverview(analytics.overview);
+      const playerRows = asPlayerRows(analytics.playerPerformance);
+      const emptyCandidate = isEmptySessionCandidate({ game, overview, playerRows });
+      if (!emptyCandidate) {
+        skippedDetails.push({
+          gameCode,
+          reason: "not_empty_or_active",
+        });
+        continue;
+      }
+      eligibleCodes.push(gameCode);
+    }
+
+    if (eligibleCodes.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        action,
+        updatedCount: 0,
+        updatedCodes: [] as string[],
+        skippedCount: skippedDetails.length,
+        skippedCodes: skippedDetails.map((entry) => entry.gameCode),
+        skippedDetails,
+      });
+    }
+
+    const updatePayload =
+      action === "archive_selected_empty"
+        ? {
+            hiddenFromOrgDashboard: true,
+            archivedAt: nowIso,
+            archivedByAccountId: access.uid,
+            updatedAt: nowIso,
+          }
+        : {
+            hiddenFromOrgDashboard: true,
+            deletedAt: nowIso,
+            deletedByAccountId: access.uid,
+            deletedReason: "manager_cleanup_empty",
+            updatedAt: nowIso,
+          };
+
+    for (const group of chunks(eligibleCodes, 400)) {
+      const batch = adminDb.batch();
+      for (const gameCode of group) {
+        if (existingGameCodes.has(gameCode)) {
+          batch.set(adminDb.collection("games").doc(gameCode), updatePayload, { merge: true });
+        }
+        if (canonicalLinkCodes.has(gameCode)) {
+          batch.set(adminDb.collection("orgs").doc(access.orgId).collection("games").doc(gameCode), updatePayload, { merge: true });
+        }
+        if (legacyLinkCodes.has(gameCode)) {
+          batch.set(adminDb.collection("organizations").doc(access.orgId).collection("games").doc(gameCode), updatePayload, { merge: true });
+        }
+      }
+      await batch.commit();
+    }
+
+    return NextResponse.json({
+      ok: true,
+      action,
+      updatedCount: eligibleCodes.length,
+      updatedCodes: eligibleCodes,
+      skippedCount: skippedDetails.length,
+      skippedCodes: skippedDetails.map((entry) => entry.gameCode),
+      skippedDetails,
+      processedAt: nowMs,
+    });
+  } catch (error) {
+    if (error instanceof OrgUnauthenticatedError) {
+      return NextResponse.json({ code: "UNAUTHENTICATED", message: "Sign in before accessing this organization." }, { status: 401 });
+    }
+    if (error instanceof OrgForbiddenError) {
+      return NextResponse.json({ code: "FORBIDDEN", message: "This account cannot access this organization." }, { status: 403 });
+    }
+    if (error instanceof OrgNotFoundError) {
+      return NextResponse.json({ code: "NOT_FOUND", message: "Organization not found." }, { status: 404 });
+    }
+    if (error instanceof OrgAccessInfrastructureError) {
+      return NextResponse.json({ code: "AUTH_VERIFICATION_FAILED", message: "Server could not verify Firebase auth." }, { status: 500 });
+    }
+
+    console.error("[org:sessions:cleanup] Failed", error);
+    return NextResponse.json({ code: "INTERNAL", message: "Unable to clean up organization sessions." }, { status: 500 });
   }
 }

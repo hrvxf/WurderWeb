@@ -1,11 +1,14 @@
+import Link from "next/link";
 import { useMemo } from "react";
 
 import { normalizeRatioMetric, toNullableNumber } from "@wurder/shared-analytics";
 import type { PlayerPerformance } from "@wurder/shared-analytics";
+import { businessSessionPlayerRoute } from "@/lib/business/routes";
 
 type PlayerPerformanceTableProps = {
   players: PlayerPerformance[];
   mode?: string | null;
+  gameCode: string;
 };
 
 function formatPercent(value: number | null | undefined): string {
@@ -30,7 +33,7 @@ function isClassicMode(mode: string | null | undefined): boolean {
   return (mode ?? "").trim().toLowerCase() === "classic";
 }
 
-export default function PlayerPerformanceTable({ players, mode }: PlayerPerformanceTableProps) {
+export default function PlayerPerformanceTable({ players, mode, gameCode }: PlayerPerformanceTableProps) {
   const hasDeathsData = players.some((player) => player.deaths != null);
   const sortedPlayers = useMemo(
     () =>
@@ -44,14 +47,14 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
   );
 
   return (
-    <section className="mission-control__panel p-4 sm:p-5">
+    <section className="mission-control__panel p-3.5 sm:p-4">
       <h2 className="mission-control__display text-lg font-semibold text-[var(--mc-text)]">Player Performance</h2>
       {isClassicMode(mode) ? (
         <p className="mt-1 text-xs text-[var(--mc-text-muted)]">In classic mode, D represents confirmed claims against the player rather than eliminations.</p>
       ) : null}
-      <div className="mt-4 overflow-x-auto">
-        <table className="min-w-full divide-y divide-[var(--mc-border)] text-sm">
-          <thead className="bg-white/4 text-left text-xs uppercase tracking-wide text-[var(--mc-text-muted)]">
+      <div className="mt-3 max-h-[360px] overflow-auto">
+        <table className="mission-control__table mission-control__table--compact min-w-full divide-y divide-[var(--mc-border)] text-sm">
+          <thead className="sticky top-0 z-10 bg-[color:rgba(9,17,30,0.94)] text-left text-xs uppercase tracking-wide text-[var(--mc-text-muted)]">
             <tr>
               <th className="px-3 py-2">Player</th>
               <th className="px-3 py-2">Kills</th>
@@ -65,12 +68,20 @@ export default function PlayerPerformanceTable({ players, mode }: PlayerPerforma
             {sortedPlayers.length > 0 ? (
               sortedPlayers.map((player, index) => (
                 <tr key={player.playerId ?? player.userId ?? `player-row-${index}`} className="text-[var(--mc-text-soft)]">
-                  <td className="whitespace-nowrap px-3 py-2 font-medium text-[var(--mc-text)]">{player.playerName}</td>
-                  <td className="px-3 py-2">{formatCount(player.kills ?? player.confirmedKills)}</td>
-                  <td className="px-3 py-2">{formatCount(player.deaths)}</td>
-                  <td className="px-3 py-2">{formatRatio(player.kd)}</td>
-                  <td className="px-3 py-2">{formatPercent(player.accuracy ?? player.successRate)}</td>
-                  <td className="px-3 py-2">{formatPercent(player.disputeRate)}</td>
+                  <td className="whitespace-nowrap px-3 py-1.5 font-medium text-[var(--mc-text)]">
+                    {player.playerId && !player.playerId.startsWith("row-") ? (
+                      <Link className="text-[var(--mc-primary)] hover:underline" href={businessSessionPlayerRoute(gameCode, player.playerId)}>
+                        {player.playerName}
+                      </Link>
+                    ) : (
+                      player.playerName
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatCount(player.kills ?? player.confirmedKills)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatCount(player.deaths)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatRatio(player.kd)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatPercent(player.accuracy ?? player.successRate)}</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{formatPercent(player.disputeRate)}</td>
                 </tr>
               ))
             ) : (
