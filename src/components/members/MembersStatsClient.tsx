@@ -8,7 +8,7 @@ import { DEFAULT_MEMBER_STATS, type MemberStatsSummary } from "@/lib/auth/member
 import { useAuth } from "@/lib/auth/AuthProvider";
 
 type Timeframe = "7d" | "30d" | "90d" | "all";
-type ModeFilter = "all" | "classic" | "ring" | "guild" | "team";
+type ModeFilter = "all" | "classic" | "elimination" | "elimination_multi" | "guilds";
 type MetricKey = "games" | "winRate" | "kd" | "points";
 type GameTypeFilter = "b2c" | "b2b" | "all";
 
@@ -46,9 +46,9 @@ const TIMEFRAME_OPTIONS: Array<{ value: Timeframe; label: string }> = [
 const MODE_OPTIONS: Array<{ value: ModeFilter; label: string }> = [
   { value: "all", label: "All modes" },
   { value: "classic", label: "Classic" },
-  { value: "ring", label: "Ring" },
-  { value: "guild", label: "Guild" },
-  { value: "team", label: "Team" },
+  { value: "elimination", label: "Elimination" },
+  { value: "elimination_multi", label: "Elimination Multi" },
+  { value: "guilds", label: "Guild" },
 ];
 
 function safeRatio(numerator: number, denominator: number): number | null {

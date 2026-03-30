@@ -4,6 +4,7 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { adminDb } from "@/lib/firebase/admin";
 import { normalizeProductTier, type ProductTier } from "@/lib/product/entitlements";
+import { parseCanonicalGameMode } from "@/lib/game/mode";
 import type {
   FirestoreDateValue,
   OrgBranding,
@@ -333,7 +334,7 @@ export async function listOrganizationTemplates(input: { orgId: string }): Promi
     if (!name) return;
 
     const config: CompanyTemplateConfig = {
-      mode: asNonEmptyString(rawConfig.mode) ?? "classic",
+      mode: parseCanonicalGameMode(rawConfig.mode) ?? "classic",
       durationMinutes: asNumber(rawConfig.durationMinutes) ?? 30,
       wordDifficulty: asNonEmptyString(rawConfig.wordDifficulty) ?? "medium",
       teamsEnabled: Boolean(rawConfig.teamsEnabled),

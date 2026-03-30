@@ -8,6 +8,7 @@ import {
   resolveDefaultClassicWordGroupId,
 } from "@/domain/game/create-game";
 import type { SessionGameType } from "@/lib/game/session-type";
+import { parseCanonicalGameMode } from "@/lib/game/mode";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
@@ -64,6 +65,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
+  const managerMode = parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
 
@@ -91,6 +93,8 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           classicPointsToWin: 25,
         });
 
+        const resolvedMode = managerMode;
+
         const companyFields: Record<string, unknown> = {};
         companyFields.managerParticipation = managerParticipation;
         if (payload.orgId) companyFields.orgId = payload.orgId;
@@ -98,7 +102,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
         if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
 
-        tx.set(gameRef, { ...baseDoc, ...companyFields });
+        tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
       });
 
       return { gameCode };
