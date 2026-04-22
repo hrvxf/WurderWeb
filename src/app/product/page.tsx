@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import StoreBadges from "@/components/store/StoreBadges";
 
 export const metadata: Metadata = {
   title: "Product",
@@ -206,6 +207,7 @@ export default function ProductPage() {
               Business use
             </Link>
           </div>
+          <StoreBadges location="product_cta" className="mt-5" />
         </div>
       </section>
     </div>

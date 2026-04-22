@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import StoreBadges from "@/components/store/StoreBadges";
 
 export default function HomePage() {
   const jsonLd = {
@@ -55,6 +56,7 @@ export default function HomePage() {
                 How It Works
               </Link>
             </div>
+            <StoreBadges location="home_hero" className="mt-4" />
           </div>
 
           <aside
@@ -122,4 +124,3 @@ export default function HomePage() {
     </div>
   );
 }
-
