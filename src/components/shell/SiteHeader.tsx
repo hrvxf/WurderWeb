@@ -6,6 +6,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import Button from "@/components/Button";
+import { storeLinks } from "@/config/storeLinks";
+import { ANALYTICS_EVENTS, trackEvent } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import { AUTH_ROUTES } from "@/lib/auth/route-helpers";
 import { BUSINESS_ROUTES, businessSessionsRoute } from "@/lib/business/routes";
@@ -372,6 +374,10 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
     }
   }
 
+  function handleStoreClick(location: string) {
+    trackEvent(ANALYTICS_EVENTS.storeCtaClick, { location, platform: "ios" });
+  }
+
   return (
     <>
       <header
@@ -416,6 +422,16 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
             >
               Join game
             </Button>
+            <a
+              href={storeLinks.iosAppStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Download Wurder on the Apple App Store (opens in a new tab)"
+              onClick={() => handleStoreClick("header_desktop")}
+              className="inline-flex min-h-10 items-center justify-center rounded-md border border-amber-100/30 bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-3 py-1.5 text-sm font-semibold text-[#160f08] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/90 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
+              iOS App
+            </a>
 
             {effectiveAuthenticated ? (
               <div className="relative" ref={desktopMenuRef}>
@@ -565,6 +581,15 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
 
             <div className="mt-5 space-y-2">
               <p className="text-xs uppercase tracking-wide text-white/45">Explore</p>
+              <a
+                href={storeLinks.iosAppStoreUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => handleStoreClick("header_mobile")}
+                className="block rounded-xl border border-amber-200/30 bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-3 py-2.5 text-sm font-semibold text-[#160f08]"
+              >
+                Download on iOS
+              </a>
               {EXPLORE_LINKS.map((item) => (
                 <MenuRow key={item.href} item={item} pathname={pathname} />
               ))}

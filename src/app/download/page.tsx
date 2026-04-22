@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { parseGameCode } from "@/domain/join/code";
 import { buildAppJoinLink } from "@/domain/join/links";
+import StoreBadges from "@/components/store/StoreBadges";
 
 export default async function DownloadPage({
   searchParams,
@@ -19,6 +20,7 @@ export default async function DownloadPage({
       <p className="mt-3 max-w-2xl text-soft">
         Install the app, then return to join your game.
       </p>
+      <StoreBadges location="download_page" className="mt-6" />
       {parsedCode.isValid ? (
         <div className="mt-4 border-y border-white/15 py-3 text-sm text-soft">
           <p className="text-xs uppercase tracking-[0.16em] text-muted">Preserved game code</p>

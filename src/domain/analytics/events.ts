@@ -5,6 +5,7 @@ export const ANALYTICS_EVENTS = {
   joinOpenSuccessProxy: "join_open_success_proxy",
   joinFallbackShown: "join_fallback_shown",
   joinInstallClick: "join_install_click",
+  storeCtaClick: "store_cta_click",
 } as const;
 
 export type AnalyticsEventName =
