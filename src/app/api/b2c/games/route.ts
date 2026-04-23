@@ -74,6 +74,26 @@ export async function POST(request: Request) {
       );
     }
 
+    if (error instanceof HandoffSetupNotFoundError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_NOT_FOUND",
+          message: "The provided setupId was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof HandoffSetupExpiredError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_EXPIRED",
+          message: "The provided setupId has expired.",
+        },
+        { status: 410 }
+      );
+    }
+
     console.error("[b2c:games] Failed to create game document", error);
     const lowerMessage = errorMessage.toLowerCase();
     if (
@@ -103,22 +123,3 @@ export async function POST(request: Request) {
     );
   }
 }
-    if (error instanceof HandoffSetupNotFoundError) {
-      return NextResponse.json(
-        {
-          code: "SETUP_NOT_FOUND",
-          message: "The provided setupId was not found.",
-        },
-        { status: 404 }
-      );
-    }
-
-    if (error instanceof HandoffSetupExpiredError) {
-      return NextResponse.json(
-        {
-          code: "SETUP_EXPIRED",
-          message: "The provided setupId has expired.",
-        },
-        { status: 410 }
-      );
-    }
