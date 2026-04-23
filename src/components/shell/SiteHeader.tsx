@@ -374,6 +374,12 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
     }
   }
 
+  function handleStartSession() {
+    setMobileMenuOpen(false);
+    setDesktopMenuOpen(false);
+    router.push("/start-session?gameType=b2c&locked=1");
+  }
+
   function handleStoreClick(location: string) {
     trackEvent(ANALYTICS_EVENTS.storeCtaClick, { location, platform: "ios" });
   }
@@ -415,13 +421,6 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                 {activeAreaLabel}
               </span>
             ) : null}
-            <Button
-              href="/join"
-              variant="glass"
-              className="!rounded-md !border-0 !bg-transparent !px-2.5 !py-1.5 !text-sm !font-medium text-soft hover:!bg-transparent hover:!text-white sm:!text-sm"
-            >
-              Join game
-            </Button>
             <a
               href={storeLinks.iosAppStoreUrl}
               target="_blank"
@@ -470,6 +469,13 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                   >
                     <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">Account</div>
                     <div className="border-t border-white/10 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleStartSession}
+                        className="block w-full border-l-2 border-transparent px-3 py-2 text-left text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none disabled:opacity-60"
+                      >
+                        Start session
+                      </button>
                       {MEMBER_ACCOUNT_LINKS.map((item) => (
                         <Link
                           key={item.href}
@@ -597,12 +603,13 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
 
             <div className="mt-5 space-y-2">
               <p className="text-xs uppercase tracking-wide text-white/45">Account</p>
-              <Link
-                href="/join"
-                className="block border-l-2 border-transparent px-3 py-2 text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none"
+              <button
+                type="button"
+                onClick={handleStartSession}
+                className="block w-full border-l-2 border-transparent px-3 py-2 text-left text-sm font-semibold text-white/72 transition hover:text-white focus-visible:border-[#D96A5A]/60 focus-visible:text-white focus-visible:outline-none disabled:opacity-60"
               >
-                Join game
-              </Link>
+                Start session
+              </button>
               {effectiveAuthenticated ? (
                 <>
                   {MEMBER_ACCOUNT_LINKS.map((item) => (

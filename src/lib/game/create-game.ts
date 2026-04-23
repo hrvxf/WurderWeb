@@ -28,6 +28,7 @@ export type ManagerConfig = {
 type CreateGameForHostUidInput = {
   hostUid: string;
   gameType?: SessionGameType;
+  mode?: string;
   orgId?: string;
   templateId?: string;
   analyticsEnabled?: boolean;
@@ -65,7 +66,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
-  const managerMode = parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
+  const managerMode = parseCanonicalGameMode(payload.mode) ?? parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
 

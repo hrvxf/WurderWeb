@@ -4,6 +4,11 @@ import {
   GameCodeCollisionError,
 } from "@/lib/game/create-game";
 import {
+  HandoffSetupExpiredError,
+  HandoffSetupNotFoundError,
+  requireActiveHandoffSetupDraft,
+} from "@/lib/handoff/setup-drafts";
+import {
   FirebaseAuthInfrastructureError,
   FirebaseAuthUnauthenticatedError,
   verifyFirebaseAuthHeader,
@@ -14,7 +19,25 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const hostUid = await verifyFirebaseAuthHeader(request.headers.get("authorization"));
-    const result = await createGameForHostUid({ hostUid, gameType: "b2c" });
+    const body = (await request.json().catch(() => ({}))) as { setupId?: unknown };
+    const setupId = typeof body.setupId === "string" ? body.setupId.trim() : "";
+
+    const setup = setupId ? await requireActiveHandoffSetupDraft(setupId) : null;
+    if (setup && setup.draft.config.gameType !== "b2c") {
+      return NextResponse.json(
+        {
+          code: "INVALID_SETUP_TYPE",
+          message: "setupId is not valid for b2c game creation.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const result = await createGameForHostUid({
+      hostUid,
+      gameType: "b2c",
+      mode: setup?.draft.config.mode,
+    });
     return NextResponse.json({ ...result, gameType: "b2c" as const }, { status: 201 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown b2c create-game error.";
@@ -80,3 +103,22 @@ export async function POST(request: Request) {
     );
   }
 }
+    if (error instanceof HandoffSetupNotFoundError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_NOT_FOUND",
+          message: "The provided setupId was not found.",
+        },
+        { status: 404 }
+      );
+    }
+
+    if (error instanceof HandoffSetupExpiredError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_EXPIRED",
+          message: "The provided setupId has expired.",
+        },
+        { status: 410 }
+      );
+    }
