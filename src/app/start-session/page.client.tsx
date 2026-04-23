@@ -293,7 +293,14 @@ export default function StartSessionPageClient() {
             ) : null}
 
             <div className="mt-4 inline-flex rounded-xl border border-white/25 bg-white p-3">
-              <QRCodeCanvas value={draft.deepLink} size={220} level="M" fgColor="#111111" bgColor="#FFFFFF" marginSize={4} />
+              <QRCodeCanvas
+                value={draft.universalLink}
+                size={220}
+                level="M"
+                fgColor="#111111"
+                bgColor="#FFFFFF"
+                marginSize={4}
+              />
             </div>
 
             <p className="mt-4 text-sm text-soft">Scan with your phone</p>
