@@ -164,6 +164,11 @@ export default function StartSessionPageClient() {
     }
   }
 
+  const freeForAllVariant =
+    draft !== null && draft.config.mode === "free_for_all" ? draft.config.freeForAllVariant : null;
+  const guildWinCondition =
+    draft !== null && draft.config.mode === "guilds" ? (draft.config.guildWinCondition ?? "score") : null;
+
   return (
     <section className="mx-auto w-full max-w-3xl">
       <div className="surface-panel rounded-3xl p-6 sm:p-8">
@@ -270,19 +275,19 @@ export default function StartSessionPageClient() {
             <p className="mt-1 text-sm text-soft">
               Mode: <span className="font-semibold text-white">{MODE_SELECTIONS.find((entry) => entry.value === draft.config.mode)?.label ?? "Classic"}</span>
             </p>
-            {draft.config.mode === "free_for_all" ? (
+            {freeForAllVariant !== null ? (
               <p className="mt-1 text-sm text-soft">
                 Variant:{" "}
                 <span className="font-semibold text-white">
-                  {FREE_FOR_ALL_VARIANTS.find((entry) => entry.value === (draft.config.freeForAllVariant ?? "classic"))?.label ?? "Classic"}
+                  {FREE_FOR_ALL_VARIANTS.find((entry) => entry.value === freeForAllVariant)?.label ?? "Classic"}
                 </span>
               </p>
             ) : null}
-            {draft.config.mode === "guilds" ? (
+            {guildWinCondition !== null ? (
               <p className="mt-1 text-sm text-soft">
                 Win condition:{" "}
                 <span className="font-semibold text-white">
-                  {GUILD_WIN_CONDITIONS.find((entry) => entry.value === (draft.config.guildWinCondition ?? "score"))?.label ?? "Score race"}
+                  {GUILD_WIN_CONDITIONS.find((entry) => entry.value === guildWinCondition)?.label ?? "Score race"}
                 </span>
               </p>
             ) : null}
