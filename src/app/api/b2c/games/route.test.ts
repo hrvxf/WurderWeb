@@ -63,11 +63,41 @@ describe("POST /api/b2c/games", () => {
     expect(createGameForHostUidMock).toHaveBeenCalledWith(
       expect.objectContaining({ hostUid: "uid-host", gameType: "b2c", mode: "classic" })
     );
+    expect(createGameForHostUidMock.mock.calls[0]?.[0]).not.toHaveProperty("managerParticipation");
     expect(payload.gameCode).toBe("ABCD");
     expect(payload.gameType).toBe("b2c");
     expect(payload.joinPath).toBe("/join/ABCD");
     expect(payload.deepLink).toBe("wurder://join/ABCD");
     expect(payload.universalLink).toBe("https://wurder.app/join/ABCD");
+    expect(payload.metadata?.createdFrom).toBe("b2c_setup");
+    expect(payload.metadata?.status).toBe("waiting");
+  });
+
+  it("keeps b2c_setup metadata and ignores incoming host_only participation requests", async () => {
+    const response = await POST(
+      buildRequest(
+        {
+          mode: "classic",
+          managerParticipation: "host_only",
+        },
+        { authorization: "Bearer token-valid" }
+      )
+    );
+    const payload = (await response.json()) as {
+      metadata?: { createdFrom?: string; status?: string };
+    };
+
+    expect(response.status).toBe(201);
+    expect(createGameForHostUidMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostUid: "uid-host",
+        gameType: "b2c",
+        mode: "classic",
+        createdFrom: "b2c_setup",
+        status: "waiting",
+      })
+    );
+    expect(createGameForHostUidMock.mock.calls[0]?.[0]).not.toHaveProperty("managerParticipation");
     expect(payload.metadata?.createdFrom).toBe("b2c_setup");
     expect(payload.metadata?.status).toBe("waiting");
   });

@@ -11,9 +11,10 @@ vi.mock("firebase-admin/firestore", () => ({
 }));
 
 vi.mock("@/domain/game/create-game", () => ({
-  buildInitialGameDoc: vi.fn(({ gameCode, gameType, createdByAccountId, createdAt, wordGroupId, lastActionAt, initialAliveCount }) => ({
+  buildInitialGameDoc: vi.fn(({ gameCode, gameType, hostPlayerId, createdByAccountId, createdAt, wordGroupId, lastActionAt, initialAliveCount }) => ({
     gameCode,
     gameType,
+    hostPlayerId,
     createdByAccountId,
     createdAt,
     wordGroupId,
@@ -113,7 +114,7 @@ describe("createGameForHostUid b2b mode fields", () => {
     expect(setCalls[0]?.data).not.toHaveProperty("freeForAllVariant");
   });
 
-  it("writes free-for-all survivor variant to b2c game doc", async () => {
+  it("writes participant host fields for b2c games when managerParticipation is omitted", async () => {
     await createGameForHostUid({
       hostUid: "host-b2c",
       gameType: "b2c",
@@ -132,11 +133,67 @@ describe("createGameForHostUid b2b mode fields", () => {
       managerAccountId: "host-b2c",
       managerUserId: "host-b2c",
       hostUserId: "host-b2c",
+      hostParticipationMode: "participant",
+      managerParticipation: "host_player",
+      hostOnly: false,
+      createdFrom: "b2c_setup",
+      status: "waiting",
+    });
+    expect(setCalls[0]?.data.hostPlayerId).toBeNull();
+    expect(setCalls[0]?.data.aliveCount).toBe(0);
+  });
+
+  it("forces participant semantics for b2c games even when host_only is requested", async () => {
+    await createGameForHostUid({
+      hostUid: "host-b2c-host-only",
+      gameType: "b2c",
+      mode: "classic",
+      managerParticipation: "host_only",
+      createdFrom: "b2c_setup",
+      status: "waiting",
+    });
+
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.data).toMatchObject({
+      gameType: "b2c",
+      mode: "classic",
+      hostParticipationMode: "participant",
+      managerParticipation: "host_player",
+      hostOnly: false,
+      createdFrom: "b2c_setup",
+      status: "waiting",
+    });
+  });
+
+  it("writes observer semantics for b2b host_only sessions", async () => {
+    await createGameForHostUid({
+      hostUid: "host-observer-1",
+      gameType: "b2b",
+      mode: "classic",
+      managerConfig: {
+        mode: "classic",
+        durationMinutes: 30,
+        wordDifficulty: "normal",
+        teamsEnabled: false,
+        metricsEnabled: [],
+        minSecondsBeforeClaim: 0,
+        minSecondsBetweenClaims: 0,
+        maxActiveClaimsPerPlayer: 1,
+        freeRefreshCooldownSeconds: 0,
+      },
+    });
+
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.data).toMatchObject({
+      gameType: "b2b",
+      mode: "classic",
+      hostParticipationMode: "observer",
+      managerParticipation: "host_only",
       hostOnly: true,
     });
   });
 
-  it("writes canonical host identity fields for host-player sessions", async () => {
+  it("writes participant semantics for b2b host_player sessions", async () => {
     await createGameForHostUid({
       hostUid: "host-player-1",
       gameType: "b2b",
@@ -163,6 +220,7 @@ describe("createGameForHostUid b2b mode fields", () => {
       managerAccountId: "host-player-1",
       managerUserId: "host-player-1",
       hostUserId: "host-player-1",
+      hostParticipationMode: "participant",
       hostOnly: false,
       managerParticipation: "host_player",
     });

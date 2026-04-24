@@ -53,6 +53,15 @@ type AccountIdentityDoc = {
   username?: unknown;
 };
 
+type ManagerParticipation = "host_only" | "host_player";
+type HostParticipationMode = "observer" | "participant";
+
+type ResolveHostParticipationForCreateInput = {
+  gameType: SessionGameType;
+  createdFrom?: "b2c_setup";
+  requestedManagerParticipation?: ManagerParticipation;
+};
+
 export class UnauthenticatedCreateGameError extends Error {
   constructor(message = "Authentication required.") {
     super(message);
@@ -67,16 +76,58 @@ export class GameCodeCollisionError extends Error {
   }
 }
 
+export function resolveHostParticipationForCreate(input: ResolveHostParticipationForCreateInput): {
+  requestedManagerParticipation: ManagerParticipation | null;
+  managerParticipation: ManagerParticipation;
+  hostParticipationMode: HostParticipationMode;
+  hostOnly: boolean;
+  hostPlayerRowCreated: boolean;
+} {
+  const requestedManagerParticipation =
+    input.requestedManagerParticipation === "host_player"
+      ? "host_player"
+      : input.requestedManagerParticipation === "host_only"
+        ? "host_only"
+        : null;
+
+  if (input.gameType === "b2c" || input.createdFrom === "b2c_setup") {
+    return {
+      requestedManagerParticipation,
+      managerParticipation: "host_player",
+      hostParticipationMode: "participant",
+      hostOnly: false,
+      hostPlayerRowCreated: false,
+    };
+  }
+
+  const managerParticipation =
+    requestedManagerParticipation === "host_player" ? "host_player" : "host_only";
+
+  return {
+    requestedManagerParticipation,
+    managerParticipation,
+    hostParticipationMode: managerParticipation === "host_player" ? "participant" : "observer",
+    hostOnly: managerParticipation === "host_only",
+    hostPlayerRowCreated: managerParticipation === "host_player",
+  };
+}
+
 function buildHostIdentityFields(input: {
   hostUid: string;
-  managerParticipation: "host_only" | "host_player";
+  hostParticipationMode?: HostParticipationMode;
+  managerParticipation?: ManagerParticipation;
 }) {
+  const hostParticipationMode =
+    input.hostParticipationMode ??
+    (input.managerParticipation === "host_player" ? "participant" : "observer");
+
   return {
     createdBy: input.hostUid,
     managerAccountId: input.hostUid,
     managerUserId: input.hostUid,
     hostUserId: input.hostUid,
-    hostOnly: input.managerParticipation === "host_only",
+    hostParticipationMode,
+    hostOnly: hostParticipationMode === "observer",
   };
 }
 
@@ -97,13 +148,29 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   }
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
-  const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
+  const resolvedHostParticipation = resolveHostParticipationForCreate({
+    gameType,
+    createdFrom: payload.createdFrom,
+    requestedManagerParticipation: payload.managerParticipation,
+  });
+  const managerParticipation = resolvedHostParticipation.managerParticipation;
+  const hostParticipationMode = resolvedHostParticipation.hostParticipationMode;
   const managerMode = payload.mode;
   const isFreeForAllMode = managerMode === "free_for_all";
   const requestedFreeForAllVariant = payload.freeForAllVariant ?? payload.managerConfig?.freeForAllVariant;
   const requestedGuildWinCondition = payload.guildWinCondition ?? payload.managerConfig?.guildWinCondition;
   const resolvedFreeForAllVariant = isFreeForAllMode ? requestedFreeForAllVariant : undefined;
   const resolvedGuildWinCondition = managerMode === "guilds" ? requestedGuildWinCondition : undefined;
+
+  console.info("create_game_host_participation_resolved", {
+    gameType,
+    createdFrom: payload.createdFrom ?? null,
+    requestedManagerParticipation: resolvedHostParticipation.requestedManagerParticipation,
+    resolvedManagerParticipation: managerParticipation,
+    resolvedHostParticipationMode: hostParticipationMode,
+    resolvedHostOnly: resolvedHostParticipation.hostOnly,
+    hostPlayerRowCreated: resolvedHostParticipation.hostPlayerRowCreated,
+  });
 
   if (gameType === "b2b" && payload.managerConfig) {
     if (payload.managerConfig.mode !== managerMode) {
@@ -126,8 +193,9 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
       throw new Error("managerConfig.metricsEnabled is required.");
     }
   }
-  const hostPlayerId =
-    managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
+  const hostPlayerId = resolvedHostParticipation.hostPlayerRowCreated
+    ? await resolveCanonicalPlayerId(hostUid)
+    : null;
   const normalizedManagerConfig =
     gameType === "b2b"
       ? {
@@ -158,16 +226,22 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           createdAt: FieldValue.serverTimestamp(),
           wordGroupId,
           lastActionAt: Date.now(),
-          initialAliveCount: managerParticipation === "host_player" ? 1 : 0,
+          initialAliveCount: resolvedHostParticipation.hostPlayerRowCreated ? 1 : 0,
           classicMaxHuntersPerVictim: 3,
           classicPointsToWin: 25,
         });
-        const hostIdentityFields = buildHostIdentityFields({ hostUid, managerParticipation });
+        const hostIdentityFields = buildHostIdentityFields({
+          hostUid,
+          hostParticipationMode,
+          managerParticipation,
+        });
 
         const resolvedMode = managerMode;
 
         const companyFields: Record<string, unknown> = {};
+        companyFields.hostParticipationMode = hostParticipationMode;
         companyFields.managerParticipation = managerParticipation;
+        companyFields.hostOnly = resolvedHostParticipation.hostOnly;
         if (payload.orgId) companyFields.orgId = payload.orgId;
         if (payload.templateId) companyFields.templateId = payload.templateId;
         if (normalizedManagerConfig) companyFields.managerConfig = normalizedManagerConfig;
@@ -210,8 +284,10 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           gameManagerAccountId: hostIdentityFields.managerAccountId,
           gameManagerUserId: hostIdentityFields.managerUserId,
           gameHostUserId: hostIdentityFields.hostUserId,
+          gameHostParticipationMode: hostIdentityFields.hostParticipationMode,
           gameHostOnly: hostIdentityFields.hostOnly,
-          managerParticipation,
+          requestedManagerParticipation: resolvedHostParticipation.requestedManagerParticipation,
+          resolvedManagerParticipation: managerParticipation,
           hostPlayerId,
         });
         assertGameDocCanonicalFields({
