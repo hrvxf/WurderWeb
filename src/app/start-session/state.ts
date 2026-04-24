@@ -12,6 +12,119 @@ export type StartSessionModeState = {
   selectedGuildWinCondition: GuildWinCondition | null;
 };
 
+export type StartSessionConfig = {
+  gameType: GameType;
+  mode: StartSessionMode;
+  freeForAllVariant?: FreeForAllVariant;
+  guildWinCondition?: GuildWinCondition;
+};
+
+export type StartSessionMetadata = {
+  createdFrom: string;
+  createdAt: string;
+  expiresAt: string;
+  status: "waiting" | "started" | "expired";
+};
+
+export type StartSessionCreateResponse = {
+  gameCode: string;
+  gameType: GameType;
+  config: StartSessionConfig;
+  joinPath: string;
+  deepLink: string;
+  universalLink: string;
+  metadata: StartSessionMetadata;
+  setupId?: string;
+  startPath?: string;
+};
+
+type StartSessionCreateApiPayload = Partial<StartSessionCreateResponse> & {
+  gameType?: unknown;
+  mode?: unknown;
+  freeForAllVariant?: unknown;
+  guildWinCondition?: unknown;
+  message?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+export function parseStartSessionCreateResponse(input: {
+  payload: StartSessionCreateApiPayload;
+  fallbackConfig: StartSessionConfig;
+}): StartSessionCreateResponse {
+  const { payload, fallbackConfig } = input;
+  const metadata = isRecord(payload.metadata) ? payload.metadata : null;
+  const payloadConfig = isRecord(payload.config) ? payload.config : null;
+
+  const gameCode = typeof payload.gameCode === "string" ? payload.gameCode : "";
+  const joinPath = typeof payload.joinPath === "string" ? payload.joinPath : `/join/${gameCode}`;
+  const deepLink = typeof payload.deepLink === "string" ? payload.deepLink : `wurder://join/${gameCode}`;
+  const universalLink =
+    typeof payload.universalLink === "string" ? payload.universalLink : `https://wurder.app${joinPath}`;
+
+  const resolvedConfig: StartSessionConfig = {
+    gameType:
+      typeof payloadConfig?.gameType === "string"
+        ? (payloadConfig.gameType as GameType)
+        : typeof payload.gameType === "string"
+          ? (payload.gameType as GameType)
+          : fallbackConfig.gameType,
+    mode:
+      typeof payloadConfig?.mode === "string"
+        ? (payloadConfig.mode as StartSessionMode)
+        : typeof payload.mode === "string"
+          ? (payload.mode as StartSessionMode)
+          : fallbackConfig.mode,
+    freeForAllVariant:
+      typeof payloadConfig?.freeForAllVariant === "string"
+        ? (payloadConfig.freeForAllVariant as FreeForAllVariant)
+        : typeof payload.freeForAllVariant === "string"
+          ? (payload.freeForAllVariant as FreeForAllVariant)
+          : fallbackConfig.freeForAllVariant,
+    guildWinCondition:
+      typeof payloadConfig?.guildWinCondition === "string"
+        ? (payloadConfig.guildWinCondition as GuildWinCondition)
+        : typeof payload.guildWinCondition === "string"
+          ? (payload.guildWinCondition as GuildWinCondition)
+          : fallbackConfig.guildWinCondition,
+  };
+
+  if (
+    !gameCode ||
+    !joinPath ||
+    !deepLink ||
+    !universalLink ||
+    !metadata ||
+    typeof metadata.createdFrom !== "string" ||
+    typeof metadata.createdAt !== "string" ||
+    typeof metadata.expiresAt !== "string" ||
+    typeof metadata.status !== "string" ||
+    !resolvedConfig.gameType ||
+    !resolvedConfig.mode
+  ) {
+    throw new Error("Session response was incomplete.");
+  }
+
+  return {
+    gameCode,
+    gameType: resolvedConfig.gameType,
+    config: resolvedConfig,
+    joinPath,
+    deepLink,
+    universalLink,
+    metadata: {
+      createdFrom: metadata.createdFrom,
+      createdAt: metadata.createdAt,
+      expiresAt: metadata.expiresAt,
+      status: metadata.status as StartSessionMetadata["status"],
+    },
+    setupId: typeof payload.setupId === "string" ? payload.setupId : undefined,
+    startPath: typeof payload.startPath === "string" ? payload.startPath : undefined,
+  };
+}
+
 export function shouldShowFreeForAllVariant(mode: StartSessionMode): boolean {
   return mode === "free_for_all";
 }
