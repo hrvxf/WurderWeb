@@ -11,11 +11,67 @@ import {
 } from "@/lib/handoff/setup-drafts";
 
 export const runtime = "nodejs";
+export const preferredRegion = ["lhr1", "fra1"];
+let hasHandledSetupFetchRequest = false;
+
+function resolveSetupFetchRegion(): string | null {
+  return (
+    process.env.VERCEL_REGION ??
+    process.env.FUNCTION_REGION ??
+    process.env.AWS_REGION ??
+    process.env.GCLOUD_REGION ??
+    null
+  );
+}
+
+function resolveFirestoreDatabaseRegion(): string | null {
+  return (
+    process.env.FIRESTORE_DATABASE_REGION ??
+    process.env.FIREBASE_FIRESTORE_REGION ??
+    process.env.FIRESTORE_REGION ??
+    process.env.GCLOUD_REGION ??
+    null
+  );
+}
 
 export async function GET(_request: Request, context: { params: Promise<{ setupId: string }> }) {
+  const setupFetchRouteStartedAtMs = Date.now();
+  const setupFetchColdStart = !hasHandledSetupFetchRequest;
+  hasHandledSetupFetchRequest = true;
+  let setupIdForLog: string | null = null;
   try {
     const { setupId } = await context.params;
-    const result = await requireActiveHandoffSetupDraft(setupId);
+    setupIdForLog = setupId;
+    console.info("setup_fetch_route_started", {
+      setupId,
+      setup_fetch_cold_start: setupFetchColdStart,
+      setup_fetch_region: resolveSetupFetchRegion(),
+      firestore_database_region: resolveFirestoreDatabaseRegion(),
+    });
+    const setupFetchAdminReadyMs = Math.max(0, Date.now() - setupFetchRouteStartedAtMs);
+    console.info("setup_fetch_admin_ready_ms", {
+      setupId,
+      setup_fetch_admin_ready_ms: setupFetchAdminReadyMs,
+      setup_fetch_cold_start: setupFetchColdStart,
+    });
+    let firestoreReadMs: number | null = null;
+    const result = await requireActiveHandoffSetupDraft(setupId, {
+      onFirestoreReadMs: (ms) => {
+        firestoreReadMs = ms;
+      },
+    });
+    console.info("setup_fetch_firestore_read_ms", {
+      setupId,
+      setup_fetch_firestore_read_ms: firestoreReadMs,
+      setup_fetch_cold_start: setupFetchColdStart,
+    });
+    console.info("setup_fetch_total_ms", {
+      setupId,
+      setup_fetch_total_ms: Math.max(0, Date.now() - setupFetchRouteStartedAtMs),
+      setup_fetch_cold_start: setupFetchColdStart,
+      setup_fetch_region: resolveSetupFetchRegion(),
+      firestore_database_region: resolveFirestoreDatabaseRegion(),
+    });
     return NextResponse.json({
       setupId: result.setupId,
       config: result.draft.config,
@@ -25,6 +81,13 @@ export async function GET(_request: Request, context: { params: Promise<{ setupI
     });
   } catch (error) {
     if (error instanceof HandoffSetupNotFoundError) {
+      console.info("setup_fetch_total_ms", {
+        setupId: setupIdForLog,
+        setup_fetch_total_ms: Math.max(0, Date.now() - setupFetchRouteStartedAtMs),
+        setup_fetch_cold_start: setupFetchColdStart,
+        setup_fetch_region: resolveSetupFetchRegion(),
+        firestore_database_region: resolveFirestoreDatabaseRegion(),
+      });
       return NextResponse.json(
         {
           code: "SETUP_NOT_FOUND",
@@ -35,6 +98,13 @@ export async function GET(_request: Request, context: { params: Promise<{ setupI
     }
 
     if (error instanceof HandoffSetupExpiredError) {
+      console.info("setup_fetch_total_ms", {
+        setupId: setupIdForLog,
+        setup_fetch_total_ms: Math.max(0, Date.now() - setupFetchRouteStartedAtMs),
+        setup_fetch_cold_start: setupFetchColdStart,
+        setup_fetch_region: resolveSetupFetchRegion(),
+        firestore_database_region: resolveFirestoreDatabaseRegion(),
+      });
       return NextResponse.json(
         {
           code: "SETUP_EXPIRED",
@@ -44,6 +114,13 @@ export async function GET(_request: Request, context: { params: Promise<{ setupI
       );
     }
 
+    console.info("setup_fetch_total_ms", {
+      setupId: setupIdForLog,
+      setup_fetch_total_ms: Math.max(0, Date.now() - setupFetchRouteStartedAtMs),
+      setup_fetch_cold_start: setupFetchColdStart,
+      setup_fetch_region: resolveSetupFetchRegion(),
+      firestore_database_region: resolveFirestoreDatabaseRegion(),
+    });
     console.error("[handoff:setups] Failed to load setup draft", error);
     return NextResponse.json(
       {

@@ -2421,3 +2421,33 @@
 [info] +  Deploy complete! 
 [info] 
 [info] Project Console: https://console.firebase.google.com/project/wurderv-1/overview
+[debug] [2026-04-24T02:41:09.607Z] ----------------------------------------------------------------------
+[debug] [2026-04-24T02:41:09.611Z] Command:       C:\Users\adamj\AppData\Local\nodejs\node.exe C:\Users\adamj\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js apphosting:backends:list --project wurderv-1
+[debug] [2026-04-24T02:41:09.611Z] CLI Version:   14.20.0
+[debug] [2026-04-24T02:41:09.611Z] Platform:      win32
+[debug] [2026-04-24T02:41:09.611Z] Node Version:  v20.19.4
+[debug] [2026-04-24T02:41:09.612Z] Time:          Fri Apr 24 2026 03:41:09 GMT+0100 (British Summer Time)
+[debug] [2026-04-24T02:41:09.612Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-24T02:41:09.896Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-24T02:41:09.898Z] > authorizing via signed-in user (hsajame3@gmail.com)
+[debug] [2026-04-24T02:41:09.901Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:09.902Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:09.904Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com [none]
+[debug] [2026-04-24T02:41:09.904Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/wurderv-1
+[debug] [2026-04-24T02:41:10.771Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com 200
+[debug] [2026-04-24T02:41:10.772Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2026-04-24T02:41:10.774Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:10.774Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:10.775Z] >>> [apiv2][query] POST https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com:enable [none]
+[debug] [2026-04-24T02:41:10.776Z] >>> [apiv2][(partial)header] POST https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com:enable x-goog-quota-user=projects/wurderv-1
+[debug] [2026-04-24T02:41:11.511Z] <<< [apiv2][status] POST https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com:enable 200
+[debug] [2026-04-24T02:41:11.511Z] <<< [apiv2][body] POST https://serviceusage.googleapis.com/v1/projects/wurderv-1/services/firebaseapphosting.googleapis.com:enable [omitted]
+[debug] [2026-04-24T02:41:21.584Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:21.585Z] Checked if tokens are valid: true, expires at: 1777001049533
+[debug] [2026-04-24T02:41:21.590Z] >>> [apiv2][query] GET https://firebaseapphosting.googleapis.com/v1beta/projects/wurderv-1/locations/-/backends 
+[debug] [2026-04-24T02:41:22.641Z] <<< [apiv2][status] GET https://firebaseapphosting.googleapis.com/v1beta/projects/wurderv-1/locations/-/backends 200
+[debug] [2026-04-24T02:41:22.641Z] <<< [apiv2][body] GET https://firebaseapphosting.googleapis.com/v1beta/projects/wurderv-1/locations/-/backends {}
+[info] ┌─────────┬────────────┬─────┬────────────────┬──────────────┐
+│ Backend │ Repository │ URL │ Primary Region │ Updated Date │
+└─────────┴────────────┴─────┴────────────────┴──────────────┘

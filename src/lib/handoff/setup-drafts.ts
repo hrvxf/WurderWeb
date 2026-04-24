@@ -57,11 +57,20 @@ export async function createHandoffSetupDraft(input: {
   throw new Error("Could not allocate a unique setupId.");
 }
 
-export async function readHandoffSetupDraft(setupIdRaw: unknown): Promise<{ setupId: string; draft: HandoffSetupDraftDoc } | null> {
+type HandoffSetupReadTelemetry = {
+  onFirestoreReadMs?: (ms: number) => void;
+};
+
+export async function readHandoffSetupDraft(
+  setupIdRaw: unknown,
+  telemetry?: HandoffSetupReadTelemetry,
+): Promise<{ setupId: string; draft: HandoffSetupDraftDoc } | null> {
   const setupId = normalizeSetupId(setupIdRaw);
   if (!setupId) return null;
 
+  const firestoreReadStartedAtMs = Date.now();
   const snapshot = await adminDb.collection(HANDOFF_SETUP_COLLECTION).doc(setupId).get();
+  telemetry?.onFirestoreReadMs?.(Math.max(0, Date.now() - firestoreReadStartedAtMs));
   if (!snapshot.exists) return null;
 
   const draft = parseHandoffSetupDraftDoc(snapshot.data());
@@ -69,8 +78,11 @@ export async function readHandoffSetupDraft(setupIdRaw: unknown): Promise<{ setu
   return { setupId, draft };
 }
 
-export async function requireActiveHandoffSetupDraft(setupIdRaw: unknown): Promise<{ setupId: string; draft: HandoffSetupDraftDoc }> {
-  const result = await readHandoffSetupDraft(setupIdRaw);
+export async function requireActiveHandoffSetupDraft(
+  setupIdRaw: unknown,
+  telemetry?: HandoffSetupReadTelemetry,
+): Promise<{ setupId: string; draft: HandoffSetupDraftDoc }> {
+  const result = await readHandoffSetupDraft(setupIdRaw, telemetry);
   if (!result) {
     throw new HandoffSetupNotFoundError();
   }
