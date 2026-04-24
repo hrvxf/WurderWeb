@@ -63,15 +63,17 @@ export async function POST(request: Request) {
 
     const b2cConfig = setup?.draft.config.gameType === "b2c" ? setup.draft.config : parsedRequestConfig;
 
-    const result = await createGameForHostUid({
+    const createPayload = {
       hostUid,
       gameType: "b2c",
-      mode: b2cConfig?.mode,
+      mode: b2cConfig.mode,
       freeForAllVariant: b2cConfig?.mode === "free_for_all" ? b2cConfig.freeForAllVariant : undefined,
       guildWinCondition: b2cConfig?.mode === "guilds" ? b2cConfig.guildWinCondition : undefined,
       createdFrom: setupId ? undefined : "b2c_setup",
       status: setupId ? undefined : "waiting",
-    });
+    } as const;
+    console.info("b2c_create_payload_sent", createPayload);
+    const result = await createGameForHostUid(createPayload);
 
     const joinPath = `/join/${result.gameCode}`;
     const payload: Record<string, unknown> = {

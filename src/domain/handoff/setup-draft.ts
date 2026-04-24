@@ -132,7 +132,7 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
       mode === FREE_FOR_ALL_MODE
         ? normalizedVariant === "survivor"
           ? "survivor"
-          : normalizedVariant === "classic" || normalizedVariant.length === 0
+          : normalizedVariant === "classic"
             ? "classic"
             : null
         : undefined;
@@ -170,7 +170,7 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
     const freeForAllVariant =
       normalizedVariant === "survivor"
         ? "survivor"
-        : normalizedVariant === "classic" || normalizedVariant.length === 0
+        : normalizedVariant === "classic"
           ? "classic"
           : null;
     if (gameType !== "b2c" || !freeForAllVariant) return null;

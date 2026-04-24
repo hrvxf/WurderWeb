@@ -16,7 +16,11 @@ import {
   BUSINESS_STORAGE_ORG_ID_KEY,
   BUSINESS_STORAGE_ORG_NAME_KEY,
 } from "@/lib/business/session-defaults";
-import { buildCreateBusinessSessionPayload, toBusinessSessionName } from "@/lib/business/session-payload-mapper";
+import {
+  buildBusinessSessionManagerConfig,
+  buildCreateBusinessSessionPayload,
+  toBusinessSessionName,
+} from "@/lib/business/session-payload-mapper";
 import type { SetupState, SetupStep } from "@/lib/business/session-options";
 import { persistLastCreatedSession } from "@/lib/game/last-created-session";
 import type { SessionGameType } from "@/lib/game/session-type";
@@ -137,7 +141,7 @@ export default function CreateBusinessSessionPage() {
       const resultOrgId = String(payload.orgId ?? setup.orgId ?? "");
       const gameCode = String(payload.gameCode ?? "");
       const joinLink = buildJoinUniversalLink(gameCode);
-      const managerConfig = buildCreateBusinessSessionPayload(setup);
+      const managerConfig = buildBusinessSessionManagerConfig(setup);
       trackEvent(ANALYTICS_EVENTS.b2bQrJoinGenerated, { gameCode, orgId: resultOrgId || null });
       setResult({
         gameCode,
@@ -149,20 +153,9 @@ export default function CreateBusinessSessionPage() {
         setupId: null,
         setupExpiresAtMs: null,
         managerConfig: {
-          managerParticipation: setup.managerParticipation,
-          mode: managerConfig.mode,
-          durationMinutes: managerConfig.durationMinutes,
-          wordDifficulty: managerConfig.wordDifficulty,
-          teamsEnabled: managerConfig.teamsEnabled,
-          metricsEnabled: managerConfig.metricsEnabled,
-          minSecondsBeforeClaim: managerConfig.minSecondsBeforeClaim,
-          minSecondsBetweenClaims: managerConfig.minSecondsBetweenClaims,
-          maxActiveClaimsPerPlayer: managerConfig.maxActiveClaimsPerPlayer,
-          freeRefreshCooldownSeconds: managerConfig.freeRefreshCooldownSeconds,
-          ...(managerConfig.freeForAllVariant ? { freeForAllVariant: managerConfig.freeForAllVariant } : {}),
-          ...(managerConfig.guildWinCondition ? { guildWinCondition: managerConfig.guildWinCondition } : {}),
+          ...managerConfig,
         },
-        managerParticipation: setup.managerParticipation,
+        managerParticipation: managerConfig.managerParticipation,
         mode: managerConfig.mode,
       });
 

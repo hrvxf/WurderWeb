@@ -59,12 +59,18 @@ export function buildStartSessionSetupPayload(input: {
   };
 
   if (input.selectedMode === "free_for_all") {
-    base.freeForAllVariant = input.selectedFreeForAllVariant ?? "classic";
+    if (!input.selectedFreeForAllVariant) {
+      throw new Error("Select a free-for-all variant before continuing.");
+    }
+    base.freeForAllVariant = input.selectedFreeForAllVariant;
     return base;
   }
 
   if (input.selectedMode === "guilds") {
-    base.guildWinCondition = input.selectedGuildWinCondition ?? "score";
+    if (!input.selectedGuildWinCondition) {
+      throw new Error("Select a guild win condition before continuing.");
+    }
+    base.guildWinCondition = input.selectedGuildWinCondition;
     return base;
   }
 

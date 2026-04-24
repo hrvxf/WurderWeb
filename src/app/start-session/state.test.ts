@@ -115,4 +115,26 @@ describe("start-session mode state", () => {
     expect(payload).not.toHaveProperty("freeForAllVariant");
     expect(payload).not.toHaveProperty("guildWinCondition");
   });
+
+  it("throws when free_for_all payload is missing variant", () => {
+    expect(() =>
+      buildStartSessionSetupPayload({
+        gameType: "b2c",
+        selectedMode: "free_for_all",
+        selectedFreeForAllVariant: null,
+        selectedGuildWinCondition: null,
+      })
+    ).toThrow("Select a free-for-all variant before continuing.");
+  });
+
+  it("throws when guilds payload is missing win condition", () => {
+    expect(() =>
+      buildStartSessionSetupPayload({
+        gameType: "b2c",
+        selectedMode: "guilds",
+        selectedFreeForAllVariant: null,
+        selectedGuildWinCondition: null,
+      })
+    ).toThrow("Select a guild win condition before continuing.");
+  });
 });
