@@ -64,6 +64,8 @@ export async function POST(request: Request) {
       analyticsEnabled: config.analyticsEnabled ?? true,
       managerParticipation,
       managerConfig: config.managerConfig,
+      freeForAllVariant: config.freeForAllVariant,
+      guildWinCondition: config.guildWinCondition,
     });
 
     await linkGameToOrganization({
@@ -93,6 +95,7 @@ export async function POST(request: Request) {
         gameType: "b2b" as const,
         mode: config.mode,
         freeForAllVariant: config.freeForAllVariant ?? null,
+        guildWinCondition: config.guildWinCondition ?? null,
         orgId: config.orgId,
         templateId: config.templateId ?? null,
         managerConfig: config.managerConfig ?? null,

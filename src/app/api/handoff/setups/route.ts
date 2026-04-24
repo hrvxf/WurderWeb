@@ -78,6 +78,8 @@ export async function POST(request: Request) {
       const trustedB2BConfig: HandoffSetupB2BConfig = {
         gameType: "b2b",
         mode: parsed.mode,
+        ...(parsed.freeForAllVariant ? { freeForAllVariant: parsed.freeForAllVariant } : {}),
+        ...(parsed.guildWinCondition ? { guildWinCondition: parsed.guildWinCondition } : {}),
         orgId: parsed.orgId,
         sessionType: parsed.sessionType,
         ...(parsed.templateId ? { templateId: parsed.templateId } : {}),

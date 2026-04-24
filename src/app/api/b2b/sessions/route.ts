@@ -42,6 +42,8 @@ type CreateBusinessSessionBody = {
   minSecondsBetweenClaims: number;
   maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: "classic" | "survivor";
+  guildWinCondition?: "score" | "last_standing";
 };
 
 function toValidIntegerField(value: unknown, fieldName: string, minimum: number): number {
@@ -87,6 +89,22 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
   const maxActiveClaimsPerPlayer =
     body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
+  const normalizedFreeForAllVariant =
+    typeof body.freeForAllVariant === "string" ? body.freeForAllVariant.trim().toLowerCase() : "";
+  const normalizedGuildWinCondition =
+    typeof body.guildWinCondition === "string" ? body.guildWinCondition.trim().toLowerCase() : "";
+  const freeForAllVariant =
+    normalizedFreeForAllVariant === "survivor"
+      ? "survivor"
+      : normalizedFreeForAllVariant === "classic"
+        ? "classic"
+        : undefined;
+  const guildWinCondition =
+    normalizedGuildWinCondition === "last_standing"
+      ? "last_standing"
+      : normalizedGuildWinCondition === "score"
+        ? "score"
+        : undefined;
 
   if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Missing or invalid b2b session fields.");
@@ -134,6 +152,8 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
     minSecondsBetweenClaims,
     maxActiveClaimsPerPlayer,
     freeRefreshCooldownSeconds,
+    ...(freeForAllVariant ? { freeForAllVariant } : {}),
+    ...(guildWinCondition ? { guildWinCondition } : {}),
   };
 }
 
@@ -239,7 +259,11 @@ export async function POST(request: Request) {
         minSecondsBetweenClaims: body.minSecondsBetweenClaims,
         maxActiveClaimsPerPlayer: body.maxActiveClaimsPerPlayer,
         freeRefreshCooldownSeconds: body.freeRefreshCooldownSeconds,
+        ...(body.freeForAllVariant ? { freeForAllVariant: body.freeForAllVariant } : {}),
+        ...(body.guildWinCondition ? { guildWinCondition: body.guildWinCondition } : {}),
       },
+      freeForAllVariant: body.freeForAllVariant,
+      guildWinCondition: body.guildWinCondition,
     });
 
     await linkGameToOrganization({

@@ -9,6 +9,7 @@ import {
 } from "@/domain/game/create-game";
 import type { SessionGameType } from "@/lib/game/session-type";
 import { parseCanonicalGameMode } from "@/lib/game/mode";
+import type { HandoffFreeForAllVariant, HandoffGuildWinCondition } from "@/domain/handoff/setup-draft";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
@@ -23,6 +24,8 @@ export type ManagerConfig = {
   minSecondsBetweenClaims: number;
   maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
 };
 
 type CreateGameForHostUidInput = {
@@ -34,6 +37,8 @@ type CreateGameForHostUidInput = {
   analyticsEnabled?: boolean;
   managerParticipation?: "host_only" | "host_player";
   managerConfig?: ManagerConfig;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
 };
 
 type AccountIdentityDoc = {
@@ -67,6 +72,54 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
   const managerMode = parseCanonicalGameMode(payload.mode) ?? parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
+  const normalizedRawMode = typeof payload.mode === "string" ? payload.mode.trim().toLowerCase() : "";
+  const isFreeForAllMode = normalizedRawMode === "free_for_all";
+  const requestedFreeForAllVariant = payload.freeForAllVariant ?? payload.managerConfig?.freeForAllVariant;
+  const requestedGuildWinCondition = payload.guildWinCondition ?? payload.managerConfig?.guildWinCondition;
+  const resolvedFreeForAllVariant = isFreeForAllMode
+    ? requestedFreeForAllVariant === "survivor"
+      ? "survivor"
+      : "classic"
+    : null;
+  const resolvedGuildWinCondition =
+    managerMode === "guilds"
+      ? requestedGuildWinCondition === "last_standing"
+        ? "last_standing"
+        : "score"
+      : null;
+
+  if (requestedFreeForAllVariant && !isFreeForAllMode) {
+    console.info("create_game_ignored_mode_specific_field", {
+      field: "freeForAllVariant",
+      reason: "mode_mismatch",
+      mode: payload.mode ?? payload.managerConfig?.mode ?? null,
+      value: requestedFreeForAllVariant,
+    });
+  }
+  if (requestedGuildWinCondition && managerMode !== "guilds") {
+    console.info("create_game_ignored_mode_specific_field", {
+      field: "guildWinCondition",
+      reason: "mode_mismatch",
+      mode: payload.mode ?? payload.managerConfig?.mode ?? null,
+      value: requestedGuildWinCondition,
+    });
+  }
+  if (isFreeForAllMode && resolvedFreeForAllVariant !== requestedFreeForAllVariant) {
+    console.info("create_game_default_applied", {
+      field: "freeForAllVariant",
+      reason: "missing_or_invalid",
+      providedValue: requestedFreeForAllVariant ?? null,
+      defaultValue: resolvedFreeForAllVariant,
+    });
+  }
+  if (managerMode === "guilds" && resolvedGuildWinCondition !== requestedGuildWinCondition) {
+    console.info("create_game_default_applied", {
+      field: "guildWinCondition",
+      reason: "missing_or_invalid",
+      providedValue: requestedGuildWinCondition ?? null,
+      defaultValue: resolvedGuildWinCondition,
+    });
+  }
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
 
@@ -102,6 +155,8 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         if (payload.templateId) companyFields.templateId = payload.templateId;
         if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
         if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
+        if (resolvedFreeForAllVariant) companyFields.freeForAllVariant = resolvedFreeForAllVariant;
+        if (resolvedGuildWinCondition) companyFields.guildWinCondition = resolvedGuildWinCondition;
 
         tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
       });

@@ -44,8 +44,9 @@ type HandoffSetupB2CConfig =
 
 export type HandoffSetupB2BConfig = {
   gameType: "b2b";
-  mode: CanonicalGameMode;
+  mode: CanonicalGameMode | typeof FREE_FOR_ALL_MODE;
   freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
   orgId: string;
   templateId?: string;
   sessionType: HandoffSessionType;
@@ -122,12 +123,36 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
       typeof source.analyticsEnabled === "boolean" ? source.analyticsEnabled : undefined;
     if (!mode || !sessionType) return null;
 
+    if (mode !== FREE_FOR_ALL_MODE && normalizedVariant.length > 0) return null;
+    if (mode !== "guilds" && normalizedGuildWinCondition.length > 0) return null;
+
+    const freeForAllVariant =
+      mode === FREE_FOR_ALL_MODE
+        ? normalizedVariant === "survivor"
+          ? "survivor"
+          : normalizedVariant === "classic" || normalizedVariant.length === 0
+            ? "classic"
+            : null
+        : undefined;
+    if (mode === FREE_FOR_ALL_MODE && !freeForAllVariant) return null;
+
+    const guildWinCondition =
+      mode === "guilds"
+        ? normalizedGuildWinCondition === "last_standing"
+          ? "last_standing"
+          : normalizedGuildWinCondition === "score"
+            ? "score"
+            : normalizedGuildWinCondition.length === 0
+              ? undefined
+              : null
+        : undefined;
+    if (mode === "guilds" && guildWinCondition === null) return null;
+
     return {
       gameType: "b2b",
       mode,
-      ...(normalizedVariant.length > 0 && mode === FREE_FOR_ALL_MODE
-        ? { freeForAllVariant: normalizedVariant === "survivor" ? "survivor" : "classic" }
-        : {}),
+      ...(freeForAllVariant ? { freeForAllVariant } : {}),
+      ...(guildWinCondition ? { guildWinCondition } : {}),
       orgId,
       ...(templateId ? { templateId } : {}),
       sessionType,
