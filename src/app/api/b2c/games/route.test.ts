@@ -25,14 +25,14 @@ vi.mock("@/lib/auth/verify-firebase-auth-header", () => ({
 const createGameForHostUidMock = vi.mocked(createGameForHostUid);
 const verifyFirebaseAuthHeaderMock = vi.mocked(verifyFirebaseAuthHeader);
 
-function buildRequest(headers?: Record<string, string>): Request {
+function buildRequest(body: Record<string, unknown> = { mode: "classic" }, headers?: Record<string, string>): Request {
   return new Request("http://localhost/api/b2c/games", {
     method: "POST",
     headers: {
       "content-type": "application/json",
       ...headers,
     },
-    body: JSON.stringify({ mode: "classic" }),
+    body: JSON.stringify(body),
   });
 }
 
@@ -48,7 +48,7 @@ describe("POST /api/b2c/games", () => {
   });
 
   it("creates a b2c game when provided a valid Firebase bearer token", async () => {
-    const response = await POST(buildRequest({ authorization: "Bearer token-valid" }));
+    const response = await POST(buildRequest({ mode: "classic" }, { authorization: "Bearer token-valid" }));
     const payload = (await response.json()) as {
       gameCode?: string;
       gameType?: string;
@@ -89,10 +89,32 @@ describe("POST /api/b2c/games", () => {
       new FirebaseAuthUnauthenticatedError("Firebase ID token has invalid signature")
     );
 
-    const response = await POST(buildRequest({ authorization: "Bearer token-invalid" }));
+    const response = await POST(buildRequest({ mode: "classic" }, { authorization: "Bearer token-invalid" }));
     const payload = (await response.json()) as { code?: string };
 
     expect(response.status).toBe(401);
     expect(payload.code).toBe("UNAUTHENTICATED");
+  });
+
+  it("forwards free_for_all survivor variant to createGameForHostUid", async () => {
+    const response = await POST(
+      buildRequest(
+        {
+          mode: "free_for_all",
+          freeForAllVariant: "survivor",
+        },
+        { authorization: "Bearer token-valid" }
+      )
+    );
+
+    expect(response.status).toBe(201);
+    expect(createGameForHostUidMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hostUid: "uid-host",
+        gameType: "b2c",
+        mode: "free_for_all",
+        freeForAllVariant: "survivor",
+      })
+    );
   });
 });

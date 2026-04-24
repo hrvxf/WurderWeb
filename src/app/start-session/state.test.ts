@@ -39,6 +39,21 @@ describe("start-session mode state", () => {
     expect(next.selectedFreeForAllVariant).toBe("classic");
   });
 
+  it("builds payload with selected ffa survivor variant", () => {
+    const payload = buildStartSessionSetupPayload({
+      gameType: "b2c",
+      selectedMode: "free_for_all",
+      selectedFreeForAllVariant: "survivor",
+      selectedGuildWinCondition: null,
+    });
+
+    expect(payload).toEqual({
+      gameType: "b2c",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+    });
+  });
+
   it("clears stale guild state when switching guilds to free_for_all", () => {
     const next = applyModeSelection(
       {

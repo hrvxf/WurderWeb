@@ -170,12 +170,12 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
             guildWinCondition: resolvedGuildWinCondition,
             managerConfig: normalizedManagerConfig,
           });
-          if (resolvedFreeForAllVariant != null) {
-            companyFields.freeForAllVariant = resolvedFreeForAllVariant;
-          }
-          if (resolvedGuildWinCondition != null) {
-            companyFields.guildWinCondition = resolvedGuildWinCondition;
-          }
+        }
+        if (resolvedFreeForAllVariant != null) {
+          companyFields.freeForAllVariant = resolvedFreeForAllVariant;
+        }
+        if (resolvedGuildWinCondition != null) {
+          companyFields.guildWinCondition = resolvedGuildWinCondition;
         }
         if (payload.createdFrom === "b2c_setup") {
           companyFields.createdFrom = "b2c_setup" as const;
