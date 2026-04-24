@@ -75,7 +75,7 @@ describe("buildCreateBusinessSessionPayload", () => {
 
     const fromGuilds = buildCreateBusinessSessionPayload({
       ...baseSetup,
-      gameMode: "elimination_multi",
+      gameMode: "elimination",
       freeForAllVariant: "classic",
       guildWinCondition: "score",
     });

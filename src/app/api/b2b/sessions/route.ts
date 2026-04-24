@@ -113,7 +113,7 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
   }
 
   if (mode !== "free_for_all" && !isCanonicalGameMode(mode)) {
-    throw new Error("Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds, free_for_all.");
+    throw new Error("Invalid mode. Allowed values: classic, elimination, guilds, free_for_all.");
   }
 
   if (mode === "free_for_all" && !freeForAllVariant) {
