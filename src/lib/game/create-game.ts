@@ -67,6 +67,19 @@ export class GameCodeCollisionError extends Error {
   }
 }
 
+function buildHostIdentityFields(input: {
+  hostUid: string;
+  managerParticipation: "host_only" | "host_player";
+}) {
+  return {
+    createdBy: input.hostUid,
+    managerAccountId: input.hostUid,
+    managerUserId: input.hostUid,
+    hostUserId: input.hostUid,
+    hostOnly: input.managerParticipation === "host_only",
+  };
+}
+
 export async function createGameForHostUid(input: string | CreateGameForHostUidInput): Promise<{ gameCode: string }> {
   if (typeof input === "string") {
     throw new Error("Canonical game payload is required.");
@@ -149,6 +162,7 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           classicMaxHuntersPerVictim: 3,
           classicPointsToWin: 25,
         });
+        const hostIdentityFields = buildHostIdentityFields({ hostUid, managerParticipation });
 
         const resolvedMode = managerMode;
 
@@ -182,7 +196,24 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
               : Date.now() + 24 * 60 * 60 * 1000;
         }
 
-        const gameDoc = { ...baseDoc, mode: resolvedMode, ...companyFields };
+        const gameDoc = {
+          ...baseDoc,
+          ...hostIdentityFields,
+          mode: resolvedMode,
+          ...companyFields,
+        };
+        console.info("game_host_identity_fields_written", {
+          gameCode,
+          gameType,
+          currentHostUid: hostUid,
+          createdByAccountId: hostUid,
+          gameManagerAccountId: hostIdentityFields.managerAccountId,
+          gameManagerUserId: hostIdentityFields.managerUserId,
+          gameHostUserId: hostIdentityFields.hostUserId,
+          gameHostOnly: hostIdentityFields.hostOnly,
+          managerParticipation,
+          hostPlayerId,
+        });
         assertGameDocCanonicalFields({
           payload: {
             gameType,

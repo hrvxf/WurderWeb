@@ -128,6 +128,43 @@ describe("createGameForHostUid b2b mode fields", () => {
       gameType: "b2c",
       mode: "free_for_all",
       freeForAllVariant: "survivor",
+      createdBy: "host-b2c",
+      managerAccountId: "host-b2c",
+      managerUserId: "host-b2c",
+      hostUserId: "host-b2c",
+      hostOnly: true,
+    });
+  });
+
+  it("writes canonical host identity fields for host-player sessions", async () => {
+    await createGameForHostUid({
+      hostUid: "host-player-1",
+      gameType: "b2b",
+      mode: "classic",
+      managerParticipation: "host_player",
+      managerConfig: {
+        mode: "classic",
+        durationMinutes: 30,
+        wordDifficulty: "normal",
+        teamsEnabled: false,
+        metricsEnabled: [],
+        minSecondsBeforeClaim: 0,
+        minSecondsBetweenClaims: 0,
+        maxActiveClaimsPerPlayer: 1,
+        freeRefreshCooldownSeconds: 0,
+      },
+    });
+
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.data).toMatchObject({
+      gameType: "b2b",
+      mode: "classic",
+      createdBy: "host-player-1",
+      managerAccountId: "host-player-1",
+      managerUserId: "host-player-1",
+      hostUserId: "host-player-1",
+      hostOnly: false,
+      managerParticipation: "host_player",
     });
   });
 
