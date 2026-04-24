@@ -71,9 +71,17 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
-  const managerMode = parseCanonicalGameMode(payload.mode) ?? parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
-  const normalizedRawMode = typeof payload.mode === "string" ? payload.mode.trim().toLowerCase() : "";
+  const rawMode =
+    typeof payload.mode === "string"
+      ? payload.mode
+      : typeof payload.managerConfig?.mode === "string"
+        ? payload.managerConfig.mode
+        : "";
+  const normalizedRawMode = rawMode.trim().toLowerCase();
   const isFreeForAllMode = normalizedRawMode === "free_for_all";
+  const managerMode = isFreeForAllMode
+    ? "free_for_all"
+    : parseCanonicalGameMode(rawMode) ?? "classic";
   const requestedFreeForAllVariant = payload.freeForAllVariant ?? payload.managerConfig?.freeForAllVariant;
   const requestedGuildWinCondition = payload.guildWinCondition ?? payload.managerConfig?.guildWinCondition;
   const resolvedFreeForAllVariant = isFreeForAllMode
@@ -155,8 +163,10 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         if (payload.templateId) companyFields.templateId = payload.templateId;
         if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
         if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
-        if (resolvedFreeForAllVariant) companyFields.freeForAllVariant = resolvedFreeForAllVariant;
-        if (resolvedGuildWinCondition) companyFields.guildWinCondition = resolvedGuildWinCondition;
+        if (gameType === "b2b") {
+          companyFields.freeForAllVariant = resolvedFreeForAllVariant;
+          companyFields.guildWinCondition = resolvedGuildWinCondition;
+        }
 
         tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
       });
