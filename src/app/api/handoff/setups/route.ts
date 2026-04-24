@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         {
           code: "INVALID_SETUP_CONFIG",
           message:
-            "Invalid setup fields. Allowed gameType: b2c|b2b. Allowed mode: classic|elimination|elimination_multi|guilds|free_for_all. freeForAllVariant applies only to free_for_all and supports classic|survivor. guildWinCondition applies only to guilds and supports score|last_standing.",
+            "Invalid setup fields. Allowed gameType: b2c|b2b. Allowed mode: classic|elimination|guilds|free_for_all. freeForAllVariant applies only to free_for_all and supports classic|survivor. guildWinCondition applies only to guilds and supports score|last_standing.",
         },
         { status: 400 }
       );

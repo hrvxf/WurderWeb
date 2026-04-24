@@ -1,5 +1,5 @@
 export type SetupStep = 1 | 2 | 3;
-export type GameModeValue = "classic" | "elimination" | "elimination_multi" | "guilds" | "free_for_all";
+export type GameModeValue = "classic" | "elimination" | "guilds" | "free_for_all";
 export type FreeForAllVariant = "classic" | "survivor";
 export type GuildWinCondition = "score" | "last_standing";
 export type SessionLength = 30 | 60 | 90;
@@ -50,20 +50,6 @@ export const gameModeOptions: GameModeOption[] = [
       "Strategic thinking",
       "Resilience under pressure",
       "Competitive development exercises",
-    ],
-    analyticsNote: sharedAnalyticsNote,
-  },
-  {
-    value: "elimination_multi",
-    label: "Elimination (multi)",
-    practicalDescription:
-      "A denser elimination format designed for larger groups and sustained momentum.",
-    interactionDescription:
-      "Supports elimination dynamics while maintaining pace for bigger sessions.",
-    businessUseCases: [
-      "Large-team exercises",
-      "Multi-round facilitation",
-      "Sustained pressure scenarios",
     ],
     analyticsNote: sharedAnalyticsNote,
   },

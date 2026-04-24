@@ -82,14 +82,6 @@ export function buildBusinessSessionManagerConfig(setup: SetupState): BusinessSe
       minSecondsBetweenClaims: 0,
       freeRefreshCooldownSeconds: 0,
     },
-    elimination_multi: {
-      mode: "elimination_multi",
-      teamsEnabled: false,
-      wordDifficulty: "hard",
-      minSecondsBeforeClaim: 0,
-      minSecondsBetweenClaims: 0,
-      freeRefreshCooldownSeconds: 0,
-    },
     free_for_all: {
       mode: "free_for_all",
       teamsEnabled: false,
