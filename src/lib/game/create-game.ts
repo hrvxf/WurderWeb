@@ -39,6 +39,9 @@ type CreateGameForHostUidInput = {
   managerConfig?: ManagerConfig;
   freeForAllVariant?: HandoffFreeForAllVariant;
   guildWinCondition?: HandoffGuildWinCondition;
+  createdFrom?: "b2c_setup";
+  expiresAtMs?: number;
+  status?: "waiting" | "started" | "expired";
 };
 
 type AccountIdentityDoc = {
@@ -166,6 +169,14 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         if (gameType === "b2b") {
           companyFields.freeForAllVariant = resolvedFreeForAllVariant;
           companyFields.guildWinCondition = resolvedGuildWinCondition;
+        }
+        if (payload.createdFrom === "b2c_setup") {
+          companyFields.createdFrom = "b2c_setup" as const;
+          companyFields.status = payload.status ?? "waiting";
+          companyFields.expiresAt =
+            typeof payload.expiresAtMs === "number" && Number.isFinite(payload.expiresAtMs)
+              ? payload.expiresAtMs
+              : Date.now() + 24 * 60 * 60 * 1000;
         }
 
         tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });

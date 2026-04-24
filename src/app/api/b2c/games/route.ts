@@ -9,6 +9,7 @@ import {
   HandoffSetupNotFoundError,
   requireActiveHandoffSetupDraft,
 } from "@/lib/handoff/setup-drafts";
+import { parseHandoffSetupConfig } from "@/domain/handoff/setup-draft";
 import {
   FirebaseAuthInfrastructureError,
   FirebaseAuthUnauthenticatedError,
@@ -20,7 +21,12 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   try {
     const hostUid = await verifyFirebaseAuthHeader(request.headers.get("authorization"));
-    const body = (await request.json().catch(() => ({}))) as { setupId?: unknown };
+    const body = (await request.json().catch(() => ({}))) as {
+      setupId?: unknown;
+      mode?: unknown;
+      freeForAllVariant?: unknown;
+      guildWinCondition?: unknown;
+    };
     const setupId = typeof body.setupId === "string" ? body.setupId.trim() : "";
 
     const setup = setupId ? await requireActiveHandoffSetupDraft(setupId) : null;
@@ -34,12 +40,60 @@ export async function POST(request: Request) {
       );
     }
 
+    const parsedRequestConfig =
+      setup == null
+        ? parseHandoffSetupConfig({
+            gameType: "b2c",
+            mode: body.mode,
+            freeForAllVariant: body.freeForAllVariant,
+            guildWinCondition: body.guildWinCondition,
+          })
+        : null;
+
+    if (!setup && !parsedRequestConfig) {
+      return NextResponse.json(
+        {
+          code: "INVALID_SETUP_CONFIG",
+          message:
+            "Invalid setup fields. Allowed mode: classic|elimination|guilds|free_for_all. freeForAllVariant applies only to free_for_all and supports classic|survivor. guildWinCondition applies only to guilds and supports score|last_standing.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const b2cConfig = setup?.draft.config.gameType === "b2c" ? setup.draft.config : parsedRequestConfig;
+
     const result = await createGameForHostUid({
       hostUid,
       gameType: "b2c",
-      mode: setup?.draft.config.mode,
+      mode: b2cConfig?.mode,
+      freeForAllVariant: b2cConfig?.mode === "free_for_all" ? b2cConfig.freeForAllVariant : undefined,
+      guildWinCondition: b2cConfig?.mode === "guilds" ? b2cConfig.guildWinCondition : undefined,
+      createdFrom: setupId ? undefined : "b2c_setup",
+      status: setupId ? undefined : "waiting",
     });
-    return NextResponse.json({ ...result, gameType: "b2c" as const }, { status: 201 });
+
+    const joinPath = `/join/${result.gameCode}`;
+    const payload: Record<string, unknown> = {
+      ...result,
+      gameType: "b2c" as const,
+      joinPath,
+      deepLink: `wurder://join/${result.gameCode}`,
+      universalLink: `https://wurder.app${joinPath}`,
+      metadata: {
+        createdFrom: setupId ? "setup_handoff" : "b2c_setup",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        status: "waiting" as const,
+      },
+    };
+
+    if (setupId) {
+      payload.setupId = setupId;
+      payload.startPath = `/start/${setupId}`;
+    }
+
+    return NextResponse.json(payload, { status: 201 });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown b2c create-game error.";
 
