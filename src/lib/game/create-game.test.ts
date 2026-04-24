@@ -110,4 +110,57 @@ describe("createGameForHostUid b2b mode fields", () => {
       guildWinCondition: "last_standing",
     });
   });
+
+  it("persists canonical mode inside managerConfig when payload mode is top-level", async () => {
+    await createGameForHostUid({
+      hostUid: "host-3",
+      gameType: "b2b",
+      mode: "free_for_all",
+      managerConfig: {
+        // Simulates incoming legacy payload where mode was omitted.
+        mode: "" as unknown as string,
+        durationMinutes: 25,
+        wordDifficulty: "medium",
+        teamsEnabled: false,
+        metricsEnabled: [],
+        minSecondsBeforeClaim: 5,
+        minSecondsBetweenClaims: 10,
+        maxActiveClaimsPerPlayer: 1,
+        freeRefreshCooldownSeconds: 12,
+        freeForAllVariant: "survivor",
+      },
+      freeForAllVariant: "survivor",
+    });
+
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.data).toMatchObject({
+      mode: "free_for_all",
+      managerConfig: {
+        mode: "free_for_all",
+        freeForAllVariant: "survivor",
+      },
+    });
+  });
+
+  it("throws when freeForAllVariant is sent for non-free_for_all mode", async () => {
+    await expect(
+      createGameForHostUid({
+        hostUid: "host-4",
+        gameType: "b2b",
+        mode: "classic",
+        freeForAllVariant: "survivor",
+      })
+    ).rejects.toThrow("freeForAllVariant is only allowed when mode is free_for_all.");
+  });
+
+  it("throws when guildWinCondition is sent for non-guilds mode", async () => {
+    await expect(
+      createGameForHostUid({
+        hostUid: "host-5",
+        gameType: "b2b",
+        mode: "classic",
+        guildWinCondition: "last_standing",
+      })
+    ).rejects.toThrow("guildWinCondition is only allowed when mode is guilds.");
+  });
 });

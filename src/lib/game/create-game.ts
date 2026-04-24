@@ -100,20 +100,10 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
       : null;
 
   if (requestedFreeForAllVariant && !isFreeForAllMode) {
-    console.info("create_game_ignored_mode_specific_field", {
-      field: "freeForAllVariant",
-      reason: "mode_mismatch",
-      mode: payload.mode ?? payload.managerConfig?.mode ?? null,
-      value: requestedFreeForAllVariant,
-    });
+    throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
   }
   if (requestedGuildWinCondition && managerMode !== "guilds") {
-    console.info("create_game_ignored_mode_specific_field", {
-      field: "guildWinCondition",
-      reason: "mode_mismatch",
-      mode: payload.mode ?? payload.managerConfig?.mode ?? null,
-      value: requestedGuildWinCondition,
-    });
+    throw new Error("guildWinCondition is only allowed when mode is guilds.");
   }
   if (isFreeForAllMode && resolvedFreeForAllVariant !== requestedFreeForAllVariant) {
     console.info("create_game_default_applied", {
@@ -133,6 +123,16 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   }
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
+  const normalizedManagerConfig =
+    gameType === "b2b"
+      ? {
+          ...(payload.managerConfig ?? {}),
+          managerParticipation,
+          mode: managerMode,
+          ...(resolvedFreeForAllVariant ? { freeForAllVariant: resolvedFreeForAllVariant } : {}),
+          ...(resolvedGuildWinCondition ? { guildWinCondition: resolvedGuildWinCondition } : {}),
+        }
+      : payload.managerConfig;
 
   for (let attempt = 0; attempt < MAX_GAME_CODE_ATTEMPTS; attempt += 1) {
     const gameCode = generateGameCode();
@@ -164,9 +164,16 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         companyFields.managerParticipation = managerParticipation;
         if (payload.orgId) companyFields.orgId = payload.orgId;
         if (payload.templateId) companyFields.templateId = payload.templateId;
-        if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
+        if (normalizedManagerConfig) companyFields.managerConfig = normalizedManagerConfig;
         if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
         if (gameType === "b2b") {
+          console.info("b2b_create_payload_before_write", {
+            gameCode,
+            mode: managerMode,
+            freeForAllVariant: resolvedFreeForAllVariant,
+            guildWinCondition: resolvedGuildWinCondition,
+            managerConfig: normalizedManagerConfig,
+          });
           companyFields.freeForAllVariant = resolvedFreeForAllVariant;
           companyFields.guildWinCondition = resolvedGuildWinCondition;
         }
@@ -180,6 +187,12 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         }
 
         tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
+        if (gameType === "b2b") {
+          console.info("b2b_manager_config_written", {
+            gameCode,
+            managerConfig: normalizedManagerConfig,
+          });
+        }
       });
 
       return { gameCode };
