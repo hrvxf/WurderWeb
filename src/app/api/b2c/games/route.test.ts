@@ -44,13 +44,19 @@ describe("POST /api/b2c/games", () => {
     verifyFirebaseAuthHeaderMock.mockResolvedValue("uid-host");
     createGameForHostUidMock.mockResolvedValue({
       gameCode: "ABCD",
-      config: { gameType: "b2c", mode: "classic" },
     } as never);
   });
 
   it("creates a b2c game when provided a valid Firebase bearer token", async () => {
     const response = await POST(buildRequest({ authorization: "Bearer token-valid" }));
-    const payload = (await response.json()) as { gameCode?: string };
+    const payload = (await response.json()) as {
+      gameCode?: string;
+      gameType?: string;
+      joinPath?: string;
+      deepLink?: string;
+      universalLink?: string;
+      metadata?: { createdFrom?: string; status?: string };
+    };
 
     expect(response.status).toBe(201);
     expect(verifyFirebaseAuthHeaderMock).toHaveBeenCalledWith("Bearer token-valid");
@@ -58,6 +64,12 @@ describe("POST /api/b2c/games", () => {
       expect.objectContaining({ hostUid: "uid-host", gameType: "b2c", mode: "classic" })
     );
     expect(payload.gameCode).toBe("ABCD");
+    expect(payload.gameType).toBe("b2c");
+    expect(payload.joinPath).toBe("/join/ABCD");
+    expect(payload.deepLink).toBe("wurder://join/ABCD");
+    expect(payload.universalLink).toBe("https://wurder.app/join/ABCD");
+    expect(payload.metadata?.createdFrom).toBe("b2c_setup");
+    expect(payload.metadata?.status).toBe("waiting");
   });
 
   it("rejects requests that do not include a bearer token", async () => {

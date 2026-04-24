@@ -5,7 +5,7 @@ import Image from "next/image";
 import { QRCodeCanvas } from "qrcode.react";
 
 import Button from "@/components/Button";
-import type { HandoffGuildWinCondition, HandoffSetupConfig } from "@/domain/handoff/setup-draft";
+import type { HandoffGuildWinCondition } from "@/domain/handoff/setup-draft";
 import { buildAppJoinLink, buildJoinUniversalLink } from "@/domain/join/links";
 import type { GameType } from "@/domain/handoff/gameTypeLink";
 import type { CanonicalGameMode } from "@/lib/game/mode";
@@ -14,9 +14,11 @@ import { auth } from "@/lib/firebase";
 import {
   applyModeSelection,
   buildStartSessionSetupPayload,
+  parseStartSessionCreateResponse,
   shouldShowFreeForAllVariant,
   shouldShowGuildWinCondition,
   type FreeForAllVariant,
+  type StartSessionCreateResponse,
 } from "@/app/start-session/state";
 
 type SetupModeOption = {
@@ -26,23 +28,6 @@ type SetupModeOption = {
 };
 
 type GuildWinCondition = HandoffGuildWinCondition;
-
-type B2CSessionApiResponse = {
-  gameCode: string;
-  gameType: "b2c";
-  config: HandoffSetupConfig;
-  joinPath: string;
-  deepLink: string;
-  universalLink: string;
-  metadata: {
-    createdFrom: string;
-    createdAt: string;
-    expiresAt: string;
-    status: "waiting" | "started" | "expired";
-  };
-  setupId?: string;
-  startPath?: string;
-};
 
 const START_SESSION_GAME_TYPE: GameType = "b2c";
 
@@ -105,7 +90,7 @@ export default function StartSessionPageClient() {
   const [selectedGuildWinCondition, setSelectedGuildWinCondition] = useState<GuildWinCondition | null>(null);
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [createError, setCreateError] = useState("");
-  const [session, setSession] = useState<B2CSessionApiResponse | null>(null);
+  const [session, setSession] = useState<StartSessionCreateResponse | null>(null);
   const [isLikelyMobile, setIsLikelyMobile] = useState(false);
 
   useEffect(() => {
@@ -169,29 +154,37 @@ export default function StartSessionPageClient() {
         body: JSON.stringify(requestPayload),
       });
 
-      const payload = (await response.json().catch(() => ({}))) as Partial<B2CSessionApiResponse> & {
+      const payload = (await response.json().catch(() => ({}))) as Partial<StartSessionCreateResponse> & {
         message?: string;
       };
+      console.info("b2c_create_response_raw", {
+        status: response.status,
+        ok: response.ok,
+        jsonKeys: Object.keys(payload),
+        gameCode: payload.gameCode ?? null,
+        universalLink: payload.universalLink ?? null,
+        deepLink: payload.deepLink ?? null,
+        joinPath: payload.joinPath ?? null,
+        metadata: payload.metadata ?? null,
+      });
 
       if (!response.ok) {
         throw new Error(payload.message ?? "Unable to prepare setup handoff.");
       }
 
-      if (
-        typeof payload.gameCode !== "string" ||
-        typeof payload.deepLink !== "string" ||
-        typeof payload.universalLink !== "string" ||
-        !payload.config ||
-        typeof payload.config.gameType !== "string" ||
-        typeof payload.config.mode !== "string"
-      ) {
-        throw new Error("Session response was incomplete.");
-      }
-
+      const parsedSession = parseStartSessionCreateResponse({
+        payload,
+        fallbackConfig: {
+          gameType: START_SESSION_GAME_TYPE,
+          mode: requestPayload.mode,
+          freeForAllVariant: requestPayload.freeForAllVariant as FreeForAllVariant | undefined,
+          guildWinCondition: requestPayload.guildWinCondition as GuildWinCondition | undefined,
+        },
+      });
       setSession({
-        ...(payload as B2CSessionApiResponse),
-        deepLink: payload.deepLink || buildAppJoinLink(payload.gameCode),
-        universalLink: payload.universalLink || buildJoinUniversalLink(payload.gameCode),
+        ...parsedSession,
+        deepLink: parsedSession.deepLink || buildAppJoinLink(parsedSession.gameCode),
+        universalLink: parsedSession.universalLink || buildJoinUniversalLink(parsedSession.gameCode),
       });
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : "Unable to create session.");

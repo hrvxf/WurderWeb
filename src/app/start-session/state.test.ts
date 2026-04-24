@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyModeSelection,
   buildStartSessionSetupPayload,
+  parseStartSessionCreateResponse,
   shouldShowFreeForAllVariant,
   shouldShowGuildWinCondition,
 } from "@/app/start-session/state";
@@ -136,5 +137,52 @@ describe("start-session mode state", () => {
         selectedGuildWinCondition: null,
       })
     ).toThrow("Select a guild win condition before continuing.");
+  });
+
+  it("parses canonical start-session response without nested config", () => {
+    const parsed = parseStartSessionCreateResponse({
+      payload: {
+        gameCode: "ABCD",
+        gameType: "b2c",
+        joinPath: "/join/ABCD",
+        deepLink: "wurder://join/ABCD",
+        universalLink: "https://wurder.app/join/ABCD",
+        metadata: {
+          createdFrom: "b2c_setup",
+          status: "waiting",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          expiresAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+      fallbackConfig: {
+        gameType: "b2c",
+        mode: "classic",
+      },
+    });
+
+    expect(parsed.gameCode).toBe("ABCD");
+    expect(parsed.joinPath).toBe("/join/ABCD");
+    expect(parsed.deepLink).toBe("wurder://join/ABCD");
+    expect(parsed.universalLink).toBe("https://wurder.app/join/ABCD");
+    expect(parsed.config.gameType).toBe("b2c");
+    expect(parsed.config.mode).toBe("classic");
+    expect(parsed.metadata.status).toBe("waiting");
+  });
+
+  it("throws when canonical response metadata is missing", () => {
+    expect(() =>
+      parseStartSessionCreateResponse({
+        payload: {
+          gameCode: "ABCD",
+          joinPath: "/join/ABCD",
+          deepLink: "wurder://join/ABCD",
+          universalLink: "https://wurder.app/join/ABCD",
+        },
+        fallbackConfig: {
+          gameType: "b2c",
+          mode: "classic",
+        },
+      })
+    ).toThrow("Session response was incomplete.");
   });
 });
