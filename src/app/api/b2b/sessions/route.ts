@@ -77,7 +77,9 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
         ? "host_only"
         : "host_only";
   const modeInput = typeof body.mode === "string" ? body.mode.trim() : "";
-  const mode = parseCanonicalGameMode(modeInput);
+  const normalizedModeInput = modeInput.toLowerCase();
+  const parsedCanonicalMode = parseCanonicalGameMode(modeInput);
+  const mode = normalizedModeInput === "free_for_all" ? "free_for_all" : parsedCanonicalMode;
   const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
   const durationMinutes = Number(body.durationMinutes);
   const teamsEnabled = Boolean(body.teamsEnabled);
@@ -110,8 +112,24 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
     throw new Error("Missing or invalid b2b session fields.");
   }
 
-  if (!isCanonicalGameMode(mode)) {
-    throw new Error("Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds.");
+  if (mode !== "free_for_all" && !isCanonicalGameMode(mode)) {
+    throw new Error("Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds, free_for_all.");
+  }
+
+  if (mode === "free_for_all" && !freeForAllVariant) {
+    throw new Error("freeForAllVariant is required when mode is free_for_all.");
+  }
+
+  if (mode !== "free_for_all" && normalizedFreeForAllVariant.length > 0) {
+    throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
+  }
+
+  if (mode === "guilds" && !guildWinCondition) {
+    throw new Error("guildWinCondition is required when mode is guilds.");
+  }
+
+  if (mode !== "guilds" && normalizedGuildWinCondition.length > 0) {
+    throw new Error("guildWinCondition is only allowed when mode is guilds.");
   }
 
   if (!templateId && saveTemplate && !templateName) {

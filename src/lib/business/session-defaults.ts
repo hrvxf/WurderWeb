@@ -8,6 +8,8 @@ export const defaultBusinessSetup: SetupState = {
   orgId: undefined,
   sessionLabel: "",
   gameMode: "guilds",
+  freeForAllVariant: "classic",
+  guildWinCondition: "score",
   length: 60,
   managerParticipation: "host_only",
 };
@@ -20,4 +22,3 @@ export const defaultBusinessMetrics = [
   "persuasionScore",
   "closingScore",
 ];
-

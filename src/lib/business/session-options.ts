@@ -1,5 +1,7 @@
 export type SetupStep = 1 | 2 | 3;
-export type GameModeValue = "guilds" | "classic" | "elimination";
+export type GameModeValue = "classic" | "elimination" | "elimination_multi" | "guilds" | "free_for_all";
+export type FreeForAllVariant = "classic" | "survivor";
+export type GuildWinCondition = "score" | "last_standing";
 export type SessionLength = 30 | 60 | 90;
 export type ManagerParticipationValue = "host_only" | "host_player";
 
@@ -8,6 +10,8 @@ export type SetupState = {
   orgId?: string;
   sessionLabel: string;
   gameMode: GameModeValue;
+  freeForAllVariant: FreeForAllVariant;
+  guildWinCondition: GuildWinCondition;
   length: SessionLength;
   managerParticipation: ManagerParticipationValue;
 };
@@ -25,18 +29,6 @@ const sharedAnalyticsNote = "Different modes surface different behaviours and in
 
 export const gameModeOptions: GameModeOption[] = [
   {
-    value: "guilds",
-    label: "Guild",
-    practicalDescription: "Team-based play that highlights collaboration, coordination, and group dynamics.",
-    interactionDescription: "People work in teams, communicate continuously, and adjust together throughout the session.",
-    businessUseCases: [
-      "Team building",
-      "Communication within groups",
-      "Observing collaboration and group dynamics",
-    ],
-    analyticsNote: sharedAnalyticsNote,
-  },
-  {
     value: "classic",
     label: "Classic",
     practicalDescription: "Individual play that surfaces confidence, initiative, and communication performance.",
@@ -52,16 +44,88 @@ export const gameModeOptions: GameModeOption[] = [
   {
     value: "elimination",
     label: "Elimination",
-    practicalDescription:
-      "Strategic play that raises the stakes and highlights adaptability, resilience, and decision-making under pressure.",
-    interactionDescription:
-      "As participants are removed over time, remaining players need to adapt quickly and make stronger decisions.",
+    practicalDescription: "Individual play that surfaces confidence, initiative, and communication performance.",
+    interactionDescription: "Higher-pressure individual mode where players are removed as the session progresses.",
     businessUseCases: [
       "Strategic thinking",
       "Resilience under pressure",
       "Competitive development exercises",
     ],
     analyticsNote: sharedAnalyticsNote,
+  },
+  {
+    value: "elimination_multi",
+    label: "Elimination (multi)",
+    practicalDescription:
+      "A denser elimination format designed for larger groups and sustained momentum.",
+    interactionDescription:
+      "Supports elimination dynamics while maintaining pace for bigger sessions.",
+    businessUseCases: [
+      "Large-team exercises",
+      "Multi-round facilitation",
+      "Sustained pressure scenarios",
+    ],
+    analyticsNote: sharedAnalyticsNote,
+  },
+  {
+    value: "guilds",
+    label: "Guilds",
+    practicalDescription: "Team-based play that highlights collaboration, coordination, and group dynamics.",
+    interactionDescription: "People work in teams, communicate continuously, and adjust together throughout the session.",
+    businessUseCases: [
+      "Team building",
+      "Communication within groups",
+      "Observing collaboration and group dynamics",
+    ],
+    analyticsNote: sharedAnalyticsNote,
+  },
+  {
+    value: "free_for_all",
+    label: "Free-for-all",
+    practicalDescription:
+      "Fully individual play where each participant competes alone, with variants for balanced or survival-focused outcomes.",
+    interactionDescription:
+      "No teams are formed; participants adapt independently based on the selected variant.",
+    businessUseCases: [
+      "Solo adaptability",
+      "Fast individual decision-making",
+      "Comparing play styles across variants",
+    ],
+    analyticsNote: sharedAnalyticsNote,
+  },
+];
+
+export const freeForAllVariantOptions: Array<{
+  value: FreeForAllVariant;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "classic",
+    label: "Free-for-all / Classic",
+    description: "Balanced free-for-all pacing with familiar scoring behaviour.",
+  },
+  {
+    value: "survivor",
+    label: "Free-for-all / Survivor",
+    description: "Focuses on outlasting opponents with higher elimination pressure.",
+  },
+];
+
+export const guildWinConditionOptions: Array<{
+  value: GuildWinCondition;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "score",
+    label: "Guilds / Score",
+    description: "Guild with the highest score at session end wins.",
+  },
+  {
+    value: "last_standing",
+    label: "Guilds / Last standing",
+    description: "Last guild with active players remaining wins.",
   },
 ];
 
@@ -83,4 +147,3 @@ export const managerParticipationOptions: Array<{
     description: "You join the session as a player while still hosting.",
   },
 ];
-
