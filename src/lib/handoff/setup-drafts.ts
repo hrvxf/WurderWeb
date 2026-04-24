@@ -8,6 +8,7 @@ import {
   isSetupExpired,
   normalizeSetupId,
   parseHandoffSetupDraftDoc,
+  type HandoffSetupB2BConfig,
   type HandoffSetupConfig,
   type HandoffSetupDraftDoc,
 } from "@/domain/handoff/setup-draft";
@@ -25,6 +26,13 @@ export class HandoffSetupExpiredError extends Error {
   constructor(message = "Setup draft has expired.") {
     super(message);
     this.name = "HandoffSetupExpiredError";
+  }
+}
+
+export class HandoffSetupConsumedError extends Error {
+  constructor(message = "Setup draft has already been consumed.") {
+    super(message);
+    this.name = "HandoffSetupConsumedError";
   }
 }
 
@@ -78,6 +86,53 @@ export async function requireActiveHandoffSetupDraft(setupIdRaw: unknown): Promi
   if (isSetupExpired(result.draft.expiresAtMs)) {
     throw new HandoffSetupExpiredError();
   }
+  if (result.draft.consumedAtMs != null) {
+    throw new HandoffSetupConsumedError();
+  }
 
   return result;
+}
+
+export async function consumeB2BHandoffSetupDraft(input: {
+  setupIdRaw: unknown;
+  hostUid: string;
+}): Promise<{ setupId: string; draft: HandoffSetupDraftDoc; config: HandoffSetupB2BConfig }> {
+  const setupId = normalizeSetupId(input.setupIdRaw);
+  if (!setupId) throw new HandoffSetupNotFoundError();
+
+  const ref = adminDb.collection(HANDOFF_SETUP_COLLECTION).doc(setupId);
+  const nowMs = Date.now();
+  const result = await adminDb.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HandoffSetupNotFoundError();
+    const parsed = parseHandoffSetupDraftDoc(snap.data());
+    if (!parsed) throw new HandoffSetupNotFoundError();
+    if (parsed.config.gameType !== "b2b") {
+      throw new Error("INVALID_SETUP_TYPE");
+    }
+    if (isSetupExpired(parsed.expiresAtMs, nowMs)) throw new HandoffSetupExpiredError();
+    if (parsed.consumedAtMs != null) throw new HandoffSetupConsumedError();
+    if (parsed.createdByAccountId && parsed.createdByAccountId !== input.hostUid) {
+      throw new Error("SETUP_HOST_MISMATCH");
+    }
+
+    tx.update(ref, {
+      consumedAtMs: nowMs,
+      consumedByAccountId: input.hostUid,
+      updatedAtMs: nowMs,
+    });
+
+    return {
+      setupId,
+      draft: {
+        ...parsed,
+        consumedAtMs: nowMs,
+        consumedByAccountId: input.hostUid,
+        updatedAtMs: nowMs,
+      },
+      config: parsed.config,
+    };
+  });
+
+  return result as { setupId: string; draft: HandoffSetupDraftDoc; config: HandoffSetupB2BConfig };
 }

@@ -1,5 +1,5 @@
 import { parseCanonicalGameMode, type CanonicalGameMode } from "@/lib/game/mode";
-import { normalizeSessionGameType, type SessionGameType } from "@/lib/game/session-type";
+import { normalizeSessionGameType } from "@/lib/game/session-type";
 
 export const HANDOFF_SETUP_COLLECTION = "handoffSetups";
 export const HANDOFF_SETUP_TTL_MS = 24 * 60 * 60 * 1000;
@@ -12,22 +12,48 @@ const FREE_FOR_ALL_MODE = "free_for_all" as const;
 export type HandoffFreeForAllVariant = "classic" | "survivor";
 export type HandoffGuildWinCondition = "score" | "last_standing";
 type CanonicalNonGuildMode = Exclude<CanonicalGameMode, "guilds">;
+export type HandoffSessionType = "host_only" | "player";
+export type HandoffB2BManagerConfig = {
+  managerParticipation?: "host_only" | "host_player";
+  mode: string;
+  durationMinutes: number;
+  wordDifficulty: string;
+  teamsEnabled: boolean;
+  metricsEnabled: string[];
+  minSecondsBeforeClaim: number;
+  minSecondsBetweenClaims: number;
+  maxActiveClaimsPerPlayer: number;
+  freeRefreshCooldownSeconds: number;
+};
 
-export type HandoffSetupConfig =
+type HandoffSetupB2CConfig =
   | {
-      gameType: SessionGameType;
+      gameType: "b2c";
       mode: CanonicalNonGuildMode;
     }
   | {
-      gameType: SessionGameType;
+      gameType: "b2c";
       mode: "guilds";
       guildWinCondition?: HandoffGuildWinCondition;
     }
   | {
-      gameType: SessionGameType;
+      gameType: "b2c";
       mode: typeof FREE_FOR_ALL_MODE;
       freeForAllVariant: HandoffFreeForAllVariant;
     };
+
+export type HandoffSetupB2BConfig = {
+  gameType: "b2b";
+  mode: CanonicalGameMode;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  orgId: string;
+  templateId?: string;
+  sessionType: HandoffSessionType;
+  managerConfig?: HandoffB2BManagerConfig;
+  analyticsEnabled?: boolean;
+};
+
+export type HandoffSetupConfig = HandoffSetupB2CConfig | HandoffSetupB2BConfig;
 
 export type HandoffSetupDraftDoc = {
   version: typeof HANDOFF_SETUP_VERSION;
@@ -38,6 +64,8 @@ export type HandoffSetupDraftDoc = {
   updatedAtMs: number;
   expiresAtMs: number;
   createdByAccountId: string | null;
+  consumedAtMs: number | null;
+  consumedByAccountId: string | null;
 };
 
 function randomSetupIdChar(): string {
@@ -69,6 +97,11 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
     mode?: unknown;
     freeForAllVariant?: unknown;
     guildWinCondition?: unknown;
+    orgId?: unknown;
+    templateId?: unknown;
+    sessionType?: unknown;
+    managerConfig?: unknown;
+    analyticsEnabled?: unknown;
   };
   const gameType = normalizeSessionGameType(source.gameType);
   const normalizedMode = typeof source.mode === "string" ? source.mode.trim().toLowerCase() : "";
@@ -78,6 +111,33 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
   const normalizedGuildWinCondition =
     typeof source.guildWinCondition === "string" ? source.guildWinCondition.trim().toLowerCase() : "";
 
+  if (gameType === "b2b") {
+    const orgId = typeof source.orgId === "string" ? source.orgId.trim() : "";
+    if (!orgId) return null;
+    const templateId = typeof source.templateId === "string" ? source.templateId.trim() : "";
+    const sessionTypeRaw = typeof source.sessionType === "string" ? source.sessionType.trim().toLowerCase() : "";
+    const sessionType: HandoffSessionType | null =
+      sessionTypeRaw === "host_only" ? "host_only" : sessionTypeRaw === "player" ? "player" : null;
+    const analyticsEnabled =
+      typeof source.analyticsEnabled === "boolean" ? source.analyticsEnabled : undefined;
+    if (!mode || !sessionType) return null;
+
+    return {
+      gameType: "b2b",
+      mode,
+      ...(normalizedVariant.length > 0 && mode === FREE_FOR_ALL_MODE
+        ? { freeForAllVariant: normalizedVariant === "survivor" ? "survivor" : "classic" }
+        : {}),
+      orgId,
+      ...(templateId ? { templateId } : {}),
+      sessionType,
+      ...(source.managerConfig && typeof source.managerConfig === "object"
+        ? { managerConfig: source.managerConfig as HandoffB2BManagerConfig }
+        : {}),
+      ...(analyticsEnabled == null ? {} : { analyticsEnabled }),
+    };
+  }
+
   if (mode === FREE_FOR_ALL_MODE) {
     if (normalizedGuildWinCondition.length > 0) return null;
     const freeForAllVariant =
@@ -86,8 +146,8 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
         : normalizedVariant === "classic" || normalizedVariant.length === 0
           ? "classic"
           : null;
-    if (!gameType || !freeForAllVariant) return null;
-    return { gameType, mode, freeForAllVariant };
+    if (gameType !== "b2c" || !freeForAllVariant) return null;
+    return { gameType: "b2c", mode, freeForAllVariant };
   }
 
   if (mode === "guilds") {
@@ -100,9 +160,9 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
           : normalizedGuildWinCondition.length === 0
             ? undefined
             : null;
-    if (!gameType || guildWinCondition === null) return null;
+    if (gameType !== "b2c" || guildWinCondition === null) return null;
     return {
-      gameType,
+      gameType: "b2c",
       mode,
       ...(guildWinCondition ? { guildWinCondition } : {}),
     };
@@ -116,8 +176,8 @@ export function parseHandoffSetupConfig(raw: unknown): HandoffSetupConfig | null
     return null;
   }
 
-  if (!gameType || !mode) return null;
-  return { gameType, mode };
+  if (gameType !== "b2c" || !mode) return null;
+  return { gameType: "b2c", mode };
 }
 
 export function createHandoffSetupDraftDoc(input: {
@@ -135,6 +195,8 @@ export function createHandoffSetupDraftDoc(input: {
     updatedAtMs: nowMs,
     expiresAtMs: nowMs + HANDOFF_SETUP_TTL_MS,
     createdByAccountId: input.createdByAccountId?.trim() || null,
+    consumedAtMs: null,
+    consumedByAccountId: null,
   };
 }
 
@@ -149,6 +211,8 @@ export function parseHandoffSetupDraftDoc(raw: unknown): HandoffSetupDraftDoc | 
     updatedAtMs?: unknown;
     expiresAtMs?: unknown;
     createdByAccountId?: unknown;
+    consumedAtMs?: unknown;
+    consumedByAccountId?: unknown;
   };
 
   if (source.version !== HANDOFF_SETUP_VERSION) return null;
@@ -175,6 +239,8 @@ export function parseHandoffSetupDraftDoc(raw: unknown): HandoffSetupDraftDoc | 
     updatedAtMs: source.updatedAtMs,
     expiresAtMs: source.expiresAtMs,
     createdByAccountId: typeof source.createdByAccountId === "string" ? source.createdByAccountId : null,
+    consumedAtMs: typeof source.consumedAtMs === "number" ? source.consumedAtMs : null,
+    consumedByAccountId: typeof source.consumedByAccountId === "string" ? source.consumedByAccountId : null,
   };
 }
 

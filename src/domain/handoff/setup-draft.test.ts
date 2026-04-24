@@ -127,6 +127,19 @@ describe("setup-draft helpers", () => {
         guildWinCondition: "score",
       })
     ).toBeNull();
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "classic",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "classic",
+      orgId: "org-1",
+      sessionType: "player",
+    });
   });
 
   it("normalizes valid setup id", () => {
@@ -137,7 +150,7 @@ describe("setup-draft helpers", () => {
   it("creates and parses setup draft docs", () => {
     const nowMs = 10_000;
     const created = createHandoffSetupDraftDoc({
-      config: { gameType: "b2b", mode: "guilds" },
+      config: { gameType: "b2b", mode: "guilds", orgId: "org-1", sessionType: "host_only" },
       createdByAccountId: "uid_123",
       nowMs,
     });
