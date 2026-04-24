@@ -13,6 +13,7 @@ import {
 import {
   createGameForHostUid,
   GameCodeCollisionError,
+  type ManagerConfig,
 } from "@/lib/game/create-game";
 import {
   consumeB2BHandoffSetupDraft,
@@ -54,6 +55,12 @@ export async function POST(request: Request) {
     });
 
     const managerParticipation = config.sessionType === "player" ? "host_player" : "host_only";
+    const managerConfig: ManagerConfig | undefined = config.managerConfig
+      ? {
+          ...config.managerConfig,
+          mode: config.mode,
+        }
+      : undefined;
 
     const createPayload = {
       hostUid,
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
       templateId: config.templateId,
       analyticsEnabled: config.analyticsEnabled ?? true,
       managerParticipation,
-      managerConfig: config.managerConfig,
+      managerConfig,
       freeForAllVariant: config.freeForAllVariant,
       guildWinCondition: config.guildWinCondition,
     } as const;

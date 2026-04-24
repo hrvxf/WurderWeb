@@ -34,7 +34,7 @@ export type CreateBusinessSessionPayload = {
   metricsEnabled: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
-  maxActiveClaimsPerPlayer: 1;
+  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
   freeForAllVariant?: FreeForAllVariant;
   guildWinCondition?: GuildWinCondition;
