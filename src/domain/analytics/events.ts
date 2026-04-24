@@ -6,6 +6,8 @@ export const ANALYTICS_EVENTS = {
   joinFallbackShown: "join_fallback_shown",
   joinInstallClick: "join_install_click",
   storeCtaClick: "store_cta_click",
+  b2bQrSetupGenerated: "b2b_qr_setup_generated",
+  b2bQrJoinGenerated: "b2b_qr_join_generated",
 } as const;
 
 export type AnalyticsEventName =

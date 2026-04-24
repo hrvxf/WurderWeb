@@ -4,6 +4,7 @@ import {
   GameCodeCollisionError,
 } from "@/lib/game/create-game";
 import {
+  HandoffSetupConsumedError,
   HandoffSetupExpiredError,
   HandoffSetupNotFoundError,
   requireActiveHandoffSetupDraft,
@@ -91,6 +92,15 @@ export async function POST(request: Request) {
           message: "The provided setupId has expired.",
         },
         { status: 410 }
+      );
+    }
+    if (error instanceof HandoffSetupConsumedError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_CONSUMED",
+          message: "The provided setupId has already been used.",
+        },
+        { status: 409 }
       );
     }
 
