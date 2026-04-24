@@ -61,7 +61,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const b2cConfig = setup?.draft.config.gameType === "b2c" ? setup.draft.config : parsedRequestConfig;
+    const b2cConfig =
+      setup?.draft.config.gameType === "b2c"
+        ? setup.draft.config
+        : parsedRequestConfig?.gameType === "b2c"
+          ? parsedRequestConfig
+          : null;
+
+    if (!b2cConfig) {
+      return NextResponse.json(
+        {
+          code: "INVALID_SETUP_CONFIG",
+          message:
+            "Invalid setup fields. Allowed mode: classic|elimination|guilds|free_for_all. freeForAllVariant applies only to free_for_all and supports classic|survivor. guildWinCondition applies only to guilds and supports score|last_standing.",
+        },
+        { status: 400 }
+      );
+    }
 
     const createPayload = {
       hostUid,
