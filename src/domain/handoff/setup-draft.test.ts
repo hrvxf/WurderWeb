@@ -27,11 +27,7 @@ describe("setup-draft helpers", () => {
         gameType: "b2c",
         mode: "free_for_all",
       })
-    ).toEqual({
-      gameType: "b2c",
-      mode: "free_for_all",
-      freeForAllVariant: "classic",
-    });
+    ).toBeNull();
     expect(
       parseHandoffSetupConfig({
         gameType: "b2c",
@@ -140,6 +136,14 @@ describe("setup-draft helpers", () => {
       orgId: "org-1",
       sessionType: "player",
     });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "free_for_all",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toBeNull();
     expect(
       parseHandoffSetupConfig({
         gameType: "b2b",

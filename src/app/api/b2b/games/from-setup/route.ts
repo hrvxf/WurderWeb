@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
     const managerParticipation = config.sessionType === "player" ? "host_player" : "host_only";
 
-    const { gameCode } = await createGameForHostUid({
+    const createPayload = {
       hostUid,
       gameType: "b2b",
       mode: config.mode,
@@ -66,7 +66,9 @@ export async function POST(request: Request) {
       managerConfig: config.managerConfig,
       freeForAllVariant: config.freeForAllVariant,
       guildWinCondition: config.guildWinCondition,
-    });
+    } as const;
+    console.info("b2b_create_payload_sent", createPayload);
+    const { gameCode } = await createGameForHostUid(createPayload);
 
     await linkGameToOrganization({
       orgId: config.orgId,

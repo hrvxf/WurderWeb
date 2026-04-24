@@ -7,6 +7,7 @@ import type {
 } from "@/lib/business/session-options";
 
 export type BusinessSessionManagerConfig = {
+  managerParticipation: "host_only" | "host_player";
   mode: string;
   durationMinutes: number;
   wordDifficulty: string;
@@ -14,6 +15,7 @@ export type BusinessSessionManagerConfig = {
   metricsEnabled: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
+  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
   freeForAllVariant?: FreeForAllVariant;
   guildWinCondition?: GuildWinCondition;
@@ -95,12 +97,14 @@ export function buildBusinessSessionManagerConfig(setup: SetupState): BusinessSe
   const modeConfig = modeMapping[setup.gameMode];
 
   const managerConfig: BusinessSessionManagerConfig = {
+    managerParticipation: setup.managerParticipation,
     mode: modeConfig.mode,
     teamsEnabled: modeConfig.teamsEnabled,
     durationMinutes: setup.length,
     wordDifficulty: modeConfig.wordDifficulty,
     minSecondsBeforeClaim: modeConfig.minSecondsBeforeClaim,
     minSecondsBetweenClaims: modeConfig.minSecondsBetweenClaims,
+    maxActiveClaimsPerPlayer: 1,
     freeRefreshCooldownSeconds: modeConfig.freeRefreshCooldownSeconds,
     metricsEnabled: defaultBusinessMetrics,
   };
@@ -123,7 +127,7 @@ export function buildCreateBusinessSessionPayload(setup: SetupState): CreateBusi
     orgName: setup.orgName.trim(),
     templateName: toBusinessSessionName(setup.orgName, setup.sessionLabel),
     saveTemplate: false,
-    managerParticipation: setup.managerParticipation,
+    managerParticipation: managerConfig.managerParticipation,
     mode: managerConfig.mode,
     durationMinutes: managerConfig.durationMinutes,
     wordDifficulty: managerConfig.wordDifficulty,
@@ -131,7 +135,7 @@ export function buildCreateBusinessSessionPayload(setup: SetupState): CreateBusi
     metricsEnabled: managerConfig.metricsEnabled,
     minSecondsBeforeClaim: managerConfig.minSecondsBeforeClaim,
     minSecondsBetweenClaims: managerConfig.minSecondsBetweenClaims,
-    maxActiveClaimsPerPlayer: 1,
+    maxActiveClaimsPerPlayer: managerConfig.maxActiveClaimsPerPlayer,
     freeRefreshCooldownSeconds: managerConfig.freeRefreshCooldownSeconds,
   };
 

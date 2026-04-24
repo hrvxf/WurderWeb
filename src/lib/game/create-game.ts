@@ -8,14 +8,14 @@ import {
   resolveDefaultClassicWordGroupId,
 } from "@/domain/game/create-game";
 import type { SessionGameType } from "@/lib/game/session-type";
-import { parseCanonicalGameMode } from "@/lib/game/mode";
+import type { CanonicalGameMode } from "@/lib/game/mode";
 import type { HandoffFreeForAllVariant, HandoffGuildWinCondition } from "@/domain/handoff/setup-draft";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
 export type ManagerConfig = {
   managerParticipation?: "host_only" | "host_player";
-  mode: string;
+  mode: CanonicalGameMode | "free_for_all";
   durationMinutes: number;
   wordDifficulty: string;
   teamsEnabled: boolean;
@@ -30,8 +30,8 @@ export type ManagerConfig = {
 
 type CreateGameForHostUidInput = {
   hostUid: string;
-  gameType?: SessionGameType;
-  mode?: string;
+  gameType: SessionGameType;
+  mode: CanonicalGameMode | "free_for_all";
   orgId?: string;
   templateId?: string;
   analyticsEnabled?: boolean;
@@ -64,9 +64,12 @@ export class GameCodeCollisionError extends Error {
 }
 
 export async function createGameForHostUid(input: string | CreateGameForHostUidInput): Promise<{ gameCode: string }> {
-  const payload: CreateGameForHostUidInput = typeof input === "string" ? { hostUid: input } : input;
+  if (typeof input === "string") {
+    throw new Error("Canonical game payload is required.");
+  }
+  const payload: CreateGameForHostUidInput = input;
   const { hostUid } = payload;
-  const gameType: SessionGameType = payload.gameType === "b2b" ? "b2b" : "b2c";
+  const gameType: SessionGameType = payload.gameType;
 
   if (!hostUid) {
     throw new UnauthenticatedCreateGameError("Missing authenticated host uid.");
@@ -74,30 +77,12 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
-  const rawMode =
-    typeof payload.mode === "string"
-      ? payload.mode
-      : typeof payload.managerConfig?.mode === "string"
-        ? payload.managerConfig.mode
-        : "";
-  const normalizedRawMode = rawMode.trim().toLowerCase();
-  const isFreeForAllMode = normalizedRawMode === "free_for_all";
-  const managerMode = isFreeForAllMode
-    ? "free_for_all"
-    : parseCanonicalGameMode(rawMode) ?? "classic";
+  const managerMode = payload.mode;
+  const isFreeForAllMode = managerMode === "free_for_all";
   const requestedFreeForAllVariant = payload.freeForAllVariant ?? payload.managerConfig?.freeForAllVariant;
   const requestedGuildWinCondition = payload.guildWinCondition ?? payload.managerConfig?.guildWinCondition;
-  const resolvedFreeForAllVariant = isFreeForAllMode
-    ? requestedFreeForAllVariant === "survivor"
-      ? "survivor"
-      : "classic"
-    : null;
-  const resolvedGuildWinCondition =
-    managerMode === "guilds"
-      ? requestedGuildWinCondition === "last_standing"
-        ? "last_standing"
-        : "score"
-      : null;
+  const resolvedFreeForAllVariant = isFreeForAllMode ? requestedFreeForAllVariant : undefined;
+  const resolvedGuildWinCondition = managerMode === "guilds" ? requestedGuildWinCondition : undefined;
 
   if (requestedFreeForAllVariant && !isFreeForAllMode) {
     throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
@@ -105,21 +90,32 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   if (requestedGuildWinCondition && managerMode !== "guilds") {
     throw new Error("guildWinCondition is only allowed when mode is guilds.");
   }
-  if (isFreeForAllMode && resolvedFreeForAllVariant !== requestedFreeForAllVariant) {
-    console.info("create_game_default_applied", {
-      field: "freeForAllVariant",
-      reason: "missing_or_invalid",
-      providedValue: requestedFreeForAllVariant ?? null,
-      defaultValue: resolvedFreeForAllVariant,
-    });
+  if (isFreeForAllMode && !requestedFreeForAllVariant) {
+    throw new Error("freeForAllVariant is required when mode is free_for_all.");
   }
-  if (managerMode === "guilds" && resolvedGuildWinCondition !== requestedGuildWinCondition) {
-    console.info("create_game_default_applied", {
-      field: "guildWinCondition",
-      reason: "missing_or_invalid",
-      providedValue: requestedGuildWinCondition ?? null,
-      defaultValue: resolvedGuildWinCondition,
-    });
+  if (managerMode === "guilds" && !requestedGuildWinCondition) {
+    throw new Error("guildWinCondition is required when mode is guilds.");
+  }
+  if (gameType === "b2b" && payload.managerConfig) {
+    if (payload.managerConfig.mode !== managerMode) {
+      throw new Error("managerConfig.mode must match mode.");
+    }
+    const requiredNumberFields: Array<keyof ManagerConfig> = [
+      "durationMinutes",
+      "minSecondsBeforeClaim",
+      "minSecondsBetweenClaims",
+      "maxActiveClaimsPerPlayer",
+      "freeRefreshCooldownSeconds",
+    ];
+    for (const field of requiredNumberFields) {
+      const value = payload.managerConfig[field];
+      if (typeof value !== "number" || Number.isNaN(value)) {
+        throw new Error(`managerConfig.${field} is required.`);
+      }
+    }
+    if (!Array.isArray(payload.managerConfig.metricsEnabled)) {
+      throw new Error("managerConfig.metricsEnabled is required.");
+    }
   }
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
@@ -129,8 +125,8 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
           ...(payload.managerConfig ?? {}),
           managerParticipation,
           mode: managerMode,
-          ...(resolvedFreeForAllVariant ? { freeForAllVariant: resolvedFreeForAllVariant } : {}),
-          ...(resolvedGuildWinCondition ? { guildWinCondition: resolvedGuildWinCondition } : {}),
+          ...(resolvedFreeForAllVariant != null ? { freeForAllVariant: resolvedFreeForAllVariant } : {}),
+          ...(resolvedGuildWinCondition != null ? { guildWinCondition: resolvedGuildWinCondition } : {}),
         }
       : payload.managerConfig;
 
@@ -174,8 +170,12 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
             guildWinCondition: resolvedGuildWinCondition,
             managerConfig: normalizedManagerConfig,
           });
-          companyFields.freeForAllVariant = resolvedFreeForAllVariant;
-          companyFields.guildWinCondition = resolvedGuildWinCondition;
+          if (resolvedFreeForAllVariant != null) {
+            companyFields.freeForAllVariant = resolvedFreeForAllVariant;
+          }
+          if (resolvedGuildWinCondition != null) {
+            companyFields.guildWinCondition = resolvedGuildWinCondition;
+          }
         }
         if (payload.createdFrom === "b2c_setup") {
           companyFields.createdFrom = "b2c_setup" as const;

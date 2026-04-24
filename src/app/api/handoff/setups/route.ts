@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as CreateHandoffSetupRequest;
     const parsed = parseHandoffSetupConfig({
       gameType: body.gameType ?? "b2c",
-      mode: body.mode ?? "classic",
+      mode: body.mode,
       freeForAllVariant: body.freeForAllVariant,
       guildWinCondition: body.guildWinCondition,
       orgId: body.orgId,
