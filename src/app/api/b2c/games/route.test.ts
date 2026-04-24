@@ -117,4 +117,21 @@ describe("POST /api/b2c/games", () => {
       })
     );
   });
+
+  it("rejects free_for_all requests without a variant", async () => {
+    const response = await POST(
+      buildRequest(
+        {
+          mode: "free_for_all",
+        },
+        { authorization: "Bearer token-valid" }
+      )
+    );
+    const payload = (await response.json()) as { code?: string; message?: string };
+
+    expect(response.status).toBe(400);
+    expect(payload.code).toBe("INVALID_SETUP_CONFIG");
+    expect(payload.message).toContain("freeForAllVariant");
+    expect(createGameForHostUidMock).not.toHaveBeenCalled();
+  });
 });

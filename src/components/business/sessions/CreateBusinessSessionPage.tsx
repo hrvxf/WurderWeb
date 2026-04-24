@@ -25,6 +25,7 @@ import type { SetupState, SetupStep } from "@/lib/business/session-options";
 import { persistLastCreatedSession } from "@/lib/game/last-created-session";
 import type { SessionGameType } from "@/lib/game/session-type";
 import type { HandoffB2BManagerConfig } from "@/domain/handoff/setup-draft";
+import { addOptionalWebSentryBreadcrumb } from "@/lib/telemetry/web-breadcrumbs";
 
 type CreatedBusinessSessionResult = {
   gameCode: string;
@@ -113,13 +114,26 @@ export default function CreateBusinessSessionPage() {
 
     try {
       const token = await user.getIdToken();
+      const createPayload = buildCreateBusinessSessionPayload(setup);
+      addOptionalWebSentryBreadcrumb({
+        category: "game.create",
+        message: "b2b_create_payload_sent",
+        level: "info",
+        data: {
+          surface: "business-session",
+          mode: createPayload.mode,
+          freeForAllVariant: createPayload.freeForAllVariant ?? null,
+          guildWinCondition: createPayload.guildWinCondition ?? null,
+          managerParticipation: createPayload.managerParticipation,
+        },
+      });
       const response = await fetch("/api/b2b/sessions", {
         method: "POST",
         headers: {
           authorization: `Bearer ${token}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify(buildCreateBusinessSessionPayload(setup)),
+        body: JSON.stringify(createPayload),
       });
 
       const payload = (await response.json().catch(() => ({}))) as {
@@ -131,6 +145,18 @@ export default function CreateBusinessSessionPage() {
       };
 
       if (!response.ok) {
+        addOptionalWebSentryBreadcrumb({
+          category: "game.create",
+          message: "canonical_create_payload_rejected",
+          level: "warning",
+          data: {
+            surface: "business-session",
+            mode: createPayload.mode,
+            status: response.status,
+            freeForAllVariant: createPayload.freeForAllVariant ?? null,
+            guildWinCondition: createPayload.guildWinCondition ?? null,
+          },
+        });
         throw new Error(payload.message ?? "Failed to start business session.");
       }
 
@@ -158,6 +184,18 @@ export default function CreateBusinessSessionPage() {
         managerParticipation: managerConfig.managerParticipation,
         mode: managerConfig.mode,
       });
+      addOptionalWebSentryBreadcrumb({
+        category: "game.create",
+        message: "canonical_create_payload_validated",
+        level: "info",
+        data: {
+          surface: "business-session",
+          gameCode,
+          mode: managerConfig.mode,
+          freeForAllVariant: managerConfig.freeForAllVariant ?? null,
+          guildWinCondition: managerConfig.guildWinCondition ?? null,
+        },
+      });
 
       if (typeof window !== "undefined") {
         window.localStorage.setItem(BUSINESS_STORAGE_ORG_NAME_KEY, setup.orgName.trim());
@@ -172,6 +210,18 @@ export default function CreateBusinessSessionPage() {
         });
       }
     } catch (error) {
+      addOptionalWebSentryBreadcrumb({
+        category: "game.create",
+        message: "canonical_create_payload_rejected",
+        level: "error",
+        data: {
+          surface: "business-session",
+          mode: setup.gameMode,
+          freeForAllVariant: setup.freeForAllVariant,
+          guildWinCondition: setup.guildWinCondition,
+          error: error instanceof Error ? error.message : "Failed to start business session.",
+        },
+      });
       setMessage(error instanceof Error ? error.message : "Failed to start business session.");
     } finally {
       setBusy(false);

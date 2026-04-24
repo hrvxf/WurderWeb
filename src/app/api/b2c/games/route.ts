@@ -15,6 +15,10 @@ import {
   FirebaseAuthUnauthenticatedError,
   verifyFirebaseAuthHeader,
 } from "@/lib/auth/verify-firebase-auth-header";
+import {
+  assertCanonicalCreatePayload,
+  CanonicalCreatePayloadError,
+} from "@/lib/game/canonical-create";
 
 export const runtime = "nodejs";
 
@@ -88,7 +92,19 @@ export async function POST(request: Request) {
       createdFrom: setupId ? undefined : "b2c_setup",
       status: setupId ? undefined : "waiting",
     } as const;
-    console.info("b2c_create_payload_sent", createPayload);
+    assertCanonicalCreatePayload(createPayload, {
+      surface: "b2c",
+      stage: "route:preCreate",
+    });
+    console.info("b2c_create_payload_sent", {
+      surface: "b2c",
+      mode: createPayload.mode,
+      gameType: createPayload.gameType,
+      freeForAllVariant: createPayload.freeForAllVariant ?? null,
+      guildWinCondition: createPayload.guildWinCondition ?? null,
+      createdFrom: createPayload.createdFrom ?? null,
+      setupId: setupId || null,
+    });
     const result = await createGameForHostUid(createPayload);
 
     const joinPath = `/join/${result.gameCode}`;
@@ -173,6 +189,16 @@ export async function POST(request: Request) {
           message: "The provided setupId has already been used.",
         },
         { status: 409 }
+      );
+    }
+
+    if (error instanceof CanonicalCreatePayloadError) {
+      return NextResponse.json(
+        {
+          code: "INVALID_SETUP_CONFIG",
+          message: errorMessage,
+        },
+        { status: 400 }
       );
     }
 

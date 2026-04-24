@@ -19,6 +19,10 @@ import {
   FirebaseAuthUnauthenticatedError,
   verifyFirebaseAuthHeader,
 } from "@/lib/auth/verify-firebase-auth-header";
+import {
+  assertCanonicalCreatePayload,
+  CanonicalCreatePayloadError,
+} from "@/lib/game/canonical-create";
 
 export const runtime = "nodejs";
 
@@ -279,7 +283,21 @@ export async function POST(request: Request) {
       freeForAllVariant: body.freeForAllVariant,
       guildWinCondition: body.guildWinCondition,
     } as const;
-    console.info("b2b_create_payload_sent", createPayload);
+    assertCanonicalCreatePayload(createPayload, {
+      surface: "b2b",
+      stage: "route:preCreate",
+    });
+    console.info("b2b_create_payload_sent", {
+      surface: "b2b",
+      gameType: createPayload.gameType,
+      mode: createPayload.mode,
+      orgId,
+      templateId: templateId ?? null,
+      managerParticipation: createPayload.managerParticipation,
+      managerConfigMode: createPayload.managerConfig.mode,
+      freeForAllVariant: createPayload.freeForAllVariant ?? null,
+      guildWinCondition: createPayload.guildWinCondition ?? null,
+    });
     const { gameCode } = await createGameForHostUid(createPayload);
 
     await linkGameToOrganization({
@@ -321,6 +339,16 @@ export async function POST(request: Request) {
           message: "Unable to allocate a unique game code. Please retry.",
         },
         { status: 409 }
+      );
+    }
+
+    if (error instanceof CanonicalCreatePayloadError) {
+      return NextResponse.json(
+        {
+          code: "INVALID_REQUEST",
+          message: error.message,
+        },
+        { status: 400 }
       );
     }
 

@@ -10,6 +10,10 @@ import {
 import type { SessionGameType } from "@/lib/game/session-type";
 import type { CanonicalGameMode } from "@/lib/game/mode";
 import type { HandoffFreeForAllVariant, HandoffGuildWinCondition } from "@/domain/handoff/setup-draft";
+import {
+  assertCanonicalCreatePayload,
+  assertGameDocCanonicalFields,
+} from "@/lib/game/canonical-create";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
@@ -68,6 +72,10 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
     throw new Error("Canonical game payload is required.");
   }
   const payload: CreateGameForHostUidInput = input;
+  assertCanonicalCreatePayload(payload, {
+    surface: payload.gameType ?? "unknown",
+    stage: "createGameForHostUid:entry",
+  });
   const { hostUid } = payload;
   const gameType: SessionGameType = payload.gameType;
 
@@ -84,18 +92,6 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
   const resolvedFreeForAllVariant = isFreeForAllMode ? requestedFreeForAllVariant : undefined;
   const resolvedGuildWinCondition = managerMode === "guilds" ? requestedGuildWinCondition : undefined;
 
-  if (requestedFreeForAllVariant && !isFreeForAllMode) {
-    throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
-  }
-  if (requestedGuildWinCondition && managerMode !== "guilds") {
-    throw new Error("guildWinCondition is only allowed when mode is guilds.");
-  }
-  if (isFreeForAllMode && !requestedFreeForAllVariant) {
-    throw new Error("freeForAllVariant is required when mode is free_for_all.");
-  }
-  if (managerMode === "guilds" && !requestedGuildWinCondition) {
-    throw new Error("guildWinCondition is required when mode is guilds.");
-  }
   if (gameType === "b2b" && payload.managerConfig) {
     if (payload.managerConfig.mode !== managerMode) {
       throw new Error("managerConfig.mode must match mode.");
@@ -186,7 +182,22 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
               : Date.now() + 24 * 60 * 60 * 1000;
         }
 
-        tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
+        const gameDoc = { ...baseDoc, mode: resolvedMode, ...companyFields };
+        assertGameDocCanonicalFields({
+          payload: {
+            gameType,
+            mode: resolvedMode,
+            freeForAllVariant: resolvedFreeForAllVariant,
+            guildWinCondition: resolvedGuildWinCondition,
+            managerConfig: normalizedManagerConfig,
+          },
+          gameDoc,
+          context: {
+            surface: gameType,
+            stage: "createGameForHostUid:preWrite",
+          },
+        });
+        tx.set(gameRef, gameDoc);
         if (gameType === "b2b") {
           console.info("b2b_manager_config_written", {
             gameCode,

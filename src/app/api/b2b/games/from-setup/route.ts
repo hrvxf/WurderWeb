@@ -16,6 +16,10 @@ import {
   type ManagerConfig,
 } from "@/lib/game/create-game";
 import {
+  assertCanonicalCreatePayload,
+  CanonicalCreatePayloadError,
+} from "@/lib/game/canonical-create";
+import {
   consumeB2BHandoffSetupDraft,
   HandoffSetupConsumedError,
   HandoffSetupExpiredError,
@@ -74,7 +78,23 @@ export async function POST(request: Request) {
       freeForAllVariant: config.freeForAllVariant,
       guildWinCondition: config.guildWinCondition,
     } as const;
-    console.info("b2b_create_payload_sent", createPayload);
+    assertCanonicalCreatePayload(createPayload, {
+      surface: "b2b",
+      stage: "from-setup:preCreate",
+    });
+    console.info("b2b_create_payload_sent", {
+      surface: "b2b",
+      source: "from-setup",
+      gameType: createPayload.gameType,
+      mode: createPayload.mode,
+      orgId: config.orgId,
+      templateId: config.templateId ?? null,
+      managerParticipation,
+      managerConfigMode: managerConfig?.mode ?? null,
+      freeForAllVariant: createPayload.freeForAllVariant ?? null,
+      guildWinCondition: createPayload.guildWinCondition ?? null,
+      analyticsEnabled: createPayload.analyticsEnabled ?? null,
+    });
     const { gameCode } = await createGameForHostUid(createPayload);
 
     await linkGameToOrganization({
@@ -192,6 +212,16 @@ export async function POST(request: Request) {
         {
           code: "INVALID_SETUP_TYPE",
           message: "setupId is not valid for b2b game creation.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (error instanceof CanonicalCreatePayloadError) {
+      return NextResponse.json(
+        {
+          code: "INVALID_REQUEST",
+          message: error.message,
         },
         { status: 400 }
       );

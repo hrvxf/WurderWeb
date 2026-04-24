@@ -165,6 +165,28 @@ describe("createGameForHostUid b2b mode fields", () => {
     ).rejects.toThrow("freeForAllVariant is only allowed when mode is free_for_all.");
   });
 
+  it("rejects b2c free-for-all games without a variant", async () => {
+    await expect(
+      createGameForHostUid({
+        hostUid: "host-ffa-missing",
+        gameType: "b2c",
+        mode: "free_for_all",
+        createdFrom: "b2c_setup",
+        status: "waiting",
+      })
+    ).rejects.toThrow("freeForAllVariant is required when mode is free_for_all.");
+  });
+
+  it("rejects guilds games without a win condition", async () => {
+    await expect(
+      createGameForHostUid({
+        hostUid: "host-guilds-missing",
+        gameType: "b2b",
+        mode: "guilds",
+      })
+    ).rejects.toThrow("guildWinCondition is required when mode is guilds.");
+  });
+
   it("throws when guildWinCondition is sent for non-guilds mode", async () => {
     await expect(
       createGameForHostUid({
