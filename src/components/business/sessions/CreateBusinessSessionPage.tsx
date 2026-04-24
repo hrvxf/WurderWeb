@@ -159,6 +159,8 @@ export default function CreateBusinessSessionPage() {
           minSecondsBetweenClaims: managerConfig.minSecondsBetweenClaims,
           maxActiveClaimsPerPlayer: managerConfig.maxActiveClaimsPerPlayer,
           freeRefreshCooldownSeconds: managerConfig.freeRefreshCooldownSeconds,
+          ...(managerConfig.freeForAllVariant ? { freeForAllVariant: managerConfig.freeForAllVariant } : {}),
+          ...(managerConfig.guildWinCondition ? { guildWinCondition: managerConfig.guildWinCondition } : {}),
         },
         managerParticipation: setup.managerParticipation,
         mode: managerConfig.mode,
@@ -329,9 +331,24 @@ export default function CreateBusinessSessionPage() {
           {step === 2 ? (
             <BusinessSessionSetupStep
               gameMode={setup.gameMode}
+              freeForAllVariant={setup.freeForAllVariant}
+              guildWinCondition={setup.guildWinCondition}
               length={setup.length}
               managerParticipation={setup.managerParticipation}
-              onGameModeChange={(value) => setSetup((prev) => ({ ...prev, gameMode: value }))}
+              onGameModeChange={(value) =>
+                setSetup((prev) => ({
+                  ...prev,
+                  gameMode: value,
+                  freeForAllVariant: value === "free_for_all" ? prev.freeForAllVariant : "classic",
+                  guildWinCondition: value === "guilds" ? prev.guildWinCondition : "score",
+                }))
+              }
+              onFreeForAllVariantChange={(value) =>
+                setSetup((prev) => ({ ...prev, freeForAllVariant: value }))
+              }
+              onGuildWinConditionChange={(value) =>
+                setSetup((prev) => ({ ...prev, guildWinCondition: value }))
+              }
               onLengthChange={(value) => setSetup((prev) => ({ ...prev, length: value }))}
               onManagerParticipationChange={(value) =>
                 setSetup((prev) => ({ ...prev, managerParticipation: value }))

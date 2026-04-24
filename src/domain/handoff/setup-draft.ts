@@ -24,6 +24,8 @@ export type HandoffB2BManagerConfig = {
   minSecondsBetweenClaims: number;
   maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
 };
 
 type HandoffSetupB2CConfig =
