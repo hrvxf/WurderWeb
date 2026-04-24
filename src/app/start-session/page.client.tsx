@@ -9,6 +9,8 @@ import type { HandoffGuildWinCondition, HandoffSetupConfig } from "@/domain/hand
 import { buildAppJoinLink, buildJoinUniversalLink } from "@/domain/join/links";
 import type { GameType } from "@/domain/handoff/gameTypeLink";
 import type { CanonicalGameMode } from "@/lib/game/mode";
+import { ensureFirebaseWebUser } from "@/lib/auth/ensure-firebase-web-user";
+import { auth } from "@/lib/firebase";
 import {
   applyModeSelection,
   buildStartSessionSetupPayload,
@@ -132,17 +134,39 @@ export default function StartSessionPageClient() {
     setCreateError("");
 
     try {
+      const existingUser = auth.currentUser;
+      if (!existingUser) {
+        console.info("b2c_create_auth_missing", { surface: "start-session" });
+      }
+
+      const user = await ensureFirebaseWebUser();
+      const idToken = await user.getIdToken();
+      console.info("b2c_create_auth_ready", {
+        surface: "start-session",
+        uid: user.uid,
+        isAnonymous: user.isAnonymous,
+      });
+
+      const requestPayload = buildStartSessionSetupPayload({
+        gameType: START_SESSION_GAME_TYPE,
+        selectedMode,
+        selectedFreeForAllVariant,
+        selectedGuildWinCondition,
+      });
+      console.info("b2c_create_payload_sent", {
+        surface: "start-session",
+        mode: requestPayload.mode,
+        freeForAllVariant: requestPayload.freeForAllVariant ?? null,
+        guildWinCondition: requestPayload.guildWinCondition ?? null,
+      });
+
       const response = await fetch("/api/b2c/games", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(
-          buildStartSessionSetupPayload({
-            gameType: START_SESSION_GAME_TYPE,
-            selectedMode,
-            selectedFreeForAllVariant,
-            selectedGuildWinCondition,
-          })
-        ),
+        headers: {
+          authorization: `Bearer ${idToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(requestPayload),
       });
 
       const payload = (await response.json().catch(() => ({}))) as Partial<B2CSessionApiResponse> & {
