@@ -90,11 +90,12 @@ export async function POST(request: Request) {
     }
 
     const result = await createHandoffSetupDraft({ config, createdByAccountId });
-    if (asB2BConfig(config)) {
+    const b2bConfig = asB2BConfig(config);
+    if (b2bConfig) {
       console.info("b2b_setup_created", {
         setupId: result.setupId,
-        orgId: config.orgId,
-        templateId: config.templateId ?? null,
+        orgId: b2bConfig.orgId,
+        templateId: b2bConfig.templateId ?? null,
         createdBy: createdByAccountId,
       });
     }
