@@ -165,8 +165,18 @@ export function buildStartSessionSetupPayload(input: {
   selectedMode: StartSessionMode;
   selectedFreeForAllVariant: FreeForAllVariant | null;
   selectedGuildWinCondition: GuildWinCondition | null;
-}): Record<string, string> {
-  const base: Record<string, string> = {
+}): {
+  gameType: GameType;
+  mode: StartSessionMode;
+  freeForAllVariant?: FreeForAllVariant;
+  guildWinCondition?: GuildWinCondition;
+} {
+  const base: {
+    gameType: GameType;
+    mode: StartSessionMode;
+    freeForAllVariant?: FreeForAllVariant;
+    guildWinCondition?: GuildWinCondition;
+  } = {
     gameType: input.gameType,
     mode: input.selectedMode,
   };
