@@ -140,6 +140,45 @@ describe("setup-draft helpers", () => {
       orgId: "org-1",
       sessionType: "player",
     });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "free_for_all",
+        freeForAllVariant: "survivor",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+      orgId: "org-1",
+      sessionType: "player",
+    });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "guilds",
+        guildWinCondition: "last_standing",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "guilds",
+      guildWinCondition: "last_standing",
+      orgId: "org-1",
+      sessionType: "player",
+    });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "classic",
+        guildWinCondition: "score",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toBeNull();
   });
 
   it("normalizes valid setup id", () => {
