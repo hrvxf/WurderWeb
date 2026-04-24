@@ -113,6 +113,24 @@ describe("createGameForHostUid b2b mode fields", () => {
     expect(setCalls[0]?.data).not.toHaveProperty("freeForAllVariant");
   });
 
+  it("writes free-for-all survivor variant to b2c game doc", async () => {
+    await createGameForHostUid({
+      hostUid: "host-b2c",
+      gameType: "b2c",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+      createdFrom: "b2c_setup",
+      status: "waiting",
+    });
+
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.data).toMatchObject({
+      gameType: "b2c",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+    });
+  });
+
   it("throws when managerConfig.mode mismatches top-level mode", async () => {
     await expect(
       createGameForHostUid({
