@@ -5,6 +5,7 @@ import {
   buildSetupUniversalLink,
 } from "@/domain/handoff/setup-draft";
 import {
+  HandoffSetupConsumedError,
   HandoffSetupExpiredError,
   HandoffSetupNotFoundError,
   requireActiveHandoffSetupDraft,
@@ -111,6 +112,15 @@ export async function GET(_request: Request, context: { params: Promise<{ setupI
           message: "Setup draft expired.",
         },
         { status: 410 }
+      );
+    }
+    if (error instanceof HandoffSetupConsumedError) {
+      return NextResponse.json(
+        {
+          code: "SETUP_CONSUMED",
+          message: "Setup draft has already been used.",
+        },
+        { status: 409 }
       );
     }
 

@@ -14,7 +14,6 @@ import {
   createGameForHostUid,
   GameCodeCollisionError,
 } from "@/lib/game/create-game";
-import { isCanonicalGameMode, parseCanonicalGameMode } from "@/lib/game/mode";
 import {
   FirebaseAuthInfrastructureError,
   FirebaseAuthUnauthenticatedError,
@@ -33,7 +32,7 @@ type CreateBusinessSessionBody = {
   templateName: string;
   saveTemplate?: boolean;
   managerParticipation: "host_only" | "host_player";
-  mode: string;
+  mode: "classic" | "elimination" | "guilds" | "free_for_all";
   durationMinutes: number;
   wordDifficulty: string;
   teamsEnabled: boolean;
@@ -42,6 +41,8 @@ type CreateBusinessSessionBody = {
   minSecondsBetweenClaims: number;
   maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: "classic" | "survivor";
+  guildWinCondition?: "score" | "last_standing";
 };
 
 function toValidIntegerField(value: unknown, fieldName: string, minimum: number): number {
@@ -66,19 +67,21 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
   const brandAccentColor = typeof body.brandAccentColor === "string" ? body.brandAccentColor.trim() : "";
   const brandThemeLabel = typeof body.brandThemeLabel === "string" ? body.brandThemeLabel.trim() : "";
   const saveTemplate = body.saveTemplate !== false;
-  const managerParticipationRaw =
-    typeof body.managerParticipation === "string" ? body.managerParticipation.trim().toLowerCase() : "";
+  const managerParticipationRaw = typeof body.managerParticipation === "string" ? body.managerParticipation.trim() : "";
   const managerParticipation =
     managerParticipationRaw === "host_player"
       ? "host_player"
       : managerParticipationRaw === "host_only"
         ? "host_only"
-        : "host_only";
+        : null;
   const modeInput = typeof body.mode === "string" ? body.mode.trim() : "";
-  const mode = parseCanonicalGameMode(modeInput);
+  const mode =
+    modeInput === "classic" || modeInput === "elimination" || modeInput === "guilds" || modeInput === "free_for_all"
+      ? modeInput
+      : null;
   const wordDifficulty = typeof body.wordDifficulty === "string" ? body.wordDifficulty.trim() : "";
   const durationMinutes = Number(body.durationMinutes);
-  const teamsEnabled = Boolean(body.teamsEnabled);
+  const teamsEnabled = typeof body.teamsEnabled === "boolean" ? body.teamsEnabled : null;
   const metricsEnabled = Array.isArray(body.metricsEnabled)
     ? body.metricsEnabled.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean)
     : [];
@@ -87,13 +90,41 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
   const maxActiveClaimsPerPlayer =
     body.maxActiveClaimsPerPlayer == null ? 1 : toValidIntegerField(body.maxActiveClaimsPerPlayer, "maxActiveClaimsPerPlayer", 1);
   const freeRefreshCooldownSeconds = toValidIntegerField(body.freeRefreshCooldownSeconds, "freeRefreshCooldownSeconds", 0);
+  const normalizedFreeForAllVariant =
+    typeof body.freeForAllVariant === "string" ? body.freeForAllVariant.trim() : "";
+  const normalizedGuildWinCondition =
+    typeof body.guildWinCondition === "string" ? body.guildWinCondition.trim() : "";
+  const freeForAllVariant =
+    normalizedFreeForAllVariant === "survivor"
+      ? "survivor"
+      : normalizedFreeForAllVariant === "classic"
+        ? "classic"
+        : undefined;
+  const guildWinCondition =
+    normalizedGuildWinCondition === "last_standing"
+      ? "last_standing"
+      : normalizedGuildWinCondition === "score"
+        ? "score"
+        : undefined;
 
-  if (!orgName || !mode || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+  if (!orgName || !managerParticipation || !mode || teamsEnabled == null || !wordDifficulty || !Number.isFinite(durationMinutes) || durationMinutes <= 0) {
     throw new Error("Missing or invalid b2b session fields.");
   }
 
-  if (!isCanonicalGameMode(mode)) {
-    throw new Error("Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds.");
+  if (mode === "free_for_all" && !freeForAllVariant) {
+    throw new Error("freeForAllVariant is required when mode is free_for_all.");
+  }
+
+  if (mode !== "free_for_all" && normalizedFreeForAllVariant.length > 0) {
+    throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
+  }
+
+  if (mode === "guilds" && !guildWinCondition) {
+    throw new Error("guildWinCondition is required when mode is guilds.");
+  }
+
+  if (mode !== "guilds" && normalizedGuildWinCondition.length > 0) {
+    throw new Error("guildWinCondition is only allowed when mode is guilds.");
   }
 
   if (!templateId && saveTemplate && !templateName) {
@@ -134,6 +165,8 @@ function toValidBody(raw: unknown): CreateBusinessSessionBody {
     minSecondsBetweenClaims,
     maxActiveClaimsPerPlayer,
     freeRefreshCooldownSeconds,
+    ...(freeForAllVariant ? { freeForAllVariant } : {}),
+    ...(guildWinCondition ? { guildWinCondition } : {}),
   };
 }
 
@@ -221,9 +254,10 @@ export async function POST(request: Request) {
       ).templateId;
     }
 
-    const { gameCode } = await createGameForHostUid({
+    const createPayload = {
       hostUid,
       gameType: "b2b",
+      mode: body.mode,
       orgId,
       templateId,
       analyticsEnabled: true,
@@ -239,8 +273,14 @@ export async function POST(request: Request) {
         minSecondsBetweenClaims: body.minSecondsBetweenClaims,
         maxActiveClaimsPerPlayer: body.maxActiveClaimsPerPlayer,
         freeRefreshCooldownSeconds: body.freeRefreshCooldownSeconds,
+        ...(body.freeForAllVariant ? { freeForAllVariant: body.freeForAllVariant } : {}),
+        ...(body.guildWinCondition ? { guildWinCondition: body.guildWinCondition } : {}),
       },
-    });
+      freeForAllVariant: body.freeForAllVariant,
+      guildWinCondition: body.guildWinCondition,
+    } as const;
+    console.info("b2b_create_payload_sent", createPayload);
+    const { gameCode } = await createGameForHostUid(createPayload);
 
     await linkGameToOrganization({
       orgId,

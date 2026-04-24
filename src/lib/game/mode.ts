@@ -1,4 +1,4 @@
-export const CANONICAL_GAME_MODES = ["classic", "elimination", "elimination_multi", "guilds"] as const;
+export const CANONICAL_GAME_MODES = ["classic", "elimination", "guilds"] as const;
 
 export type CanonicalGameMode = (typeof CANONICAL_GAME_MODES)[number];
 

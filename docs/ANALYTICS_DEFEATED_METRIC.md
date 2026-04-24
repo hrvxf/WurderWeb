@@ -4,7 +4,7 @@
 
 - Internal canonical concept: `defeated` (also described as `caught`).
 - Definition: a player is counted once whenever the game-authoritative claim outcome confirms a successful claim against that player.
-- This is mode-agnostic and must apply to `classic`, `elimination`, `elimination_multi`, and `guilds`.
+- This is mode-agnostic and must apply to `classic`, `elimination`, and `guilds`.
 
 ## Separation of semantics
 

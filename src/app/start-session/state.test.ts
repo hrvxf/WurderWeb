@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyModeSelection,
   buildStartSessionSetupPayload,
+  parseStartSessionCreateResponse,
   shouldShowFreeForAllVariant,
   shouldShowGuildWinCondition,
 } from "@/app/start-session/state";
@@ -36,6 +37,21 @@ describe("start-session mode state", () => {
     expect(shouldShowFreeForAllVariant(next.selectedMode)).toBe(true);
     expect(shouldShowGuildWinCondition(next.selectedMode)).toBe(false);
     expect(next.selectedFreeForAllVariant).toBe("classic");
+  });
+
+  it("builds payload with selected ffa survivor variant", () => {
+    const payload = buildStartSessionSetupPayload({
+      gameType: "b2c",
+      selectedMode: "free_for_all",
+      selectedFreeForAllVariant: "survivor",
+      selectedGuildWinCondition: null,
+    });
+
+    expect(payload).toEqual({
+      gameType: "b2c",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+    });
   });
 
   it("clears stale guild state when switching guilds to free_for_all", () => {
@@ -114,5 +130,74 @@ describe("start-session mode state", () => {
     });
     expect(payload).not.toHaveProperty("freeForAllVariant");
     expect(payload).not.toHaveProperty("guildWinCondition");
+  });
+
+  it("throws when free_for_all payload is missing variant", () => {
+    expect(() =>
+      buildStartSessionSetupPayload({
+        gameType: "b2c",
+        selectedMode: "free_for_all",
+        selectedFreeForAllVariant: null,
+        selectedGuildWinCondition: null,
+      })
+    ).toThrow("Select a free-for-all variant before continuing.");
+  });
+
+  it("throws when guilds payload is missing win condition", () => {
+    expect(() =>
+      buildStartSessionSetupPayload({
+        gameType: "b2c",
+        selectedMode: "guilds",
+        selectedFreeForAllVariant: null,
+        selectedGuildWinCondition: null,
+      })
+    ).toThrow("Select a guild win condition before continuing.");
+  });
+
+  it("parses canonical start-session response without nested config", () => {
+    const parsed = parseStartSessionCreateResponse({
+      payload: {
+        gameCode: "ABCD",
+        gameType: "b2c",
+        joinPath: "/join/ABCD",
+        deepLink: "wurder://join/ABCD",
+        universalLink: "https://wurder.app/join/ABCD",
+        metadata: {
+          createdFrom: "b2c_setup",
+          status: "waiting",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          expiresAt: "2026-01-02T00:00:00.000Z",
+        },
+      },
+      fallbackConfig: {
+        gameType: "b2c",
+        mode: "classic",
+      },
+    });
+
+    expect(parsed.gameCode).toBe("ABCD");
+    expect(parsed.joinPath).toBe("/join/ABCD");
+    expect(parsed.deepLink).toBe("wurder://join/ABCD");
+    expect(parsed.universalLink).toBe("https://wurder.app/join/ABCD");
+    expect(parsed.config.gameType).toBe("b2c");
+    expect(parsed.config.mode).toBe("classic");
+    expect(parsed.metadata.status).toBe("waiting");
+  });
+
+  it("throws when canonical response metadata is missing", () => {
+    expect(() =>
+      parseStartSessionCreateResponse({
+        payload: {
+          gameCode: "ABCD",
+          joinPath: "/join/ABCD",
+          deepLink: "wurder://join/ABCD",
+          universalLink: "https://wurder.app/join/ABCD",
+        },
+        fallbackConfig: {
+          gameType: "b2c",
+          mode: "classic",
+        },
+      })
+    ).toThrow("Session response was incomplete.");
   });
 });

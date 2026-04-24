@@ -8,13 +8,14 @@ import {
   resolveDefaultClassicWordGroupId,
 } from "@/domain/game/create-game";
 import type { SessionGameType } from "@/lib/game/session-type";
-import { parseCanonicalGameMode } from "@/lib/game/mode";
+import type { CanonicalGameMode } from "@/lib/game/mode";
+import type { HandoffFreeForAllVariant, HandoffGuildWinCondition } from "@/domain/handoff/setup-draft";
 
 const MAX_GAME_CODE_ATTEMPTS = 6;
 
 export type ManagerConfig = {
   managerParticipation?: "host_only" | "host_player";
-  mode: string;
+  mode: CanonicalGameMode | "free_for_all";
   durationMinutes: number;
   wordDifficulty: string;
   teamsEnabled: boolean;
@@ -23,17 +24,24 @@ export type ManagerConfig = {
   minSecondsBetweenClaims: number;
   maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
 };
 
 type CreateGameForHostUidInput = {
   hostUid: string;
-  gameType?: SessionGameType;
-  mode?: string;
+  gameType: SessionGameType;
+  mode: CanonicalGameMode | "free_for_all";
   orgId?: string;
   templateId?: string;
   analyticsEnabled?: boolean;
   managerParticipation?: "host_only" | "host_player";
   managerConfig?: ManagerConfig;
+  freeForAllVariant?: HandoffFreeForAllVariant;
+  guildWinCondition?: HandoffGuildWinCondition;
+  createdFrom?: "b2c_setup";
+  expiresAtMs?: number;
+  status?: "waiting" | "started" | "expired";
 };
 
 type AccountIdentityDoc = {
@@ -56,9 +64,12 @@ export class GameCodeCollisionError extends Error {
 }
 
 export async function createGameForHostUid(input: string | CreateGameForHostUidInput): Promise<{ gameCode: string }> {
-  const payload: CreateGameForHostUidInput = typeof input === "string" ? { hostUid: input } : input;
+  if (typeof input === "string") {
+    throw new Error("Canonical game payload is required.");
+  }
+  const payload: CreateGameForHostUidInput = input;
   const { hostUid } = payload;
-  const gameType: SessionGameType = payload.gameType === "b2b" ? "b2b" : "b2c";
+  const gameType: SessionGameType = payload.gameType;
 
   if (!hostUid) {
     throw new UnauthenticatedCreateGameError("Missing authenticated host uid.");
@@ -66,9 +77,58 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
 
   const wordGroupId = await resolveDefaultClassicWordGroupId(adminDb).catch(() => null);
   const managerParticipation = payload.managerParticipation === "host_player" ? "host_player" : "host_only";
-  const managerMode = parseCanonicalGameMode(payload.mode) ?? parseCanonicalGameMode(payload.managerConfig?.mode) ?? "classic";
+  const managerMode = payload.mode;
+  const isFreeForAllMode = managerMode === "free_for_all";
+  const requestedFreeForAllVariant = payload.freeForAllVariant ?? payload.managerConfig?.freeForAllVariant;
+  const requestedGuildWinCondition = payload.guildWinCondition ?? payload.managerConfig?.guildWinCondition;
+  const resolvedFreeForAllVariant = isFreeForAllMode ? requestedFreeForAllVariant : undefined;
+  const resolvedGuildWinCondition = managerMode === "guilds" ? requestedGuildWinCondition : undefined;
+
+  if (requestedFreeForAllVariant && !isFreeForAllMode) {
+    throw new Error("freeForAllVariant is only allowed when mode is free_for_all.");
+  }
+  if (requestedGuildWinCondition && managerMode !== "guilds") {
+    throw new Error("guildWinCondition is only allowed when mode is guilds.");
+  }
+  if (isFreeForAllMode && !requestedFreeForAllVariant) {
+    throw new Error("freeForAllVariant is required when mode is free_for_all.");
+  }
+  if (managerMode === "guilds" && !requestedGuildWinCondition) {
+    throw new Error("guildWinCondition is required when mode is guilds.");
+  }
+  if (gameType === "b2b" && payload.managerConfig) {
+    if (payload.managerConfig.mode !== managerMode) {
+      throw new Error("managerConfig.mode must match mode.");
+    }
+    const requiredNumberFields: Array<keyof ManagerConfig> = [
+      "durationMinutes",
+      "minSecondsBeforeClaim",
+      "minSecondsBetweenClaims",
+      "maxActiveClaimsPerPlayer",
+      "freeRefreshCooldownSeconds",
+    ];
+    for (const field of requiredNumberFields) {
+      const value = payload.managerConfig[field];
+      if (typeof value !== "number" || Number.isNaN(value)) {
+        throw new Error(`managerConfig.${field} is required.`);
+      }
+    }
+    if (!Array.isArray(payload.managerConfig.metricsEnabled)) {
+      throw new Error("managerConfig.metricsEnabled is required.");
+    }
+  }
   const hostPlayerId =
     managerParticipation === "host_player" ? await resolveCanonicalPlayerId(hostUid) : null;
+  const normalizedManagerConfig =
+    gameType === "b2b"
+      ? {
+          ...(payload.managerConfig ?? {}),
+          managerParticipation,
+          mode: managerMode,
+          ...(resolvedFreeForAllVariant != null ? { freeForAllVariant: resolvedFreeForAllVariant } : {}),
+          ...(resolvedGuildWinCondition != null ? { guildWinCondition: resolvedGuildWinCondition } : {}),
+        }
+      : payload.managerConfig;
 
   for (let attempt = 0; attempt < MAX_GAME_CODE_ATTEMPTS; attempt += 1) {
     const gameCode = generateGameCode();
@@ -100,10 +160,39 @@ export async function createGameForHostUid(input: string | CreateGameForHostUidI
         companyFields.managerParticipation = managerParticipation;
         if (payload.orgId) companyFields.orgId = payload.orgId;
         if (payload.templateId) companyFields.templateId = payload.templateId;
-        if (payload.managerConfig) companyFields.managerConfig = payload.managerConfig;
+        if (normalizedManagerConfig) companyFields.managerConfig = normalizedManagerConfig;
         if (payload.analyticsEnabled != null) companyFields.analyticsEnabled = payload.analyticsEnabled;
+        if (gameType === "b2b") {
+          console.info("b2b_create_payload_before_write", {
+            gameCode,
+            mode: managerMode,
+            freeForAllVariant: resolvedFreeForAllVariant,
+            guildWinCondition: resolvedGuildWinCondition,
+            managerConfig: normalizedManagerConfig,
+          });
+        }
+        if (resolvedFreeForAllVariant != null) {
+          companyFields.freeForAllVariant = resolvedFreeForAllVariant;
+        }
+        if (resolvedGuildWinCondition != null) {
+          companyFields.guildWinCondition = resolvedGuildWinCondition;
+        }
+        if (payload.createdFrom === "b2c_setup") {
+          companyFields.createdFrom = "b2c_setup" as const;
+          companyFields.status = payload.status ?? "waiting";
+          companyFields.expiresAt =
+            typeof payload.expiresAtMs === "number" && Number.isFinite(payload.expiresAtMs)
+              ? payload.expiresAtMs
+              : Date.now() + 24 * 60 * 60 * 1000;
+        }
 
         tx.set(gameRef, { ...baseDoc, mode: resolvedMode, ...companyFields });
+        if (gameType === "b2b") {
+          console.info("b2b_manager_config_written", {
+            gameCode,
+            managerConfig: normalizedManagerConfig,
+          });
+        }
       });
 
       return { gameCode };

@@ -8,14 +8,20 @@ type CreatedBusinessSessionResult = {
   orgId: string;
   orgName: string;
   joinLink: string;
+  setupLink: string | null;
+  setupId: string | null;
+  setupExpiresAtMs: number | null;
   managerParticipation: "host_only" | "host_player";
 };
 
 type BusinessSessionCreatedStateProps = {
   result: CreatedBusinessSessionResult;
-  copyState: { gameCode: boolean; joinLink: boolean };
+  copyState: { gameCode: boolean; joinLink: boolean; setupLink: boolean };
   onCopyGameCode: () => void;
   onCopyJoinLink: () => void;
+  onCopySetupLink: () => void;
+  onGenerateSetupQr: () => void;
+  setupGenerating: boolean;
   onCreateAnother: () => void;
 };
 
@@ -24,6 +30,9 @@ export default function BusinessSessionCreatedState({
   copyState,
   onCopyGameCode,
   onCopyJoinLink,
+  onCopySetupLink,
+  onGenerateSetupQr,
+  setupGenerating,
   onCreateAnother,
 }: BusinessSessionCreatedStateProps) {
   const sessionDashboardHref = businessSessionRoute(result.gameCode);
@@ -63,7 +72,7 @@ export default function BusinessSessionCreatedState({
       </div>
 
       <div className="rounded-xl border border-white/15 bg-black/20 p-4">
-        <p className="text-xs uppercase tracking-[0.16em] text-white/70">Session join QR</p>
+        <p className="text-xs uppercase tracking-[0.16em] text-white/70">Player join QR</p>
         <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="inline-flex w-fit rounded-xl bg-white p-3">
             <QRCodeCanvas value={result.joinLink} size={168} level="M" fgColor="#111111" bgColor="#FFFFFF" marginSize={2} />
@@ -73,6 +82,39 @@ export default function BusinessSessionCreatedState({
             <p className="mt-2 break-all text-sm text-white/85">{result.joinLink}</p>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-xl border border-white/15 bg-black/20 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs uppercase tracking-[0.16em] text-white/70">Start session via QR (host setup)</p>
+          <button
+            type="button"
+            onClick={onGenerateSetupQr}
+            disabled={setupGenerating}
+            className="rounded-lg border border-white/25 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-60"
+          >
+            {setupGenerating ? "Generating..." : result.setupLink ? "Regenerate" : "Generate"}
+          </button>
+        </div>
+        {result.setupLink ? (
+          <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div className="inline-flex w-fit rounded-xl bg-white p-3">
+              <QRCodeCanvas value={result.setupLink} size={168} level="M" fgColor="#111111" bgColor="#FFFFFF" marginSize={2} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.16em] text-white/70">Setup link</p>
+              <p className="mt-2 break-all text-sm text-white/85">{result.setupLink}</p>
+              {result.setupId ? <p className="mt-2 text-xs text-white/70">setupId: {result.setupId}</p> : null}
+              {result.setupExpiresAtMs ? (
+                <p className="mt-1 text-xs text-white/70">Expires: {new Date(result.setupExpiresAtMs).toLocaleString()}</p>
+              ) : null}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-white/70">
+            Generate a host setup QR for app handoff using the /start/{`{setupId}`} URL while keeping join QR for players.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -90,6 +132,15 @@ export default function BusinessSessionCreatedState({
         >
           {copyState.joinLink ? "Join link copied" : "Copy join link"}
         </button>
+        {result.setupLink ? (
+          <button
+            type="button"
+            className="rounded-xl border border-white/25 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
+            onClick={onCopySetupLink}
+          >
+            {copyState.setupLink ? "Setup link copied" : "Copy setup link"}
+          </button>
+        ) : null}
         <button
           type="button"
           className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"

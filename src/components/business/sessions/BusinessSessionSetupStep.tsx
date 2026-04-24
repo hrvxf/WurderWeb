@@ -1,28 +1,40 @@
 import SessionStyleOptionCard from "@/components/business/sessions/form/SessionStyleOptionCard";
 import {
+  freeForAllVariantOptions,
   gameModeOptions,
+  guildWinConditionOptions,
   lengthOptions,
   managerParticipationOptions,
+  type FreeForAllVariant,
   type GameModeOption,
   type GameModeValue,
+  type GuildWinCondition,
   type ManagerParticipationValue,
   type SessionLength,
 } from "@/lib/business/session-options";
 
 type BusinessSessionSetupStepProps = {
   gameMode: GameModeValue;
+  freeForAllVariant: FreeForAllVariant;
+  guildWinCondition: GuildWinCondition;
   length: SessionLength;
   managerParticipation: ManagerParticipationValue;
   onGameModeChange: (value: GameModeValue) => void;
+  onFreeForAllVariantChange: (value: FreeForAllVariant) => void;
+  onGuildWinConditionChange: (value: GuildWinCondition) => void;
   onLengthChange: (value: SessionLength) => void;
   onManagerParticipationChange: (value: ManagerParticipationValue) => void;
 };
 
 export default function BusinessSessionSetupStep({
   gameMode,
+  freeForAllVariant,
+  guildWinCondition,
   length,
   managerParticipation,
   onGameModeChange,
+  onFreeForAllVariantChange,
+  onGuildWinConditionChange,
   onLengthChange,
   onManagerParticipationChange,
 }: BusinessSessionSetupStepProps) {
@@ -50,6 +62,40 @@ export default function BusinessSessionSetupStep({
       </div>
 
       <ModeDescriptionPanel option={selectedMode} />
+
+      {gameMode === "free_for_all" ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-white">Free-for-all variant</p>
+          <div className="grid gap-2">
+            {freeForAllVariantOptions.map((option) => (
+              <SessionStyleOptionCard
+                key={option.value}
+                label={option.label}
+                description={option.description}
+                selected={freeForAllVariant === option.value}
+                onClick={() => onFreeForAllVariantChange(option.value)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {gameMode === "guilds" ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-white">Guild win condition</p>
+          <div className="grid gap-2">
+            {guildWinConditionOptions.map((option) => (
+              <SessionStyleOptionCard
+                key={option.value}
+                label={option.label}
+                description={option.description}
+                selected={guildWinCondition === option.value}
+                onClick={() => onGuildWinConditionChange(option.value)}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="space-y-3">
         <p className="text-sm font-medium text-white">Session length</p>

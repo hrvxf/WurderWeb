@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     }
 
     if (!isCanonicalGameMode(mode)) {
-      return NextResponse.json({ code: "INVALID_REQUEST", message: "Invalid mode. Allowed values: classic, elimination, elimination_multi, guilds." }, { status: 400 });
+      return NextResponse.json({ code: "INVALID_REQUEST", message: "Invalid mode. Allowed values: classic, elimination, guilds." }, { status: 400 });
     }
 
     const requestedOrgId = typeof body.orgId === "string" ? body.orgId.trim() : "";
@@ -205,4 +205,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ code: "INTERNAL", message: "Unable to save template." }, { status: 500 });
   }
 }
-

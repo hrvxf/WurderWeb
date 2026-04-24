@@ -27,11 +27,7 @@ describe("setup-draft helpers", () => {
         gameType: "b2c",
         mode: "free_for_all",
       })
-    ).toEqual({
-      gameType: "b2c",
-      mode: "free_for_all",
-      freeForAllVariant: "classic",
-    });
+    ).toBeNull();
     expect(
       parseHandoffSetupConfig({
         gameType: "b2c",
@@ -127,6 +123,66 @@ describe("setup-draft helpers", () => {
         guildWinCondition: "score",
       })
     ).toBeNull();
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "classic",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "classic",
+      orgId: "org-1",
+      sessionType: "player",
+    });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "free_for_all",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toBeNull();
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "free_for_all",
+        freeForAllVariant: "survivor",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "free_for_all",
+      freeForAllVariant: "survivor",
+      orgId: "org-1",
+      sessionType: "player",
+    });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "guilds",
+        guildWinCondition: "last_standing",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toEqual({
+      gameType: "b2b",
+      mode: "guilds",
+      guildWinCondition: "last_standing",
+      orgId: "org-1",
+      sessionType: "player",
+    });
+    expect(
+      parseHandoffSetupConfig({
+        gameType: "b2b",
+        mode: "classic",
+        guildWinCondition: "score",
+        orgId: "org-1",
+        sessionType: "player",
+      })
+    ).toBeNull();
   });
 
   it("normalizes valid setup id", () => {
@@ -137,7 +193,7 @@ describe("setup-draft helpers", () => {
   it("creates and parses setup draft docs", () => {
     const nowMs = 10_000;
     const created = createHandoffSetupDraftDoc({
-      config: { gameType: "b2b", mode: "guilds" },
+      config: { gameType: "b2b", mode: "guilds", orgId: "org-1", sessionType: "host_only" },
       createdByAccountId: "uid_123",
       nowMs,
     });

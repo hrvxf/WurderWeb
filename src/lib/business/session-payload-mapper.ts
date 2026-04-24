@@ -1,10 +1,13 @@
 import { defaultBusinessMetrics } from "@/lib/business/session-defaults";
 import type {
+  FreeForAllVariant,
   GameModeValue,
+  GuildWinCondition,
   SetupState,
 } from "@/lib/business/session-options";
 
 export type BusinessSessionManagerConfig = {
+  managerParticipation: "host_only" | "host_player";
   mode: string;
   durationMinutes: number;
   wordDifficulty: string;
@@ -12,7 +15,10 @@ export type BusinessSessionManagerConfig = {
   metricsEnabled: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
+  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: FreeForAllVariant;
+  guildWinCondition?: GuildWinCondition;
 };
 
 export type CreateBusinessSessionPayload = {
@@ -28,8 +34,10 @@ export type CreateBusinessSessionPayload = {
   metricsEnabled: string[];
   minSecondsBeforeClaim: number;
   minSecondsBetweenClaims: number;
-  maxActiveClaimsPerPlayer: 1;
+  maxActiveClaimsPerPlayer: number;
   freeRefreshCooldownSeconds: number;
+  freeForAllVariant?: FreeForAllVariant;
+  guildWinCondition?: GuildWinCondition;
 };
 
 export function toBusinessSessionName(orgName: string, input: string): string {
@@ -76,30 +84,50 @@ export function buildBusinessSessionManagerConfig(setup: SetupState): BusinessSe
       minSecondsBetweenClaims: 0,
       freeRefreshCooldownSeconds: 0,
     },
+    free_for_all: {
+      mode: "free_for_all",
+      teamsEnabled: false,
+      wordDifficulty: "medium",
+      minSecondsBeforeClaim: 5,
+      minSecondsBetweenClaims: 10,
+      freeRefreshCooldownSeconds: 12,
+    },
   };
 
   const modeConfig = modeMapping[setup.gameMode];
 
-  return {
+  const managerConfig: BusinessSessionManagerConfig = {
+    managerParticipation: setup.managerParticipation,
     mode: modeConfig.mode,
     teamsEnabled: modeConfig.teamsEnabled,
     durationMinutes: setup.length,
     wordDifficulty: modeConfig.wordDifficulty,
     minSecondsBeforeClaim: modeConfig.minSecondsBeforeClaim,
     minSecondsBetweenClaims: modeConfig.minSecondsBetweenClaims,
+    maxActiveClaimsPerPlayer: 1,
     freeRefreshCooldownSeconds: modeConfig.freeRefreshCooldownSeconds,
     metricsEnabled: defaultBusinessMetrics,
   };
+
+  if (setup.gameMode === "free_for_all") {
+    managerConfig.freeForAllVariant = setup.freeForAllVariant;
+  }
+
+  if (setup.gameMode === "guilds") {
+    managerConfig.guildWinCondition = setup.guildWinCondition;
+  }
+
+  return managerConfig;
 }
 
 export function buildCreateBusinessSessionPayload(setup: SetupState): CreateBusinessSessionPayload {
   const managerConfig = buildBusinessSessionManagerConfig(setup);
-  return {
+  const payload: CreateBusinessSessionPayload = {
     orgId: setup.orgId,
     orgName: setup.orgName.trim(),
     templateName: toBusinessSessionName(setup.orgName, setup.sessionLabel),
     saveTemplate: false,
-    managerParticipation: setup.managerParticipation,
+    managerParticipation: managerConfig.managerParticipation,
     mode: managerConfig.mode,
     durationMinutes: managerConfig.durationMinutes,
     wordDifficulty: managerConfig.wordDifficulty,
@@ -107,9 +135,19 @@ export function buildCreateBusinessSessionPayload(setup: SetupState): CreateBusi
     metricsEnabled: managerConfig.metricsEnabled,
     minSecondsBeforeClaim: managerConfig.minSecondsBeforeClaim,
     minSecondsBetweenClaims: managerConfig.minSecondsBetweenClaims,
-    maxActiveClaimsPerPlayer: 1,
+    maxActiveClaimsPerPlayer: managerConfig.maxActiveClaimsPerPlayer,
     freeRefreshCooldownSeconds: managerConfig.freeRefreshCooldownSeconds,
   };
+
+  if (setup.gameMode === "free_for_all") {
+    payload.freeForAllVariant = setup.freeForAllVariant;
+  }
+
+  if (setup.gameMode === "guilds") {
+    payload.guildWinCondition = setup.guildWinCondition;
+  }
+
+  return payload;
 }
 
 // Transitional aliases kept during migration window.
@@ -118,4 +156,3 @@ export type CreateCompanyGamePayload = CreateBusinessSessionPayload;
 export const toSessionName = toBusinessSessionName;
 export const buildManagerConfig = buildBusinessSessionManagerConfig;
 export const buildCreateCompanyGamePayload = buildCreateBusinessSessionPayload;
-

@@ -9,23 +9,35 @@ import BusinessSessionReviewStep from "@/components/business/sessions/BusinessSe
 import BusinessSessionSetupStep from "@/components/business/sessions/BusinessSessionSetupStep";
 import BusinessSessionStepper from "@/components/business/sessions/BusinessSessionStepper";
 import { buildJoinUniversalLink } from "@/domain/join/joinLink";
+import { trackEvent, ANALYTICS_EVENTS } from "@/lib/analytics";
 import { useAuth } from "@/lib/auth/AuthProvider";
 import {
   defaultBusinessSetup,
   BUSINESS_STORAGE_ORG_ID_KEY,
   BUSINESS_STORAGE_ORG_NAME_KEY,
 } from "@/lib/business/session-defaults";
-import { buildCreateBusinessSessionPayload, toBusinessSessionName } from "@/lib/business/session-payload-mapper";
+import {
+  buildBusinessSessionManagerConfig,
+  buildCreateBusinessSessionPayload,
+  toBusinessSessionName,
+} from "@/lib/business/session-payload-mapper";
 import type { SetupState, SetupStep } from "@/lib/business/session-options";
 import { persistLastCreatedSession } from "@/lib/game/last-created-session";
 import type { SessionGameType } from "@/lib/game/session-type";
+import type { HandoffB2BManagerConfig } from "@/domain/handoff/setup-draft";
 
 type CreatedBusinessSessionResult = {
   gameCode: string;
   orgId: string;
   orgName: string;
   joinLink: string;
+  templateId: string | null;
+  setupLink: string | null;
+  setupId: string | null;
+  setupExpiresAtMs: number | null;
+  managerConfig: HandoffB2BManagerConfig;
   managerParticipation: "host_only" | "host_player";
+  mode: string;
 };
 
 export default function CreateBusinessSessionPage() {
@@ -37,10 +49,12 @@ export default function CreateBusinessSessionPage() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [result, setResult] = useState<CreatedBusinessSessionResult | null>(null);
-  const [copyState, setCopyState] = useState<{ gameCode: boolean; joinLink: boolean }>({
+  const [copyState, setCopyState] = useState<{ gameCode: boolean; joinLink: boolean; setupLink: boolean }>({
     gameCode: false,
     joinLink: false,
+    setupLink: false,
   });
+  const [setupQrBusy, setSetupQrBusy] = useState(false);
 
   useEffect(() => {
     const queryOrgName = searchParams.get("orgName")?.trim() ?? "";
@@ -112,6 +126,7 @@ export default function CreateBusinessSessionPage() {
         message?: string;
         gameCode?: string;
         orgId?: string;
+        templateId?: string | null;
         gameType?: SessionGameType;
       };
 
@@ -126,12 +141,22 @@ export default function CreateBusinessSessionPage() {
       const resultOrgId = String(payload.orgId ?? setup.orgId ?? "");
       const gameCode = String(payload.gameCode ?? "");
       const joinLink = buildJoinUniversalLink(gameCode);
+      const managerConfig = buildBusinessSessionManagerConfig(setup);
+      trackEvent(ANALYTICS_EVENTS.b2bQrJoinGenerated, { gameCode, orgId: resultOrgId || null });
       setResult({
         gameCode,
         orgId: resultOrgId,
         orgName: setup.orgName.trim(),
         joinLink,
-        managerParticipation: setup.managerParticipation,
+        templateId: typeof payload.templateId === "string" ? payload.templateId : null,
+        setupLink: null,
+        setupId: null,
+        setupExpiresAtMs: null,
+        managerConfig: {
+          ...managerConfig,
+        },
+        managerParticipation: managerConfig.managerParticipation,
+        mode: managerConfig.mode,
       });
 
       if (typeof window !== "undefined") {
@@ -167,14 +192,14 @@ export default function CreateBusinessSessionPage() {
     setStep((prev) => (prev > 1 ? ((prev - 1) as SetupStep) : prev));
   }
 
-  function setCopied(key: "gameCode" | "joinLink") {
+  function setCopied(key: "gameCode" | "joinLink" | "setupLink") {
     setCopyState((prev) => ({ ...prev, [key]: true }));
     window.setTimeout(() => {
       setCopyState((prev) => ({ ...prev, [key]: false }));
     }, 1400);
   }
 
-  async function copyText(value: string, key: "gameCode" | "joinLink") {
+  async function copyText(value: string, key: "gameCode" | "joinLink" | "setupLink") {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(key);
@@ -187,8 +212,67 @@ export default function CreateBusinessSessionPage() {
     setResult(null);
     setMessage(null);
     setStep(1);
-    setCopyState({ gameCode: false, joinLink: false });
+    setCopyState({ gameCode: false, joinLink: false, setupLink: false });
     setSetup((prev) => ({ ...prev, sessionLabel: "" }));
+  }
+
+  async function generateSetupQr() {
+    if (!user || !result) return;
+    setSetupQrBusy(true);
+    setMessage(null);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch("/api/handoff/setups", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          gameType: "b2b",
+          mode: result.mode,
+          orgId: result.orgId,
+          templateId: result.templateId,
+          sessionType: result.managerParticipation === "host_player" ? "player" : "host_only",
+          managerConfig: result.managerConfig,
+          analyticsEnabled: true,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        message?: string;
+        setupId?: string;
+        universalLink?: string;
+        expiresAtMs?: number;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Unable to generate setup QR.");
+      }
+      if (typeof payload.setupId !== "string" || typeof payload.universalLink !== "string" || typeof payload.expiresAtMs !== "number") {
+        throw new Error("Setup response was incomplete.");
+      }
+
+      trackEvent(ANALYTICS_EVENTS.b2bQrSetupGenerated, {
+        setupId: payload.setupId,
+        orgId: result.orgId,
+      });
+
+      setResult((prev) =>
+        prev
+          ? {
+              ...prev,
+              setupId: payload.setupId ?? null,
+              setupLink: payload.universalLink ?? null,
+              setupExpiresAtMs: payload.expiresAtMs ?? null,
+            }
+          : prev
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to generate setup QR.");
+    } finally {
+      setSetupQrBusy(false);
+    }
   }
 
   return (
@@ -208,6 +292,11 @@ export default function CreateBusinessSessionPage() {
           copyState={copyState}
           onCopyGameCode={() => void copyText(result.gameCode, "gameCode")}
           onCopyJoinLink={() => void copyText(result.joinLink, "joinLink")}
+          onCopySetupLink={() => {
+            if (result.setupLink) void copyText(result.setupLink, "setupLink");
+          }}
+          onGenerateSetupQr={() => void generateSetupQr()}
+          setupGenerating={setupQrBusy}
           onCreateAnother={createAnother}
         />
       ) : (
@@ -235,9 +324,24 @@ export default function CreateBusinessSessionPage() {
           {step === 2 ? (
             <BusinessSessionSetupStep
               gameMode={setup.gameMode}
+              freeForAllVariant={setup.freeForAllVariant}
+              guildWinCondition={setup.guildWinCondition}
               length={setup.length}
               managerParticipation={setup.managerParticipation}
-              onGameModeChange={(value) => setSetup((prev) => ({ ...prev, gameMode: value }))}
+              onGameModeChange={(value) =>
+                setSetup((prev) => ({
+                  ...prev,
+                  gameMode: value,
+                  freeForAllVariant: value === "free_for_all" ? prev.freeForAllVariant : "classic",
+                  guildWinCondition: value === "guilds" ? prev.guildWinCondition : "score",
+                }))
+              }
+              onFreeForAllVariantChange={(value) =>
+                setSetup((prev) => ({ ...prev, freeForAllVariant: value }))
+              }
+              onGuildWinConditionChange={(value) =>
+                setSetup((prev) => ({ ...prev, guildWinCondition: value }))
+              }
               onLengthChange={(value) => setSetup((prev) => ({ ...prev, length: value }))}
               onManagerParticipationChange={(value) =>
                 setSetup((prev) => ({ ...prev, managerParticipation: value }))

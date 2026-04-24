@@ -142,7 +142,6 @@ Canonical spec: `docs/GAME_STATE_MACHINE.md`
 ### Modes
 
 - `elimination`
-- `elimination_multi`
 - `classic`
 - `guilds`
 
