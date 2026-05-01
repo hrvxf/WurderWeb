@@ -380,8 +380,8 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
     router.push("/start-session?gameType=b2c&locked=1");
   }
 
-  function handleStoreClick(location: string) {
-    trackEvent(ANALYTICS_EVENTS.storeCtaClick, { location, platform: "ios" });
+  function handleStoreClick(location: string, platform: "ios" | "android") {
+    trackEvent(ANALYTICS_EVENTS.storeCtaClick, { location, platform });
   }
 
   return (
@@ -426,10 +426,20 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Download Wurder on the Apple App Store (opens in a new tab)"
-              onClick={() => handleStoreClick("header_desktop")}
+              onClick={() => handleStoreClick("header_desktop", "ios")}
               className="inline-flex min-h-10 items-center justify-center rounded-md border border-amber-100/30 bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-3 py-1.5 text-sm font-semibold text-[#160f08] transition hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/90 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
             >
               iOS App
+            </a>
+            <a
+              href={storeLinks.androidPlayStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Get Wurder on Google Play (opens in a new tab)"
+              onClick={() => handleStoreClick("header_desktop", "android")}
+              className="inline-flex min-h-10 items-center justify-center rounded-md border border-white/20 bg-white/[0.06] px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-white/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+            >
+              Android App
             </a>
 
             {effectiveAuthenticated ? (
@@ -591,10 +601,19 @@ export default function SiteHeader({ initialAccount = null }: { initialAccount?:
                 href={storeLinks.iosAppStoreUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={() => handleStoreClick("header_mobile")}
+                onClick={() => handleStoreClick("header_mobile", "ios")}
                 className="block rounded-xl border border-amber-200/30 bg-gradient-to-b from-[#f8d57e] via-[#e8b85d] to-[#b17f2f] px-3 py-2.5 text-sm font-semibold text-[#160f08]"
               >
                 Download on iOS
+              </a>
+              <a
+                href={storeLinks.androidPlayStoreUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={() => handleStoreClick("header_mobile", "android")}
+                className="block rounded-xl border border-white/20 bg-white/[0.06] px-3 py-2.5 text-sm font-semibold text-white"
+              >
+                Download on Android
               </a>
               {EXPLORE_LINKS.map((item) => (
                 <MenuRow key={item.href} item={item} pathname={pathname} />
